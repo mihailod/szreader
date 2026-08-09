@@ -1,2 +1,21 @@
-.DS_Store
+# --- Never commit: forum data ------------------------------------------
+# Saved topic pages and everything derived from them contain live download
+# links to scanned comics. Nothing under these paths belongs in git.
+spike/pages/
+spike/fixtures/
+spike/*.json
+spike/*.csv
 
+# --- Build artefacts ---------------------------------------------------
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# --- Python ------------------------------------------------------------
+__pycache__/
+*.pyc
+
+# --- macOS -------------------------------------------------------------
+.DS_Store
