@@ -95,13 +95,15 @@ final class LabelStyleTests: XCTestCase {
             """)
         XCTAssertEqual(recs.count, 2)
         XCTAssertEqual(recs.map(\.style), [.labeledBlock, .labeledBlock])
-        XCTAssertEqual(recs.first?.label, "MN_LMS_511")
+        XCTAssertEqual(recs.first?.label?.code, "MN_LMS_511")
+        XCTAssertEqual(recs.first?.label?.number, 511)
     }
 
     func testLabeledInline() {
         let recs = Catalog.links(in: "<div>MM_LMS_031 - http://www.mediafire.com/?FAKEKEY031</div>")
         XCTAssertEqual(recs.map(\.style), [.labeledInline])
-        XCTAssertEqual(recs.first?.label, "MM_LMS_031")
+        XCTAssertEqual(recs.first?.label?.code, "MM_LMS_031")
+        XCTAssertEqual(recs.first?.label?.number, 31)
     }
 
     func testInlinePrevLine() {
@@ -109,14 +111,16 @@ final class LabelStyleTests: XCTestCase {
             <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>
             """)
         XCTAssertEqual(recs.map(\.style), [.inlinePrevLine])
-        XCTAssertEqual(recs.first?.label, "Nasilje u Darkvudu")
+        XCTAssertEqual(recs.first?.label?.title, "Nasilje u Darkvudu")
+        XCTAssertEqual(recs.first?.label?.number, 13)
     }
 
     func testInlineSameLine() {
         let recs = Catalog.links(in:
             "<div>001 (SSB 089/001) - Grupa TNT - https://mega.nz/file/FAKEID001#FAKEKEY</div>")
         XCTAssertEqual(recs.map(\.style), [.inlineSameLine])
-        XCTAssertEqual(recs.first?.label, "Grupa TNT")
+        XCTAssertEqual(recs.first?.label?.title, "Grupa TNT")
+        XCTAssertEqual(recs.first?.label?.number, 1)
     }
 
     func testNameFirst() {
@@ -125,7 +129,9 @@ final class LabelStyleTests: XCTestCase {
             <div>http://www.mediafire.com/?FAKEKEY003</div>
             """)
         XCTAssertEqual(recs.map(\.style), [.inlinePrevLine])
-        XCTAssertEqual(recs.first?.label, "Zašto sam ubio Pierrea")
+        XCTAssertEqual(recs.first?.label?.title, "Zašto sam ubio Pierrea")
+        XCTAssertEqual(recs.first?.label?.number, 3)
+        XCTAssertEqual(recs.first?.label?.series, "Kolorka")
     }
 
     /// Name-first with no title at all still identifies the issue.
@@ -133,7 +139,9 @@ final class LabelStyleTests: XCTestCase {
         let recs = Catalog.links(in: """
             <div>Alef 01 -</div><div>http://www.4shared.com/document/FAKEID/Alef_01.html</div>
             """)
-        XCTAssertEqual(recs.first?.label, "Alef 01")
+        XCTAssertNil(recs.first?.label?.title)          // no title in this convention
+        XCTAssertEqual(recs.first?.label?.number, 1)
+        XCTAssertEqual(recs.first?.label?.series, "Alef")
     }
 
     /// Forum chrome must never become a label.
