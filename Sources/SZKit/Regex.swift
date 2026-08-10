@@ -3,7 +3,7 @@ import Foundation
 /// Thin NSRegularExpression wrapper. Patterns here are compile-time constants
 /// covered by tests, so `try!` is honest rather than lazy.
 struct Rx {
-    let re: NSRegularExpression
+    let re: NSRegularExpression   // exposed for enumerateMatches
 
     init(_ pattern: String, _ options: NSRegularExpression.Options = []) {
         self.re = try! NSRegularExpression(pattern: pattern, options: options)

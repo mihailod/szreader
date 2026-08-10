@@ -5,11 +5,6 @@ spike/pages/
 spike/fixtures/
 spike/*.json
 spike/*.csv
-# Local-only dev seed: a real saved topic page with live download links in it.
-# Same rule as spike/pages — forum data, not a build artefact. Named DevSeed
-# rather than Resources so that App/Resources stays free for real, committable
-# app resources instead of being silently swallowed by this rule.
-App/DevSeed/
 
 # --- Build artefacts ---------------------------------------------------
 .build/

@@ -92,13 +92,27 @@ extension Store {
     }
 
     /// Updates the title and keeps the FTS index in step.
+    ///
+    /// The index covers code, number, series and forum context as well, so the
+    /// whole row is recomputed — refreshing only the title would drop the rest
+    /// and quietly make the issue unfindable by publisher or hero.
     func setTitle(issueID: Int, title: String) throws {
+        var code: String?, series: String?, context: String?
+        var number: Int?
+        try db.query("SELECT code, number, series, context FROM issue WHERE id = ?",
+                     [.int(Int64(issueID))]) { row in
+            code = row.string(0); number = row.int(1)
+            series = row.string(2); context = row.string(3)
+        }
         let folded = Fold.fold(title)
-        try db.run("UPDATE issue SET title = ?, title_folded = ? WHERE id = ?",
-                   [.text(title), .text(folded), .int(Int64(issueID))])
+        let searchText = Store.searchText(title: title, code: code, number: number,
+                                          series: series, context: context)
+        try db.run("""
+            UPDATE issue SET title = ?, title_folded = ?, search_text = ? WHERE id = ?
+            """, [.text(title), .text(folded), .text(searchText), .int(Int64(issueID))])
         try db.run("DELETE FROM issue_fts WHERE rowid = ?", [.int(Int64(issueID))])
-        try db.run("INSERT INTO issue_fts (rowid, title_folded) VALUES (?, ?)",
-                   [.int(Int64(issueID)), .text(folded)])
+        try db.run("INSERT INTO issue_fts (rowid, search_text) VALUES (?, ?)",
+                   [.int(Int64(issueID)), .text(searchText)])
     }
 
     public var untitledIssueCount: Int {
