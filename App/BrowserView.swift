@@ -53,6 +53,7 @@ final class BrowserModel: NSObject, ObservableObject {
     }
 
     func load(_ address: String) {
+        // Upgrade before the first request too, not just on redirects.
         guard let url = URL(string: address) else { return }
         webView.load(URLRequest(url: url))
     }
@@ -73,8 +74,29 @@ final class BrowserModel: NSObject, ObservableObject {
 }
 
 extension BrowserModel: WKNavigationDelegate {
-    nonisolated func webView(_ webView: WKWebView,
-                             didFinish navigation: WKNavigation!) {}
+
+    /// Forces stripzona onto HTTPS.
+    ///
+    /// The site serves the forum fine over TLS but its own links and redirects
+    /// often point at plain http, and the session cookie is NOT marked Secure —
+    /// so a single cleartext request would put a live session cookie on the
+    /// wire. Upgrading every navigation keeps the whole session encrypted.
+    nonisolated func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction
+    ) async -> WKNavigationActionPolicy {
+        guard let url = navigationAction.request.url,
+              url.scheme == "http",
+              let host = url.host?.lowercased(),
+              host.hasSuffix("stripzona.com"),
+              var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return .allow }
+
+        parts.scheme = "https"
+        guard let secure = parts.url else { return .allow }
+        Task { @MainActor in webView.load(URLRequest(url: secure)) }
+        return .cancel
+    }
 }
 
 struct BrowserView: UIViewRepresentable {

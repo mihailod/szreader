@@ -17,7 +17,9 @@ struct ImportView: View {
     @State private var errorText: String?
     @State private var importing = false
 
-    private static let home = "https://www.stripzona.com"
+    // The forum path directly: the bare root 302s to plain http, and every
+    // cleartext hop would expose a session cookie that is not marked Secure.
+    private static let home = "https://www.stripzona.com/port/index.php"
 
     var body: some View {
         NavigationStack {
