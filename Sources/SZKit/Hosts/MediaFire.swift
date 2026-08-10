@@ -80,6 +80,13 @@ public struct MediaFireHost: FileHost {
     public func directLink(_ url: URL, via transport: Transport) async throws -> DirectLink {
         let page = try canonical(url)
         let resp = try await transport.send(HTTPRequest(url: page, maxBodyBytes: 512_000))
+        // A dead link must surface as `notFound` so the caller can record the
+        // mirror as dead. Falling through to a generic parse error would leave
+        // it first in the fallback order forever.
+        if resp.status == 404 || resp.status == 410 { throw HostError.notFound }
+        guard resp.status == 200 || (300..<400).contains(resp.status) else {
+            throw HostError.apiError("HTTP \(resp.status)")
+        }
         let html = resp.text.isEmpty && (300..<400).contains(resp.status)
             ? try await follow(page, resp, via: transport)
             : resp.text

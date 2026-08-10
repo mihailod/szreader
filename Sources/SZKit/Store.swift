@@ -19,6 +19,7 @@ public final class Store {
     public init(path: String = ":memory:") throws {
         db = try Database(path: path)
         try migrate()
+        try migrateDownloads()
     }
 
     private func migrate() throws {
