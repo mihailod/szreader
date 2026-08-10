@@ -8,15 +8,23 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            List(model.results, id: \.id) { issue in
-                Button { selected = issue } label: { row(issue) }
-                    .buttonStyle(.plain)
+            Group {
+                if model.results.isEmpty {
+                    // An empty library and a search that found nothing look
+                    // identical on screen, and both look like a bug. Say which.
+                    emptyState
+                } else {
+                    List(model.results, id: \.id) { issue in
+                        Button { selected = issue } label: { row(issue) }
+                            .buttonStyle(.plain)
+                    }
+                    .listStyle(.plain)
+                }
             }
-            .listStyle(.plain)
             .searchable(text: Binding(get: { model.query },
                                       set: { model.search($0) }),
                         placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: "Search comics — try “celjusti” or “kuca”")
+                        prompt: "Search by title")
             .navigationTitle("StripZona")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -34,6 +42,29 @@ struct LibraryView: View {
                 ReaderView(document: SampleComic.document(), title: "Sample comic")
             }
         }
+    }
+
+    /// Distinguishes "nothing imported yet" from "no match for this query".
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: model.issueCount == 0 ? "books.vertical" : "magnifyingglass")
+                .font(.system(size: 52))
+                .foregroundStyle(.tertiary)
+            Text(model.issueCount == 0 ? "No comics yet" : "No match")
+                .font(.title3.weight(.semibold))
+            Text(model.issueCount == 0
+                 ? "Import a topic page to fill the library."
+                 : "Nothing in \(model.issueCount) issues matches “\(model.query)”.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Text(model.status)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.top, 4)
+        }
+        .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func row(_ issue: StoredIssue) -> some View {

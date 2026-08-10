@@ -40,8 +40,10 @@ final class AppModel: ObservableObject {
                let html = try? String(contentsOf: seed, encoding: .utf8) {
                 let added = try store.ingest(html: html, source: "bundled seed")
                 status = "imported \(added.issues) issues, \(added.mirrors) mirrors"
+            } else if store.issueCount == 0 {
+                status = "no seed bundled — import a page to begin"
             } else {
-                status = "library ready"
+                status = "\(store.issueCount) issues in library"
             }
             issueCount = store.issueCount
             search("")

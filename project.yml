@@ -22,8 +22,13 @@ targets:
     sources:
       - path: App
         excludes:
-          - "build-sim.sh"    # the pre-Xcode scaffold; kept for reference
           - "Info.plist"      # referenced via INFOPLIST_FILE instead
+      # Optional dev seed so a fresh install has a library to look at. Kept out
+      # of git (it holds live download links) and retired once the in-app
+      # WebView import lands. The app copes fine when it is missing.
+      - path: App/DevSeed
+        optional: true
+        buildPhase: resources
 
     dependencies:
       - package: SZKit
