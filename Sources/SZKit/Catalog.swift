@@ -110,7 +110,8 @@ public enum Catalog {
                     } else if !before.isEmpty, let g = Labels.num.firstGroups(before) {
                         instance += 1
                         out.append(.init(url: u, style: .inlineSameLine,
-                                         label: IssueLabel(number: Int(g[1]), title: g[2]),
+                                         label: IssueLabel(number: Int(g[1]),
+                                                           title: TitleCleaner.tidyInline(g[2])),
                                          instance: instance))
                     } else if let p = pendingNum {
                         out.append(.init(url: u, style: .inlinePrevLine,
@@ -138,7 +139,8 @@ public enum Catalog {
             if let g = Labels.num.firstGroups(line),
                g[2].count > 2, !g[2].lowercased().hasPrefix("http") {
                 instance += 1
-                pendingNum = (IssueLabel(number: Int(g[1]), title: g[2]), instance)
+                pendingNum = (IssueLabel(number: Int(g[1]),
+                                         title: TitleCleaner.tidyInline(g[2])), instance)
                 pendingCode = nil
                 continue
             }

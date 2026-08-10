@@ -80,6 +80,29 @@ public enum TitleCleaner {
             .filter { !$0.isEmpty }
     }
 
+    /// Tidies a title taken from post text rather than a filename.
+    ///
+    /// Zagor's convention writes `ZS 0418 - ZAGOR - Ulovljeni lovac (Scanturion
+    /// & folpi)`, so the captured title carries a shouted hero name in front
+    /// and scanner credits behind. Both hurt search and display.
+    public static func tidyInline(_ raw: String) -> String {
+        var t = raw.trimmingCharacters(in: .whitespaces)
+        while true {
+            let shorter = trailingTag.replacing(t, with: "").trimmingCharacters(in: .whitespaces)
+            if shorter == t || shorter.isEmpty { break }
+            t = shorter
+        }
+        let parts = split(t)
+        // Only a single ALL-CAPS word is treated as a hero prefix. Requiring a
+        // single word keeps a genuinely shouted multi-word title intact.
+        if parts.count >= 2, let head = parts.first,
+           !head.contains(" "), head.count >= 2, head.count <= 20,
+           head == head.uppercased(), head.contains(where: \.isLetter) {
+            return parts.dropFirst().joined(separator: " - ")
+        }
+        return t
+    }
+
     /// Rejects codes and junk while keeping genuinely short titles ("UFO").
     public static func isPlausible(_ title: String?) -> Bool {
         guard let t = title?.trimmingCharacters(in: .whitespaces), !t.isEmpty else { return false }

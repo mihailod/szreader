@@ -14,7 +14,7 @@ public struct StoredIssue: Equatable, Sendable {
 /// The local library: issues, their mirrors, and a folded full-text index.
 public final class Store {
 
-    private let db: Database
+    let db: Database   // internal: Store+Backfill reaches in
 
     public init(path: String = ":memory:") throws {
         db = try Database(path: path)
