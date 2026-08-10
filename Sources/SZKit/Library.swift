@@ -89,6 +89,19 @@ public final class Library {
         }
     }
 
+    /// Opens a downloaded comic for reading.
+    ///
+    /// Unpacking a solid RAR is slow enough to notice, so callers should do
+    /// this off the main thread.
+    public func document(forIssue issueID: Int) throws -> ComicDocument {
+        guard let file = try store.downloadedFile(issueID: issueID),
+              FileManager.default.fileExists(atPath: file.path.path) else {
+            throw DownloadError.notAnArchive("not downloaded yet")
+        }
+        return try ComicDocument(fileURL: file.path,
+                                 workDirectory: paths.directory(forIssue: issueID))
+    }
+
     /// Bytes currently held by downloaded comics.
     public var diskUsage: Int64 { store.totalDownloadedBytes }
 

@@ -46,6 +46,9 @@ struct LibraryView: View {
                 IssueDetail(issue: issue, mirrors: model.mirrors(for: issue))
             }
             .alert(item: $pending) { action in confirmation(for: action) }
+            .fullScreenCover(item: $model.reading) { open in
+                ReaderView(document: open.document, title: open.title)
+            }
             // On its own view deliberately: SwiftUI honours only one `.alert`
             // per view, and the confirmation alert above already claims this
             // one.
@@ -225,8 +228,7 @@ struct LibraryView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 18)],
                           spacing: 22) {
                     ForEach(model.results, id: \.id) { issue in
-                        Button { selected = issue } label: { gridCell(issue) }
-                            .buttonStyle(.plain)
+                        gridCell(issue)
                             .contextMenu { issueMenu(for: issue) }
                     }
                 }
@@ -240,21 +242,50 @@ struct LibraryView: View {
         }
     }
 
+    /// Two tap targets, deliberately.
+    ///
+    /// The artwork opens the comic, the caption opens its details — the same
+    /// split as a bookshelf app, where tapping a cover means "read this" and
+    /// tapping the title means "tell me about it". An issue that is not
+    /// downloaded has nothing to read, so its artwork opens the details too,
+    /// which is where the Download action lives.
     private func gridCell(_ issue: StoredIssue) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .topTrailing) {
-                cover(issue)
-                    .aspectRatio(2.0 / 3.0, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))
-                if model.downloading.contains(issue.id) {
-                    ProgressView().padding(8)
-                } else if issue.isDownloaded {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.white, .green)
-                        .padding(6)
-                }
+            Button {
+                if issue.isDownloaded { model.read(issue) } else { selected = issue }
+            } label: {
+                artwork(issue)
             }
+            .buttonStyle(.plain)
+
+            Button { selected = issue } label: { caption(issue) }
+                .buttonStyle(.plain)
+        }
+    }
+
+    private func artwork(_ issue: StoredIssue) -> some View {
+        ZStack(alignment: .topTrailing) {
+            cover(issue)
+                .aspectRatio(2.0 / 3.0, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))
+            if model.downloading.contains(issue.id) {
+                ProgressView().padding(8)
+            } else if model.opening == issue.id {
+                // Unpacking a solid RAR takes a moment; without this the tap
+                // looks ignored.
+                ProgressView().padding(8)
+            } else if issue.isDownloaded {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.white, .green)
+                    .padding(6)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func caption(_ issue: StoredIssue) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
             Text(name(issue))
                 .font(.callout.weight(.medium))
                 .lineLimit(2)
@@ -262,8 +293,10 @@ struct LibraryView: View {
             if let number = issue.number {
                 Text("#\(number)").font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .contentShape(Rectangle())
     }
 
     private func row(_ issue: StoredIssue) -> some View {
@@ -272,6 +305,14 @@ struct LibraryView: View {
             cover(issue)
                 .frame(width: 58, height: 82)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
+                // Same rule as the grid: artwork reads, metadata describes.
+                .onTapGesture {
+                    if issue.isDownloaded { model.read(issue) } else { selected = issue }
+                }
+                .overlay {
+                    if model.opening == issue.id { ProgressView() }
+                }
                 .contextMenu { issueMenu(for: issue) }
 
             Button { selected = issue } label: {

@@ -56,10 +56,41 @@ public final class ComicDocument {
     public init(archive: ArchiveReader) throws {
         self.archive = archive
         self.pages = try archive.pageNames()
+        guard !pages.isEmpty else {
+            // Say what is actually in there. A reader handed zero pages shows
+            // an empty frame and a spinner that never resolves, which looks
+            // like a hang rather than an unreadable file.
+            let entries = (try? archive.entries()) ?? []
+            let sample = entries.prefix(3).joined(separator: ", ")
+            throw ArchiveError.corrupt(
+                "no readable pages in archive (\(entries.count) entries: \(sample))")
+        }
     }
 
+    /// Opens a comic, unwrapping a nested archive if that is what it is.
+    ///
+    /// Scanlation downloads are frequently a zip whose only entry is the real
+    /// `.cbz`. Depth is capped: two levels covers every wrapper seen in the
+    /// corpus, and refusing to recurse further means a maliciously nested
+    /// archive cannot spin the unpacker.
     public convenience init(fileURL: URL, workDirectory: URL? = nil) throws {
-        try self.init(archive: try ArchiveOpener.open(fileURL, workDirectory: workDirectory))
+        let work = workDirectory
+            ?? fileURL.deletingPathExtension().appendingPathExtension("unpacked")
+        var current = try ArchiveOpener.open(fileURL, workDirectory: work)
+
+        for depth in 0..<2 {
+            let entries = try current.entries()
+            if !PageManifest.pages(from: entries).isEmpty { break }
+            guard let nested = PageManifest.nestedArchives(in: entries).first else { break }
+
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            let unwrapped = work.appendingPathComponent(
+                "nested-\(depth)-" + (nested as NSString).lastPathComponent)
+            try current.data(for: nested).write(to: unwrapped, options: .atomic)
+            current = try ArchiveOpener.open(
+                unwrapped, workDirectory: work.appendingPathComponent("nested-\(depth)-work"))
+        }
+        try self.init(archive: current)
     }
 
     public var pageCount: Int { pages.count }

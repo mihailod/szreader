@@ -54,6 +54,21 @@ public enum PageManifest {
         return a.count < b.count
     }
 
+    static let archiveExtensions: Set<String> = ["cbz", "cbr", "zip", "rar"]
+
+    /// Archive entries inside an archive, in reading order.
+    ///
+    /// Scanlations are often packaged as a wrapper around the real comic —
+    /// a zip whose only entry is "01 Some Title.cbz". The pages are one level
+    /// down, so an archive with no images but a nested archive is not empty,
+    /// it is wrapped.
+    public static func nestedArchives(in entries: [String]) -> [String] {
+        entries.filter { path in
+            guard !isJunk(path), let ext = path.split(separator: ".").last else { return false }
+            return archiveExtensions.contains(ext.lowercased())
+        }.sorted(by: naturalLess)
+    }
+
     /// Image entries only, in reading order.
     public static func pages(from entries: [String]) -> [String] {
         entries.filter { !isJunk($0) && isImage($0) }.sorted(by: naturalLess)

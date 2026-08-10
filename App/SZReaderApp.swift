@@ -42,6 +42,11 @@ final class AppModel: ObservableObject {
     /// A failure worth interrupting for. The status line is too easy to miss,
     /// and a download that silently does nothing looks like a broken app.
     @Published var failure: String?
+
+    /// The comic currently open in the reader.
+    @Published var reading: OpenComic?
+    /// Issue whose archive is being unpacked, so the cover can show a spinner.
+    @Published var opening: Int?
     /// True while filenames are being probed to name untitled issues.
     @Published var resolving = false
 
@@ -168,9 +173,41 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// A comic handed to the reader. Identifiable so it can drive a cover.
+    struct OpenComic: Identifiable {
+        let id: Int
+        let document: ComicDocument
+        let title: String
+    }
+
     enum ImportFailure: Error, CustomStringConvertible {
         case notReady
         var description: String { "the library is still opening — try again in a moment" }
+    }
+
+    /// Opens a downloaded comic in the reader.
+    ///
+    /// Unpacking happens off the main thread: a solid RAR of 80 MB takes long
+    /// enough that doing it inline freezes the shelf mid-tap.
+    func read(_ issue: StoredIssue) {
+        guard let library, issue.isDownloaded, opening == nil else { return }
+        opening = issue.id
+        let name = issue.title ?? issue.code ?? "Comic"
+        Task { [weak self] in
+            do {
+                let document = try library.document(forIssue: issue.id)
+                await MainActor.run {
+                    self?.opening = nil
+                    self?.reading = OpenComic(id: issue.id, document: document, title: name)
+                }
+            } catch {
+                await MainActor.run {
+                    self?.opening = nil
+                    self?.failure = "“\(name)” could not be opened.\n\n"
+                        + Library.reason(error)
+                }
+            }
+        }
     }
 
     /// Names issues the forum post never named.

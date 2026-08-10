@@ -133,14 +133,23 @@ final class RarReaderTests: XCTestCase {
         }
     }
 
-    /// A RAR whose members are pages should present as an ordered comic.
-    func testComicDocumentOverRar() throws {
+    /// Opening and filtering a RAR work end to end.
+    ///
+    /// The fixture holds .txt files, so there is nothing to read. That used to
+    /// produce a document with zero pages, which the reader rendered as an
+    /// empty frame and a spinner that never resolved; it now fails with a
+    /// message naming what the archive does contain.
+    func testComicDocumentOverRarWithoutPages() throws {
         let url = try write(rar4Base64, as: "pages.cbr")
-        let doc = try ComicDocument(fileURL: url,
-                                    workDirectory: scratch.appendingPathComponent("doc"))
-        // The fixture holds .txt files, so there are no pages — the point is
-        // that opening and filtering work end to end without throwing.
-        XCTAssertEqual(doc.pageCount, 0)
-        XCTAssertFalse(try doc.archive.entries().isEmpty)
+        XCTAssertThrowsError(try ComicDocument(
+            fileURL: url, workDirectory: scratch.appendingPathComponent("doc"))) { error in
+            let message = "\(error)"
+            XCTAssertTrue(message.contains("no readable pages"), message)
+            XCTAssertTrue(message.contains(".txt"), "error names nothing concrete: \(message)")
+        }
+        // The RAR itself still opens and lists its members.
+        let archive = try ArchiveOpener.open(
+            url, workDirectory: scratch.appendingPathComponent("raw"))
+        XCTAssertFalse(try archive.entries().isEmpty)
     }
 }
