@@ -55,6 +55,17 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         UIRequiredDeviceCapabilities:
           - arm64
+        # The forum redirects to plain http and hotlinks covers from
+        # stripovi.com, so both need a scoped exception. Scoped rather than
+        # NSAllowsArbitraryLoads: only these hosts get cleartext.
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            stripzona.com:
+              NSIncludesSubdomains: true
+              NSExceptionAllowsInsecureHTTPLoads: true
+            stripovi.com:
+              NSIncludesSubdomains: true
+              NSExceptionAllowsInsecureHTTPLoads: true
 
     settings:
       base:

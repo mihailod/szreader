@@ -5,6 +5,7 @@ struct LibraryView: View {
     @ObservedObject var model: AppModel
     @State private var selected: StoredIssue?
     @State private var showingSample = false
+    @State private var showingImport = false
 
     var body: some View {
         NavigationStack {
@@ -27,7 +28,10 @@ struct LibraryView: View {
                         prompt: "Search by title")
             .navigationTitle("StripZona")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showingImport = true
+                    } label: { Label("Import", systemImage: "square.and.arrow.down") }
                     Button("Sample comic") { showingSample = true }
                 }
                 ToolbarItem(placement: .bottomBar) {
@@ -37,6 +41,9 @@ struct LibraryView: View {
             }
             .sheet(item: $selected) { issue in
                 IssueDetail(issue: issue, mirrors: model.mirrors(for: issue))
+            }
+            .sheet(isPresented: $showingImport) {
+                ImportView { html in model.importPage(html: html) }
             }
             .fullScreenCover(isPresented: $showingSample) {
                 ReaderView(document: SampleComic.document(), title: "Sample comic")

@@ -66,6 +66,21 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Ingests a page captured from the in-app browser, then refreshes the shelf.
+    func importPage(html: String) -> ImportReport? {
+        guard let store else { return nil }
+        do {
+            let report = try store.importPage(html: html, source: "webview import")
+            issueCount = store.issueCount
+            status = "\(store.issueCount) issues in library"
+            search(query)
+            return report
+        } catch {
+            status = "import failed: \(error)"
+            return nil
+        }
+    }
+
     func mirrors(for issue: StoredIssue) -> [MirrorLink] {
         (try? store?.mirrors(forIssue: issue.id)) as? [MirrorLink] ?? []
     }
