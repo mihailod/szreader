@@ -65,14 +65,34 @@ struct ImportView: View {
                     }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    // Done sits to the LEFT of Import so that Import keeps the
+                    // top-right corner it occupies on the shelf. It said
+                    // "Import this page" here and "Import" there, in a
+                    // different place and a different style — three differences
+                    // that made the one button you came in to press look like a
+                    // new one you had not seen before.
+                    Button("Done") { dismiss() }
+
                     Button {
                         Task { await performImport() }
                     } label: {
-                        if importing { ProgressView() }
-                        else { Label("Import this page", systemImage: "square.and.arrow.down") }
+                        if importing {
+                            ProgressView()
+                        } else {
+                            // Spelled out as an explicit stack: a toolbar
+                            // collapses a Label to its icon regardless of
+                            // labelStyle, and the word "Import" is what makes
+                            // this recognisably the same button as on the
+                            // shelf.
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.and.arrow.down")
+                                Text("Import")
+                            }
+                            .font(.headline)
+                        }
                     }
+                    .buttonStyle(.borderedProminent)
                     .disabled(importing || browser.isLoading)
-                    Button("Done") { dismiss() }
                 }
             }
             .onAppear { if browser.url == nil { browser.load(Self.home) } }

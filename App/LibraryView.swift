@@ -170,7 +170,7 @@ struct LibraryView: View {
 
         Button(role: .destructive) {
             pending = .remove(issue)
-        } label: { Label("Delete From Library", systemImage: "xmark.bin") }
+        } label: { Label("Delete", systemImage: "xmark.bin") }
 
         Button(role: .destructive) {
             pending = .deleteAll(model.issueCount)
@@ -290,8 +290,8 @@ struct LibraryView: View {
                 .font(.callout.weight(.medium))
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if let number = issue.number {
-                Text("#\(number)").font(.caption.monospacedDigit())
+            if let mark = issue.shelfMark {
+                Text(mark).font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -320,19 +320,18 @@ struct LibraryView: View {
                     HStack(spacing: 8) {
                         // Monospaced digits so numbers line up down the column
                         // rather than jittering with digit width.
-                        if let number = issue.number {
-                            Text("\(number)")
+                        if let mark = issue.shelfMark {
+                            Text(mark)
                                 .font(.title3.weight(.semibold).monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
                         Text(name(issue)).font(.title3.weight(.medium))
                     }
-                    HStack(spacing: 8) {
-                        if let series = issue.series {
-                            Text(series).font(.subheadline).foregroundStyle(.secondary)
-                        }
-                        Text("\(issue.mirrorCount) mirror\(issue.mirrorCount == 1 ? "" : "s")")
-                            .font(.subheadline).foregroundStyle(.secondary)
+                    // Who it is about and what it is from. The mirror count
+                    // lived here and told the reader nothing about the comic;
+                    // it is in the details, where it belongs.
+                    if let provenance = issue.provenance {
+                        Text(provenance).font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -350,18 +349,21 @@ struct LibraryView: View {
             if model.downloading.contains(issue.id) {
                 ProgressView().frame(width: 92)
             } else {
-                Button(issue.isDownloaded ? "Re-download" : "Download") {
-                    model.download(issue)
+                // One button for both directions, because the two states are
+                // mutually exclusive: a comic either is on disk or is not, and
+                // a permanently greyed-out twin of the button next to it says
+                // nothing a reader cannot already see from the cover.
+                Button(issue.isDownloaded ? "Remove Download" : "Download") {
+                    if issue.isDownloaded {
+                        pending = .deleteDownload(issue)
+                    } else {
+                        model.download(issue)
+                    }
                 }
                 .buttonStyle(.bordered)
-                .tint(.green)
+                .tint(issue.isDownloaded ? .red : .green)
             }
-            // Not red: this only reclaims disk, and the comic can be fetched
-            // again without re-importing its page.
-            Button("Remove Download") { pending = .deleteDownload(issue) }
-                .buttonStyle(.bordered)
-                .disabled(!issue.isDownloaded)
-            Button("Delete From Library") { pending = .remove(issue) }
+            Button("Delete") { pending = .remove(issue) }
                 .buttonStyle(.bordered)
                 .tint(.red)
         }
@@ -400,17 +402,18 @@ struct LibraryView: View {
 
     private var emptyTitle: String {
         if model.downloadedOnly { return "No downloaded comics yet" }
-        return model.issueCount == 0 ? "No comics yet" : "No match"
+        return model.issueCount == 0 ? "No imported comics yet" : "No match"
     }
 
     private var emptyDetail: String {
         if model.downloadedOnly {
             return model.query.isEmpty
-                ? "Long-press a comic and choose Download, or turn off the Downloaded filter"
+                ? "Turn off the Downloaded filter and download some comics!"
                 : "Nothing you have downloaded matches “\(model.query)”."
         }
         return model.issueCount == 0
-            ? "Tap Import, browse StripZona, like a post, then import that page"
+            ? "Tap Import, login to StripZona (if needed), browse and like a post "
+              + "with the comics you want to read and then import that page."
             : "Nothing in your \(model.issueCount) imported issues matches “\(model.query)”."
     }
 
@@ -551,8 +554,20 @@ struct IssueDetail: View {
             List {
                 Section("Issue") {
                     LabeledContent("Title", value: issue.title ?? "—")
-                    LabeledContent("Code", value: issue.code ?? "—")
+                    LabeledContent("Hero", value: issue.heroDisplay ?? "—")
+                    LabeledContent("Series", value: issue.edition ?? "—")
+                    // Spelled out, because the shelf shows only the short form
+                    // and an unexplained "LMS" is not obviously an abbreviation
+                    // of anything.
+                    if let code = issue.editionCode, let edition = issue.edition,
+                       code.caseInsensitiveCompare(edition) != .orderedSame {
+                        LabeledContent("Series code") {
+                            Text("\(code) — \(edition)")
+                        }
+                    }
                     LabeledContent("Number", value: issue.number.map(String.init) ?? "—")
+                    LabeledContent("Code", value: issue.code ?? "—")
+                    LabeledContent("Mirrors", value: "\(issue.mirrorCount)")
                     LabeledContent("Parsed as", value: issue.style.rawValue)
                     LabeledContent("Downloaded", value: issue.isDownloaded ? "yes" : "no")
                 }

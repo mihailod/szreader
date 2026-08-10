@@ -30,7 +30,33 @@ final class AppModel: ObservableObject {
 
     @Published var results: [StoredIssue] = []
     @Published var query = ""
-    @Published var status = "starting…"
+    /// The last thing that happened, shown in the status bar.
+    ///
+    /// Clears itself after a while: it reports an event, and an event that
+    /// finished two hours ago reads as current state. Each new message
+    /// supersedes the previous one's timer, so a run of updates — the name
+    /// resolver counting up, say — is never cut short halfway.
+    @Published var status = "starting…" {
+        didSet { scheduleStatusClear() }
+    }
+
+    /// How long a message stays on screen.
+    private static let statusLifetime = Duration.seconds(30)
+
+    /// Identifies the message a pending clear belongs to.
+    private var statusGeneration = 0
+
+    private func scheduleStatusClear() {
+        guard !status.isEmpty else { return }
+        statusGeneration += 1
+        let generation = statusGeneration
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.statusLifetime)
+            // A newer message has taken over; that one owns the timer now.
+            guard let self, self.statusGeneration == generation else { return }
+            self.status = ""
+        }
+    }
     @Published var issueCount = 0
     @Published var downloadedCount = 0
     /// 0...1 per issue being fetched, for the progress bar.
@@ -113,8 +139,11 @@ final class AppModel: ObservableObject {
             // Empty query lists the start of the library rather than nothing,
             // so the shelf is never blank on launch.
             results = text.trimmingCharacters(in: .whitespaces).isEmpty
-                ? try store.recent(limit: 200, downloadedOnly: downloadedOnly)
-                : try store.search(text, limit: 200, downloadedOnly: downloadedOnly)
+                // No cap: the grid and list are lazy, so only visible cells are
+                // built, and a silent 200-row ceiling made a 613-issue library
+                // look like it ended at 200.
+                ? try store.recent(limit: nil, downloadedOnly: downloadedOnly)
+                : try store.search(text, limit: nil, downloadedOnly: downloadedOnly)
         } catch {
             status = "search failed: \(error)"
         }
@@ -213,7 +242,7 @@ final class AppModel: ObservableObject {
     func read(_ issue: StoredIssue) {
         guard let library, issue.isDownloaded, opening == nil else { return }
         opening = issue.id
-        let name = issue.title ?? issue.code ?? "Comic"
+        let name = issue.readerTitle
         Task { [weak self] in
             do {
                 let document = try library.document(forIssue: issue.id)

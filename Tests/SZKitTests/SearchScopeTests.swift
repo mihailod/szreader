@@ -241,3 +241,216 @@ final class DownloadedFilterTests: XCTestCase {
         XCTAssertFalse(try store.recent(limit: 50).isEmpty)
     }
 }
+
+/// How an issue is labelled on the shelf.
+final class ShelfLabelTests: XCTestCase {
+
+    private func issue(hero: String?, edition: String?, number: Int?) -> StoredIssue {
+        StoredIssue(id: 1, code: "MN_LMS_511", number: number, title: "Dijamantska klopka",
+                    series: nil, hero: hero, edition: edition, style: .labeledBlock,
+                    mirrorCount: 2, coverURL: nil, isDownloaded: false)
+    }
+
+    /// Several words become initials.
+    func testMultiWordEditionBecomesInitials() {
+        XCTAssertEqual(issue(hero: "Mister No", edition: "Lunov Magnus Strip",
+                             number: 511).editionCode, "LMS")
+        XCTAssertEqual(issue(hero: "Kit Teler", edition: "ZLATNA SERIJA",
+                             number: 21).editionCode, "ZS")
+        XCTAssertEqual(issue(hero: "Alan Ford", edition: "Super Strip Biblioteka",
+                             number: 33).editionCode, "SSB")
+    }
+
+    /// A single word is used as it is, not reduced to one letter.
+    func testSingleWordEditionIsKept() {
+        XCTAssertEqual(issue(hero: "Alan Ford", edition: "Vjesnik", number: 1).editionCode,
+                       "Vjesnik")
+        XCTAssertEqual(issue(hero: "Kolorka", edition: "FIBRA", number: 3).editionCode, "FIBRA")
+    }
+
+    func testShelfMarkReadsAsEditionThenNumber() {
+        XCTAssertEqual(issue(hero: "Mister No", edition: "Lunov Magnus Strip",
+                             number: 511).shelfMark, "LMS 511")
+    }
+
+    /// Missing pieces must not produce "LMS " or a stray separator.
+    func testShelfMarkDegradesCleanly() {
+        XCTAssertEqual(issue(hero: nil, edition: nil, number: 7).shelfMark, "7")
+        XCTAssertEqual(issue(hero: nil, edition: "Zlatna Serija", number: nil).shelfMark, "ZS")
+        XCTAssertNil(issue(hero: nil, edition: nil, number: nil).shelfMark)
+    }
+
+    func testProvenanceIsHeroThenSeries() {
+        XCTAssertEqual(issue(hero: "Mister No", edition: "Lunov Magnus Strip", number: 511)
+                        .provenance, "Mister No, Lunov Magnus Strip")
+        XCTAssertEqual(issue(hero: "Mister No", edition: nil, number: 1).provenance, "Mister No")
+        XCTAssertNil(issue(hero: nil, edition: nil, number: 1).provenance)
+    }
+}
+
+/// Hero names as readers actually use them.
+final class HeroAliasTests: XCTestCase {
+
+    func testZagorLosesItsRegisteredSuffixOnScreen() {
+        XCTAssertEqual(PageContext.displayName(forHero: "Zagor Te-Nay"), "Zagor")
+        // Folded matching, so punctuation and case cannot miss it.
+        XCTAssertEqual(PageContext.displayName(forHero: "ZAGOR TE-NAY"), "Zagor")
+        XCTAssertEqual(PageContext.displayName(forHero: "Zagor Te Nay"), "Zagor")
+    }
+
+    /// Every other hero passes through untouched.
+    func testOtherHeroesAreUnchanged() {
+        XCTAssertEqual(PageContext.displayName(forHero: "Mister No"), "Mister No")
+        XCTAssertEqual(PageContext.displayName(forHero: "Alan Ford"), "Alan Ford")
+        XCTAssertEqual(PageContext.displayName(forHero: "Zagor"), "Zagor")
+    }
+
+    /// End to end, on the real page.
+    func testZagorPageReportsTheShortName() throws {
+        let dir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("spike/pages")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        guard let hit = names.first(where: { $0.contains("Zagor - ZLATNA") }),
+              let html = try? String(contentsOf: dir.appendingPathComponent(hit),
+                                     encoding: .utf8)
+        else { throw XCTSkip("fixture missing") }
+
+        let context = Catalog.pageContext(in: html)
+        // Stored and indexed as the forum spells it, so searching the full
+        // name still finds it...
+        XCTAssertEqual(context.hero, "Zagor Te-Nay")
+        XCTAssertTrue(context.searchableText.contains("Zagor Te-Nay"))
+        XCTAssertEqual(context.publisher, "BONELLI")
+        // ...and shortened only where a reader sees it.
+        XCTAssertEqual(PageContext.displayName(forHero: context.hero!), "Zagor")
+    }
+}
+
+/// The shelf must not silently stop partway through the library.
+final class ResultLimitTests: XCTestCase {
+
+    private func store(issues: Int) throws -> Store {
+        let store = try Store()
+        var html = ""
+        for n in 1...issues {
+            html += "<div>\(String(format: "%04d", n))-Broj \(n)</div>"
+                 +  "<div>http://www.mediafire.com/?FAKEKEY\(String(format: "%04d", n))</div>"
+        }
+        try store.ingest(html: html)
+        return store
+    }
+
+    func testNilLimitReturnsEverything() throws {
+        let store = try store(issues: 250)
+        XCTAssertEqual(store.issueCount, 250)
+        XCTAssertEqual(try store.recent(limit: nil).count, 250)
+        XCTAssertEqual(try store.search("broj", limit: nil).count, 250)
+    }
+
+    /// An explicit cap still works, for callers that want one.
+    func testExplicitLimitStillApplies() throws {
+        let store = try store(issues: 250)
+        XCTAssertEqual(try store.recent(limit: 10).count, 10)
+        XCTAssertEqual(try store.search("broj", limit: 10).count, 10)
+    }
+
+    /// The filter and an absent limit must compose.
+    func testNilLimitWithDownloadedFilter() throws {
+        let store = try store(issues: 250)
+        XCTAssertTrue(try store.recent(limit: nil, downloadedOnly: true).isEmpty)
+        XCTAssertEqual(try store.recent(limit: nil, downloadedOnly: false).count, 250)
+    }
+
+    /// A library far larger than anything on the forum still comes back whole,
+    /// and quickly — this is the claim that removing the cap rests on.
+    func testLargeLibraryIsReturnedWhole() throws {
+        let store = try store(issues: 5_000)
+        let started = Date()
+        let all = try store.recent(limit: nil)
+        let elapsed = Date().timeIntervalSince(started)
+        XCTAssertEqual(all.count, 5_000)
+        XCTAssertLessThan(elapsed, 2.0, "loading the shelf took \(elapsed)s")
+    }
+}
+
+/// What the reader's title bar says.
+final class ReaderTitleTests: XCTestCase {
+
+    private func issue(edition: String?, hero: String?, title: String?,
+                       number: Int? = 511, code: String? = "MN_LMS_511") -> StoredIssue {
+        StoredIssue(id: 1, code: code, number: number, title: title, series: nil,
+                    hero: hero, edition: edition, style: .labeledBlock,
+                    mirrorCount: 2, coverURL: nil, isDownloaded: true)
+    }
+
+    func testFullTitleReadsSeriesNumberHeroThenName() {
+        XCTAssertEqual(issue(edition: "Super Strip Biblioteka", hero: "Alan Ford",
+                             title: "Grupa TNT", number: 1).readerTitle,
+                       "SSB 1 · Alan Ford · Grupa TNT")
+        XCTAssertEqual(issue(edition: "Lunov Magnus Strip", hero: "Mister No",
+                             title: "Dijamantska klopka").readerTitle,
+                       "LMS 511 · Mister No · Dijamantska klopka")
+    }
+
+    /// The display alias applies here too.
+    func testHeroUsesItsShortName() {
+        XCTAssertEqual(issue(edition: "Zlatna Serija", hero: "Zagor Te-Nay",
+                             title: "Nasilje u Darkvudu", number: 13).readerTitle,
+                       "ZS 13 · Zagor · Nasilje u Darkvudu")
+    }
+
+    /// Missing pieces are dropped, not left as dangling separators.
+    func testMissingPiecesAreOmitted() {
+        XCTAssertEqual(issue(edition: nil, hero: "Alan Ford",
+                             title: "Grupa TNT", number: 1).readerTitle,
+                       "1 · Alan Ford · Grupa TNT")
+        XCTAssertEqual(issue(edition: "Zlatna Serija", hero: nil,
+                             title: "Nasilje", number: 13).readerTitle,
+                       "ZS 13 · Nasilje")
+        XCTAssertEqual(issue(edition: "Zlatna Serija", hero: "Zagor",
+                             title: "Nasilje", number: nil).readerTitle,
+                       "ZS · Zagor · Nasilje")
+    }
+
+    /// With nothing to go on, the code is better than an empty bar.
+    func testFallsBackToTheCode() {
+        XCTAssertEqual(issue(edition: nil, hero: nil, title: nil, number: nil).readerTitle,
+                       "MN_LMS_511")
+        XCTAssertEqual(issue(edition: nil, hero: nil, title: nil,
+                             number: nil, code: nil).readerTitle, "Comic")
+    }
+}
+
+/// Editions whose initials are not what readers call them.
+final class EditionCodeTests: XCTestCase {
+
+    /// Spelled out rather than abbreviated: it is a fan scanlation exclusive
+    /// to the forum, not a printed edition like the others.
+    func testStripzonaScanlationIsSpelledOut() {
+        XCTAssertEqual(PageContext.code(forEdition: "Stripzona Scanlation"), "SZScanlation")
+        // Folded, so the forum's shouted spelling resolves the same way.
+        XCTAssertEqual(PageContext.code(forEdition: "STRIPZONA SCANLATION"), "SZScanlation")
+    }
+
+    /// Everything else still derives from the words themselves.
+    func testOtherEditionsAreUnaffected() {
+        XCTAssertEqual(PageContext.code(forEdition: "Lunov Magnus Strip"), "LMS")
+        XCTAssertEqual(PageContext.code(forEdition: "ZLATNA SERIJA"), "ZS")
+        XCTAssertEqual(PageContext.code(forEdition: "Super Strip Biblioteka"), "SSB")
+        XCTAssertEqual(PageContext.code(forEdition: "Vjesnik"), "Vjesnik")
+        XCTAssertNil(PageContext.code(forEdition: "   "))
+    }
+
+    /// The alias must reach the shelf, not just the parser.
+    func testStoredIssueUsesTheAlias() {
+        let issue = StoredIssue(id: 1, code: "JD_01", number: 1, title: "Takav je bio Alan Skot",
+                                series: nil, hero: "Dzudas", edition: "STRIPZONA SCANLATION",
+                                style: .labeledBlock, mirrorCount: 2, coverURL: nil,
+                                isDownloaded: false)
+        XCTAssertEqual(issue.editionCode, "SZScanlation")
+        XCTAssertEqual(issue.shelfMark, "SZScanlation 1")
+        XCTAssertEqual(issue.readerTitle,
+                       "SZScanlation 1 · Dzudas · Takav je bio Alan Skot")
+    }
+}

@@ -7,12 +7,62 @@ public struct StoredIssue: Equatable, Sendable {
     public let number: Int?
     public let title: String?
     public let series: String?
+    /// Character the topic sits under: "Mister No", "Alan Ford".
+    public let hero: String?
+    /// Edition the topic collects, spelled out: "Lunov Magnus Strip".
+    public let edition: String?
     public let style: LabelStyle
     public let mirrorCount: Int
     public let coverURL: String?
     /// Whether the archive is on disk. Drives the greyed-out cover and which
     /// actions are offered.
     public let isDownloaded: Bool
+
+    /// Short form of the edition for the shelf: initials when it is several
+    /// words ("Lunov Magnus Strip" -> "LMS"), the word itself when it is one
+    /// ("Vjesnik", "FIBRA").
+    public var editionCode: String? {
+        guard let edition, !edition.isEmpty else { return nil }
+        return PageContext.code(forEdition: edition)
+    }
+
+    /// "LMS 511" — the edition and number as a reader refers to an issue.
+    public var shelfMark: String? {
+        switch (editionCode, number) {
+        case let (code?, num?): return "\(code) \(num)"
+        case let (code?, nil):  return code
+        case let (nil, num?):   return "\(num)"
+        default:                return nil
+        }
+    }
+
+    /// The hero as it should read on screen — the stored value keeps the
+    /// forum's own spelling so search still matches it.
+    public var heroDisplay: String? {
+        hero.map(PageContext.displayName(forHero:))
+    }
+
+    /// "SSB 1 · Alan Ford · Grupa TNT" — how the reader names what is open.
+    ///
+    /// Wider than the shelf's label because the reader is the one place with
+    /// no surrounding context: the covers, the numbers and the series are all
+    /// off screen, so the title bar has to say what this is on its own.
+    /// Missing pieces are dropped rather than left as empty separators.
+    public var readerTitle: String {
+        // shelfMark rather than the bare code, so the issue number travels
+        // with the series — "SSB 1" is what identifies a comic; "SSB" alone
+        // names a whole run of several hundred.
+        let parts = [shelfMark, heroDisplay, title ?? code]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? "Comic" : parts.joined(separator: " · ")
+    }
+
+    /// "Mister No, Lunov Magnus Strip" — who it is about and what it is from.
+    public var provenance: String? {
+        let parts = [heroDisplay, edition].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
 }
 
 /// The local library: issues, their mirrors, and a folded full-text index.
@@ -72,6 +122,8 @@ public final class Store {
         try? db.execute("ALTER TABLE issue ADD COLUMN context TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN search_text TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN cover_url TEXT")
+        try? db.execute("ALTER TABLE issue ADD COLUMN hero TEXT")
+        try? db.execute("ALTER TABLE issue ADD COLUMN edition TEXT")
 
         // Heal libraries damaged by the identity bug: naming an issue used to
         // rewrite `title_folded`, which is part of the natural key, so the next
@@ -175,14 +227,24 @@ public final class Store {
         var newIssues = 0, newMirrors = 0
         // Publisher, hero and edition live in the page chrome, not the posts,
         // so they are read once per page and stamped onto each issue.
-        let context = Catalog.pageContext(in: html).searchableText
+        let pageContext = Catalog.pageContext(in: html)
+        let context = pageContext.searchableText
         let covers = Catalog.covers(in: html)
         try db.transaction {
             for parsed in Catalog.issues(in: html) {
                 let folded = Fold.fold(parsed.label.title ?? parsed.label.code ?? "")
                 let id = try upsertIssue(parsed, folded: folded, source: source,
-                                         context: context, inserted: &newIssues)
+                                         context: context, hero: pageContext.hero,
+                                         edition: pageContext.edition,
+                                         inserted: &newIssues)
                 // Covers arrive per page; fill one in if this issue lacks one.
+                // Fills these in for rows created before the columns existed,
+                // so a re-import upgrades an old library rather than only
+                // helping new arrivals.
+                try db.run("""
+                    UPDATE issue SET hero = COALESCE(hero, ?), edition = COALESCE(edition, ?)
+                    WHERE id = ?
+                    """, [SQLValue(pageContext.hero), SQLValue(pageContext.edition), .int(id)])
                 if let number = parsed.label.number, let cover = covers[number] {
                     try db.run("UPDATE issue SET cover_url = ? WHERE id = ? AND cover_url IS NULL",
                                [.text(cover), .int(id)])
@@ -201,18 +263,21 @@ public final class Store {
     }
 
     private func upsertIssue(_ parsed: ParsedIssue, folded: String, source: String?,
-                             context: String, inserted: inout Int) throws -> Int64 {
+                             context: String, hero: String?, edition: String?,
+                             inserted: inout Int) throws -> Int64 {
         let searchText = Self.searchText(title: parsed.label.title, code: parsed.label.code,
                                          number: parsed.label.number,
                                          series: parsed.label.series, context: context)
         try db.run("""
             INSERT OR IGNORE INTO issue
-              (code, number, title, title_folded, series, style, source, context, search_text)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (code, number, title, title_folded, series, style, source, context,
+               search_text, hero, edition)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [SQLValue(parsed.label.code), SQLValue(parsed.label.number),
                   SQLValue(parsed.label.title), .text(folded),
                   SQLValue(parsed.label.series), .text(parsed.style.rawValue),
-                  SQLValue(source), .text(context), .text(searchText)])
+                  SQLValue(source), .text(context), .text(searchText),
+                  SQLValue(hero), SQLValue(edition)])
 
         if try db.scalarInt("SELECT changes()") > 0 {
             inserted += 1
@@ -245,7 +310,7 @@ public final class Store {
 
     /// Prefix search over folded titles. The query is folded identically to
     /// the stored keys, so diacritics and punctuation cannot cause a miss.
-    public func search(_ text: String, limit: Int = 50,
+    public func search(_ text: String, limit: Int? = 50,
                        downloadedOnly: Bool = false) throws -> [StoredIssue] {
         let tokens = Fold.fold(text).split(separator: " ").filter { !$0.isEmpty }
         guard !tokens.isEmpty else { return [] }
@@ -257,21 +322,23 @@ public final class Store {
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
                    (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
-                   EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id)
+                   EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
+                   i.hero, i.edition
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
             \(downloadedOnly
               ? "AND EXISTS(SELECT 1 FROM download f WHERE f.issue_id = i.id)" : "")
             ORDER BY rank
-            LIMIT ?
-            """, [.text(match), .int(Int64(limit))]) { row in
+            \(limit == nil ? "" : "LIMIT ?")
+            """, [.text(match)] + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
                 id: row.int(0) ?? 0,
                 code: row.string(1),
                 number: row.int(2),
                 title: row.string(3),
                 series: row.string(4),
+                hero: row.string(9), edition: row.string(10),
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
@@ -282,7 +349,10 @@ public final class Store {
 
     /// The library in insertion order, for the shelf when no query is active.
     /// An empty search field should show the library, not an empty screen.
-    public func recent(limit: Int = 100, downloadedOnly: Bool = false) throws -> [StoredIssue] {
+    /// `limit: nil` returns everything. The shelf uses that: a cap there is
+    /// invisible — the library simply appears to stop, with no indication that
+    /// more exists.
+    public func recent(limit: Int? = 100, downloadedOnly: Bool = false) throws -> [StoredIssue] {
         var out: [StoredIssue] = []
         // Applied in SQL rather than to the results: the query is capped, so
         // filtering afterwards would drop downloads that sit past the cap.
@@ -291,12 +361,14 @@ public final class Store {
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
                    (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
-                   EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id)
-            FROM issue i \(filter) ORDER BY i.id LIMIT ?
-            """, [.int(Int64(limit))]) { row in
+                   EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
+                   i.hero, i.edition
+            FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
+            """, limit.map { [SQLValue.int(Int64($0))] } ?? []) { row in
             out.append(StoredIssue(
                 id: row.int(0) ?? 0, code: row.string(1), number: row.int(2),
                 title: row.string(3), series: row.string(4),
+                hero: row.string(9), edition: row.string(10),
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),

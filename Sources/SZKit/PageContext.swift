@@ -27,16 +27,129 @@ public struct PageContext: Equatable, Sendable {
         ([topic].compactMap { $0 } + trail).joined(separator: " ")
     }
 
-    /// Best guess at the hero/series forum — the last crumb before the leaf is
-    /// usually the character ("Zagor Te-Nay", "Alan Ford").
-    public var hero: String? {
-        trail.count >= 2 ? trail[trail.count - 2] : trail.last
+    /// The character the topic sits under — the *last* crumb.
+    ///
+    /// This used to take the crumb before the leaf, which returns "BONELLI"
+    /// for Mister No: the publisher, not the hero. Checked against every saved
+    /// page: the leaf is "Mister No", "Kit Teler", "Dzudas", "Alan Ford".
+    /// Registered names nobody uses when talking about the comic.
+    ///
+    /// Applied only when a hero is *shown*. The forum's own spelling is what
+    /// gets stored and indexed, so searching "te-nay" still finds Zagor and
+    /// nothing is lost by preferring the short form on screen.
+    /// Keyed on the folded form so punctuation and case cannot miss.
+    private static let heroAliases: [String: String] = [
+        "zagor te nay": "Zagor",
+    ]
+
+    /// How a hero should read on screen.
+    public static func displayName(forHero name: String) -> String {
+        heroAliases[Fold.fold(name)] ?? name
     }
 
-    /// Best guess at the publisher grouping ("BONELLI", "Magnus - Bunker").
-    public var publisher: String? {
-        trail.count >= 3 ? trail[trail.count - 3] : nil
+    /// The trail crumb identified as the hero, exactly as the forum spells it.
+    ///
+    /// Kept separate from `hero` because `publisher` locates itself relative to
+    /// this crumb *in the trail* — and an aliased name ("Zagor") no longer
+    /// appears there, so looking that up finds nothing.
+    var heroCrumb: String? {
+        // The topic names the hero first: "Mister No - LUNOV MAGNUS STRIP".
+        // Matched against the breadcrumb so the fuller forum spelling wins —
+        // "Zagor" in the topic, "Zagor Te-Nay" in the trail — and because the
+        // leaf crumb is sometimes a section ("ZS i LMS") rather than a hero.
+        guard let key = topicParts.first, !key.isEmpty else { return trail.last }
+        let folded = Fold.fold(key)
+        if let match = trail.first(where: {
+            let crumb = Fold.fold($0)
+            return crumb.hasPrefix(folded) || folded.hasPrefix(crumb)
+        }) { return match }
+        return key
     }
+
+    public var hero: String? { heroCrumb }
+
+    /// Topic split on " - ", with bracketed asides removed.
+    private var topicParts: [String] {
+        guard let topic else { return [] }
+        var cleaned = topic
+        for pattern in [#"\[[^\]]*\]"#, #"\([^)]*\)"#] {
+            cleaned = cleaned.replacingOccurrences(of: pattern, with: " ",
+                                                   options: .regularExpression)
+        }
+        return cleaned.components(separatedBy: " - ")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// The grouping directly above the hero ("BONELLI", "Magnus - Bunker").
+    ///
+    /// Found relative to the hero rather than at a fixed depth: some topics
+    /// carry an extra section crumb below it ("ZS i LMS"), which shifts every
+    /// fixed offset by one.
+    public var publisher: String? {
+        guard let crumb = heroCrumb, let index = trail.firstIndex(of: crumb),
+              index > 0 else { return nil }
+        return trail[index - 1]
+    }
+
+    /// The edition a topic collects, e.g. "LUNOV MAGNUS STRIP".
+    ///
+    /// Topics are titled "<hero> - <EDITION>", so the edition is whichever part
+    /// is not the hero. Alan Ford writes it as one run —
+    /// "Alan Ford Super Strip Biblioteka [425] [Vjesnik] - Alan Ford" — so the
+    /// hero is also stripped from the front of the remainder, and bracketed
+    /// asides (issue counts, publisher tags) are dropped first.
+    public var edition: String? {
+        let heroFolded = hero.map(Fold.fold)
+        let parts = topicParts.filter { Fold.fold($0) != heroFolded }
+
+        // Editions are shouted on this forum — "LUNOV MAGNUS STRIP",
+        // "ZLATNA SERIJA", "FIBRA" — which separates them from the hero and
+        // from descriptive asides far more reliably than position does.
+        if let shouted = parts.first(where: { part in
+            part.contains(where: \.isLetter) && !part.contains(where: \.isLowercase)
+        }) { return shouted }
+
+        guard var candidate = parts.last else { return nil }
+
+        // "Alan Ford Super Strip Biblioteka" -> "Super Strip Biblioteka"
+        if let hero, Fold.fold(candidate).hasPrefix(Fold.fold(hero)),
+           candidate.count > hero.count {
+            candidate = String(candidate.dropFirst(hero.count))
+                .trimmingCharacters(in: .whitespaces)
+        }
+        return candidate.isEmpty ? nil : candidate
+    }
+
+    /// Editions whose initials are not what readers call them.
+    ///
+    /// "Stripzona Scanlation" reduces to "SS", which says nothing. It is also
+    /// not an edition in the sense the others are — no publisher printed it;
+    /// it is a fan scanlation that exists only here — so it is spelled out
+    /// rather than abbreviated, and reads as the odd one out on a shelf of
+    /// LMS and ZS precisely because it is.
+    ///
+    /// Keyed on the folded form so case and punctuation cannot miss.
+    private static let editionCodes: [String: String] = [
+        "stripzona scanlation": "SZScanlation",
+    ]
+
+    /// Short form of an edition, for the shelf: an alias where one exists,
+    /// otherwise initials when it is several words ("Lunov Magnus Strip" ->
+    /// "LMS") and the word itself when it is one ("Vjesnik", "FIBRA").
+    ///
+    /// The single definition both `PageContext` and `StoredIssue` use — they
+    /// had a copy each, which is two places for the next alias to be forgotten.
+    public static func code(forEdition edition: String) -> String? {
+        if let alias = editionCodes[Fold.fold(edition)] { return alias }
+        let words = edition.split(whereSeparator: { $0 == " " || $0 == "-" })
+            .filter { $0.contains(where: \.isLetter) }
+        guard !words.isEmpty else { return nil }
+        if words.count == 1 { return String(words[0]) }
+        return words.compactMap { $0.first?.uppercased() }.joined()
+    }
+
+    public var editionCode: String? { edition.flatMap(Self.code(forEdition:)) }
 
     public static let empty = PageContext(topic: nil, trail: [])
 }
