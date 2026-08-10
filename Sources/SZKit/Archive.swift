@@ -1,4 +1,5 @@
 import Compression
+import CUnrar
 import Foundation
 
 public enum ArchiveError: Error, CustomStringConvertible {
@@ -6,8 +7,8 @@ public enum ArchiveError: Error, CustomStringConvertible {
     case corrupt(String)
     case unsupportedCompression(UInt16)
     case entryNotFound(String)
-    /// RAR needs a real decompressor; see `RarReader`.
-    case rarSupportMissing
+    /// A failure reported by the vendored unrar sources.
+    case rar(Int32)
 
     public var description: String {
         switch self {
@@ -15,9 +16,8 @@ public enum ArchiveError: Error, CustomStringConvertible {
         case .corrupt(let m): return "corrupt archive: \(m)"
         case .unsupportedCompression(let m): return "unsupported zip compression method \(m)"
         case .entryNotFound(let n): return "no such entry: \(n)"
-        case .rarSupportMissing:
-            return "RAR archives need a decompressor linked into the app target "
-                 + "(UnrarKit or libarchive) — see RarReader"
+        case .rar(let code):
+            return "rar: " + String(cString: szunrar_error_string(code))
         }
     }
 }
@@ -36,11 +36,21 @@ extension ArchiveReader {
 
 /// Opens whichever container the bytes actually are.
 public enum ArchiveOpener {
-    public static func open(_ url: URL) throws -> ArchiveReader {
+    /// Opens whichever container the bytes actually are.
+    ///
+    /// `workDirectory` is only used for RAR, which must be unpacked to disk.
+    /// It defaults to a sibling of the archive so callers that do not care
+    /// still get sane behaviour.
+    public static func open(_ url: URL, workDirectory: URL? = nil) throws -> ArchiveReader {
         switch ArchiveKind.sniff(url) {
-        case .zip: return try ZipReader(url: url)
-        case .rar: return RarReader()
-        case .unknown: throw ArchiveError.notAnArchive
+        case .zip:
+            return try ZipReader(url: url)
+        case .rar:
+            let work = workDirectory ?? url.deletingPathExtension()
+                .appendingPathExtension("unpacked")
+            return try RarReader(url: url, workDirectory: work)
+        case .unknown:
+            throw ArchiveError.notAnArchive
         }
     }
 }
@@ -164,21 +174,6 @@ public struct ZipReader: ArchiveReader {
     }
 }
 
-/// RAR placeholder.
-///
-/// 98% of resolved filenames in the corpus are `.cbr`/`.rar`, so this is the
-/// common case, not an edge case. RAR decompression cannot be implemented here:
-/// the format is complex and the unrar licence explicitly forbids using its
-/// source to reimplement the algorithm.
-///
-/// The app target must link a decompressor — UnrarKit (CocoaPods or a manual
-/// Xcode integration; it has no SPM manifest) or a vendored libarchive — and
-/// provide an `ArchiveReader` that wraps it.
-public struct RarReader: ArchiveReader {
-    public init() {}
-    public func entries() throws -> [String] { throw ArchiveError.rarSupportMissing }
-    public func data(for entry: String) throws -> Data { throw ArchiveError.rarSupportMissing }
-}
 
 extension Data {
     func u16(_ offset: Int) -> UInt16 {

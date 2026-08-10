@@ -103,11 +103,10 @@ final class ZipReaderTests: XCTestCase {
         let reader = try ArchiveOpener.open(liar)
         XCTAssertEqual(try reader.pageNames().count, 3)
 
-        let rar = dir.appendingPathComponent("real.cbr")
+        // A truncated RAR routes to the RAR reader and is rejected there.
+        let rar = dir.appendingPathComponent("truncated.cbr")
         try Data([0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00, 0x00]).write(to: rar)
-        XCTAssertThrowsError(try ArchiveOpener.open(rar).pageNames()) { error in
-            XCTAssertTrue("\(error)".contains("RAR archives need a decompressor"))
-        }
+        XCTAssertThrowsError(try ArchiveOpener.open(rar, workDirectory: dir.appendingPathComponent("w")))
     }
 }
 

@@ -58,8 +58,8 @@ public final class ComicDocument {
         self.pages = try archive.pageNames()
     }
 
-    public convenience init(fileURL: URL) throws {
-        try self.init(archive: try ArchiveOpener.open(fileURL))
+    public convenience init(fileURL: URL, workDirectory: URL? = nil) throws {
+        try self.init(archive: try ArchiveOpener.open(fileURL, workDirectory: workDirectory))
     }
 
     public var pageCount: Int { pages.count }
