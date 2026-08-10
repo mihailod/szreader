@@ -1,0 +1,71 @@
+name: SZReader
+
+options:
+  bundleIdPrefix: com.mihailod
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+# SZKit and the vendored CUnrar come from the package in this same directory,
+# so there is one source of truth: `swift test` and the app build the same code.
+packages:
+  SZKit:
+    path: .
+
+targets:
+  SZReader:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+
+    sources:
+      - path: App
+        excludes:
+          - "build-sim.sh"    # the pre-Xcode scaffold; kept for reference
+          - "Info.plist"      # referenced via INFOPLIST_FILE instead
+
+    dependencies:
+      - package: SZKit
+        product: SZKit
+
+    # xcodegen OWNS this file and rewrites it on every generate, so anything
+    # needed at runtime has to be declared here. Without UILaunchScreen the app
+    # runs letterboxed on iPad instead of filling the display.
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: StripZona
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiredDeviceCapabilities:
+          - arm64
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mihailod.szreader
+        PRODUCT_NAME: SZReader
+        INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"        # iPhone and iPad
+        SWIFT_VERSION: "5.9"
+        CODE_SIGN_STYLE: Automatic
+        # Pinned here rather than set in Xcode: xcodegen rewrites the project on
+        # every generate, so anything configured only in the IDE is lost.
+        DEVELOPMENT_TEAM: MUYBB8YH5X
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # unrar is C++; without this the linker misses the C++ runtime.
+        CLANG_CXX_LANGUAGE_STANDARD: "c++14"
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG

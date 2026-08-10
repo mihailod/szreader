@@ -10,6 +10,13 @@ spike/*.csv
 .build/
 .swiftpm/
 DerivedData/
+# NB: git has no inline comments — a '#' only starts a comment at the start of
+# a line, so a trailing comment becomes part of the pattern and matches nothing.
+# xcodebuild -derivedDataPath
+.xcbuild/
+.simbuild/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
 *.xcuserstate
 *.xcodeproj/project.xcworkspace/xcuserdata/
 

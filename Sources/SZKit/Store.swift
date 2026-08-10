@@ -153,6 +153,24 @@ public final class Store {
         return out
     }
 
+    /// The library in insertion order, for the shelf when no query is active.
+    /// An empty search field should show the library, not an empty screen.
+    public func recent(limit: Int = 100) throws -> [StoredIssue] {
+        var out: [StoredIssue] = []
+        try db.query("""
+            SELECT i.id, i.code, i.number, i.title, i.series, i.style,
+                   (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id)
+            FROM issue i ORDER BY i.id LIMIT ?
+            """, [.int(Int64(limit))]) { row in
+            out.append(StoredIssue(
+                id: row.int(0) ?? 0, code: row.string(1), number: row.int(2),
+                title: row.string(3), series: row.string(4),
+                style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
+                mirrorCount: row.int(6) ?? 0))
+        }
+        return out
+    }
+
     public func mirrors(forIssue id: Int) throws -> [MirrorLink] {
         var out: [MirrorLink] = []
         try db.query("""
