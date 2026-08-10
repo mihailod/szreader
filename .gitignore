@@ -14,7 +14,10 @@ DerivedData/
 # a line, so a trailing comment becomes part of the pattern and matches nothing.
 # xcodebuild -derivedDataPath
 .xcbuild/
+.xcbuild-device/
 .simbuild/
+# Snapshot of the simulator's logged-in forum session (cookies). Local only.
+.simsession/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcuserstate

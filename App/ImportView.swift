@@ -34,6 +34,24 @@ struct ImportView: View {
             }
             .navigationTitle(browser.title.isEmpty ? "Import" : browser.title)
             .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                // Shows the live URL and its scheme. If a login bounces, this
+                // is what tells you where it actually landed.
+                HStack(spacing: 8) {
+                    Image(systemName: browser.url?.scheme == "https"
+                          ? "lock.fill" : "lock.open.fill")
+                        .font(.caption2)
+                        .foregroundStyle(browser.url?.scheme == "https" ? .green : .orange)
+                    Text(browser.url?.absoluteString ?? "—")
+                        .font(.caption.monospaced())
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .background(.bar)
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
                     Button { browser.webView.goBack() } label: {

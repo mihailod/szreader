@@ -75,17 +75,28 @@ final class BrowserModel: NSObject, ObservableObject {
 
 extension BrowserModel: WKNavigationDelegate {
 
-    /// Forces stripzona onto HTTPS.
+    /// Upgrades stripzona page loads to HTTPS.
     ///
-    /// The site serves the forum fine over TLS but its own links and redirects
-    /// often point at plain http, and the session cookie is NOT marked Secure —
-    /// so a single cleartext request would put a live session cookie on the
-    /// wire. Upgrading every navigation keeps the whole session encrypted.
+    /// The site serves the forum over TLS but emits plain-http links, and its
+    /// session cookie is not marked Secure, so a cleartext hop would put a live
+    /// session on the wire.
+    ///
+    /// GET ONLY, and that restriction is load-bearing. Upgrading works by
+    /// cancelling the navigation and re-issuing it, but WebKit does not expose
+    /// `httpBody` to this delegate — it is always nil — so a re-issued form
+    /// submission arrives as a bodyless GET with no Referer. That silently
+    /// broke logging in: the credentials never reached the server and the page
+    /// just bounced back. Non-GET navigations are left exactly as the page
+    /// made them; the login form already posts to https regardless.
     nonisolated func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction
     ) async -> WKNavigationActionPolicy {
-        guard let url = navigationAction.request.url,
+        let request = navigationAction.request
+        guard request.httpMethod == nil || request.httpMethod == "GET",
+              navigationAction.navigationType != .formSubmitted,
+              navigationAction.navigationType != .formResubmitted,
+              let url = request.url,
               url.scheme == "http",
               let host = url.host?.lowercased(),
               host.hasSuffix("stripzona.com"),
@@ -94,7 +105,10 @@ extension BrowserModel: WKNavigationDelegate {
 
         parts.scheme = "https"
         guard let secure = parts.url else { return .allow }
-        Task { @MainActor in webView.load(URLRequest(url: secure)) }
+        // Carry the original headers over; only the scheme changes.
+        var upgraded = request
+        upgraded.url = secure
+        Task { @MainActor in webView.load(upgraded) }
         return .cancel
     }
 }
