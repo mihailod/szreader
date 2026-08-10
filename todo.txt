@@ -1,0 +1,2 @@
+- incorporate sorting by original italian nomenclature (alan ford, zagor... others possibly)
+

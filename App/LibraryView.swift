@@ -104,34 +104,40 @@ struct LibraryView: View {
 
     /// One menu for both layouts — long-pressing cover art behaves identically
     /// in grid and list, so there is only one thing to learn.
+    /// One menu for both layouts — long-pressing cover art behaves identically
+    /// in grid and list, so there is only one thing to learn.
+    ///
+    /// Ordered by consequence: fetching, then the two that only reclaim disk,
+    /// then — below a divider and marked destructive so they render red — the
+    /// two that actually remove things from the library. Only "Delete" ever
+    /// costs an import to undo.
     @ViewBuilder private func issueMenu(for issue: StoredIssue) -> some View {
+        // Green for the only action that adds something; red is reserved for
+        // the two that remove from the library.
         Button {
             model.download(issue)
         } label: {
             Label(issue.isDownloaded ? "Download again" : "Download",
                   systemImage: "arrow.down.circle")
         }
+        .tint(.green)
         .disabled(model.downloading.contains(issue.id))
 
-        // Naming deliberately parallel to the bulk actions below: "Remove"
-        // always means the files, "Delete" always means the library entry.
-        // The earlier Delete/Remove pair meant the opposite in singular and
-        // plural, which is a bad way to lose a catalogue.
-        Button(role: .destructive) {
+        Button {
             pending = .deleteDownload(issue)
         } label: { Label("Remove Download", systemImage: "trash") }
             .disabled(!issue.isDownloaded)
 
-        Button(role: .destructive) {
-            pending = .remove(issue)
-        } label: { Label("Delete From Library", systemImage: "xmark.bin") }
+        Button {
+            pending = .removeAllDownloads(model.downloadedCount)
+        } label: { Label("Remove All Downloads", systemImage: "arrow.down.circle.dotted") }
+            .disabled(model.downloadedCount == 0)
 
         Divider()
 
         Button(role: .destructive) {
-            pending = .removeAllDownloads(model.downloadedCount)
-        } label: { Label("Remove All Downloads", systemImage: "arrow.down.circle.dotted") }
-            .disabled(model.downloadedCount == 0)
+            pending = .remove(issue)
+        } label: { Label("Delete From Library", systemImage: "xmark.bin") }
 
         Button(role: .destructive) {
             pending = .deleteAll(model.issueCount)
@@ -240,7 +246,16 @@ struct LibraryView: View {
 
             Button { selected = issue } label: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(name(issue)).font(.title3.weight(.medium))
+                    HStack(spacing: 8) {
+                        // Monospaced digits so numbers line up down the column
+                        // rather than jittering with digit width.
+                        if let number = issue.number {
+                            Text("\(number)")
+                                .font(.title3.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(name(issue)).font(.title3.weight(.medium))
+                    }
                     HStack(spacing: 8) {
                         if let series = issue.series {
                             Text(series).font(.subheadline).foregroundStyle(.secondary)
@@ -268,11 +283,12 @@ struct LibraryView: View {
                     model.download(issue)
                 }
                 .buttonStyle(.bordered)
+                .tint(.green)
             }
+            // Not red: this only reclaims disk, and the comic can be fetched
+            // again without re-importing its page.
             Button("Remove Download") { pending = .deleteDownload(issue) }
                 .buttonStyle(.bordered)
-                .tint(.red)
-                // Nothing to remove until the archive is actually on disk.
                 .disabled(!issue.isDownloaded)
             Button("Delete From Library") { pending = .remove(issue) }
                 .buttonStyle(.bordered)
@@ -282,12 +298,15 @@ struct LibraryView: View {
         .controlSize(.regular)
     }
 
-    /// Cover art, desaturated until the comic is actually downloaded — the
-    /// quickest way to see what you have versus what is only catalogued.
+    /// Cover art, greyed until the comic is downloaded — the quickest way to
+    /// see what you have versus what is only catalogued.
+    ///
+    /// The grey version is a separately cached image, not a live filter: the
+    /// filter re-ran on the GPU for every visible cell on every render.
     private func cover(_ issue: StoredIssue) -> some View {
-        CoverImage(url: issue.coverURL, number: issue.number)
-            .saturation(issue.isDownloaded ? 1 : 0)
-            .opacity(issue.isDownloaded ? 1 : 0.55)
+        CoverImage(url: issue.coverURL, number: issue.number,
+                   grayscale: !issue.isDownloaded)
+            .opacity(issue.isDownloaded ? 1 : 0.75)
     }
 
     private var emptyState: some View {
@@ -308,41 +327,79 @@ struct LibraryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private static func gb(_ bytes: Int64) -> String {
+        let f = ByteCountFormatter()
+        f.allowedUnits = [.useMB, .useGB]
+        f.countStyle = .file
+        // Without this, zero formats as "Zero KB". Showing "0 MB" keeps the
+        // storage readout present from the start, so the feature is visible
+        // before anything has been downloaded.
+        f.allowsNonnumericFormatting = false
+        return f.string(fromByteCount: bytes)
+    }
+
     private var statusBar: some View {
-        HStack {
-            Text("\(model.results.count) shown · \(model.issueCount) imported")
-            Spacer()
-            Text(model.status)
+        HStack(spacing: 14) {
+            Text("\(model.results.count) shown · \(model.issueCount) imported · "
+                 + "\(model.downloadedCount) downloaded (\(Self.gb(model.diskUsage)))")
+            // Only present when something actually happened; the counts above
+            // are the resting state.
+            if !model.status.isEmpty {
+                Text("·")
+                Text(model.status)
+            }
         }
-        .font(.footnote)
+        .font(.system(size: 25, weight: .semibold))
         .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
         .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        // maxWidth centres horizontally, the fixed height centres vertically.
+        .frame(maxWidth: .infinity)
+        .frame(height: 64)
         .background(.bar)
     }
 }
 
-/// Cover art, hotlinked from stripovi.com the same way the forum does it.
-/// Falls back to the issue number: an empty tile is worse than a plain one.
+/// Cover art, served from `CoverStore`.
+///
+/// The image is read out of the cache **synchronously in `init`**, so a
+/// redisplay — scrolling a cell back, or switching grid to list — paints on
+/// the first frame instead of showing a placeholder while an async task
+/// re-checks a cache it was always going to hit.
 private struct CoverImage: View {
     let url: String?
     let number: Int?
+    let grayscale: Bool
+
+    @State private var image: UIImage?
+
+    init(url: String?, number: Int?, grayscale: Bool) {
+        self.url = url
+        self.number = number
+        self.grayscale = grayscale
+        _image = State(initialValue: CoverStore.shared.cached(url, grayscale: grayscale))
+    }
 
     var body: some View {
-        AsyncImage(url: url.flatMap(URL.init(string:))) { phase in
-            switch phase {
-            case .success(let image): image.resizable().aspectRatio(contentMode: .fill)
-            case .failure, .empty: placeholder
-            @unknown default: placeholder
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                placeholder
             }
         }
         .background(Color(.tertiarySystemFill))
+        .task(id: (url ?? "") + (grayscale ? "#gray" : "")) {
+            guard image == nil else { return }
+            image = await CoverStore.shared.image(url, grayscale: grayscale)
+        }
     }
 
     private var placeholder: some View {
         ZStack {
             Color(.tertiarySystemFill)
-            Text(number.map(String.init) ?? "—")
+            Text(number.map(String.init) ?? "-")
                 .font(.title2.weight(.semibold).monospacedDigit())
                 .foregroundStyle(.secondary)
         }

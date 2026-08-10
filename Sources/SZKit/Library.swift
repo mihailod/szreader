@@ -51,6 +51,10 @@ public final class Library {
         self.transport = transport; self.downloader = downloader
     }
 
+    /// Bytes currently held by downloaded comics.
+    public var diskUsage: Int64 { store.totalDownloadedBytes }
+
+
     /// Downloads an issue, trying mirrors in order until one yields a valid
     /// archive.
     ///

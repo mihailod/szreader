@@ -23,7 +23,7 @@ extension Store {
             INSERT OR REPLACE INTO download (issue_id, mirror_url, path, bytes, fetched_at)
             VALUES (?, ?, ?, ?, ?)
             """, [.int(Int64(issueID)), .text(mirrorURL), .text(path.path),
-                  .int(bytes), .int(Int64(Date().timeIntervalSince1970))])
+                  .int(bytes), .double(Date().timeIntervalSince1970)])
     }
 
     public func downloadedFile(issueID: Int) throws -> DownloadOutcome? {
@@ -61,6 +61,39 @@ extension Store {
         }
         return out
     }
+
+    /// Bytes held by downloaded comics.
+    ///
+    /// Nothing evicts these — the library keeps whatever you download until you
+    /// remove it. This exists so the app can show what is being used, which is
+    /// what makes manual clean-up a decision rather than a guess.
+    ///
+    /// Measured on disk rather than summed from the recorded sizes: the archive
+    /// is deleted after unpacking but the unpacked pages remain, so the
+    /// recorded byte count is not what the library actually occupies.
+    public var totalDownloadedBytes: Int64 {
+        var total: Int64 = 0
+        try? db.query("SELECT path FROM download") { row in
+            guard let p = row.string(0) else { return }
+            total += Self.sizeOnDisk(URL(fileURLWithPath: p).deletingLastPathComponent())
+        }
+        return total
+    }
+
+    static func sizeOnDisk(_ directory: URL) -> Int64 {
+        let keys: Set<URLResourceKey> = [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey]
+        guard let e = FileManager.default.enumerator(at: directory,
+                                                     includingPropertiesForKeys: Array(keys))
+        else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in e {
+            let values = try? url.resourceValues(forKeys: keys)
+            total += Int64(values?.totalFileAllocatedSize ?? values?.fileAllocatedSize ?? 0)
+        }
+        return total
+    }
+
+
 
     public var downloadedCount: Int {
         (try? db.scalarInt("SELECT COUNT(*) FROM download")) ?? 0

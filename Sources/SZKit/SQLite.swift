@@ -14,6 +14,9 @@ struct SQLiteError: Error, CustomStringConvertible {
 enum SQLValue {
     case text(String)
     case int(Int64)
+    /// Needed for timestamps: whole seconds cannot distinguish two events in
+    /// the same second, which silently breaks least-recently-used ordering.
+    case double(Double)
     case null
 
     init(_ v: String?) { self = v.map { .text($0) } ?? .null }
@@ -90,6 +93,7 @@ final class Database {
             switch arg {
             case .text(let s): sqlite3_bind_text(stmt, idx, s, -1, transient)
             case .int(let n):  sqlite3_bind_int64(stmt, idx, n)
+            case .double(let d): sqlite3_bind_double(stmt, idx, d)
             case .null:        sqlite3_bind_null(stmt, idx)
             }
         }

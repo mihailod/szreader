@@ -1,9 +1,21 @@
+import Foundation
 import SwiftUI
 import SZKit
 
 @main
 struct SZReaderApp: App {
     @StateObject private var model = AppModel()
+
+    init() {
+        // AsyncImage goes through URLSession.shared -> URLCache.shared, whose
+        // iOS default disk budget (~10 MB) barely holds one page of covers and
+        // is shared with everything else. The covers are small and the server
+        // sends max-age=604800, so a generous cache means they are fetched
+        // once and then come from disk on every later launch.
+        URLCache.shared = URLCache(memoryCapacity: 64 << 20,
+                                   diskCapacity: 512 << 20,
+                                   directory: nil)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -21,6 +33,8 @@ final class AppModel: ObservableObject {
     @Published var status = "starting…"
     @Published var issueCount = 0
     @Published var downloadedCount = 0
+    @Published var diskUsage: Int64 = 0
+
 
     /// Issues currently being fetched, so the row can show progress instead of
     /// a Download button.
@@ -39,9 +53,9 @@ final class AppModel: ObservableObject {
             let store = try Store(path: support.appendingPathComponent("library.sqlite").path)
             self.store = store
 
-            status = store.issueCount == 0
-                ? "empty — tap Import to add a topic page"
-                : "\(store.issueCount) issues in library"
+            // Deliberately blank: the counts are shown on the left and the
+            // empty-library case is covered by the empty state view.
+            status = ""
             // Real downloads: throttled because these are third-party file
             // hosts that rate-limit, and a burst is what gets an IP blocked.
             library = Library(store: store,
@@ -50,8 +64,13 @@ final class AppModel: ObservableObject {
                                                             minInterval: 1.5),
                               downloader: URLSessionDownloader())
 
+            #if DEBUG
+            seedFromSavedPages(into: store)
+            #endif
+
             issueCount = store.issueCount
             downloadedCount = store.downloadedCount
+            diskUsage = library?.diskUsage ?? 0
             search("")
         } catch {
             status = "failed: \(error)"
@@ -73,13 +92,32 @@ final class AppModel: ObservableObject {
     }
 
     /// Ingests a page captured from the in-app browser, then refreshes the shelf.
+    #if DEBUG
+    /// Keeps the raw HTML of the last import, for diagnosing a page that
+    /// parses oddly.
+    ///
+    /// Parsing a forum page is guesswork until you can see the markup: cover
+    /// matching for the scanlations failed twice against markup that was
+    /// inferred rather than read. Only the last page is kept, so this cannot
+    /// grow. Debug-only — a release build never writes it.
+    private func dumpForDiagnosis(_ html: String) {
+        guard let docs = FileManager.default.urls(for: .documentDirectory,
+                                                  in: .userDomainMask).first else { return }
+        try? html.write(to: docs.appendingPathComponent("last-import.html"),
+                        atomically: true, encoding: .utf8)
+    }
+    #endif
+
     func importPage(html: String) -> ImportReport? {
+        #if DEBUG
+        dumpForDiagnosis(html)
+        #endif
         guard let store else { return nil }
         do {
             let report = try store.importPage(html: html, source: "webview import")
-            issueCount = store.issueCount
-            downloadedCount = store.downloadedCount
-            status = "\(store.issueCount) issues in library"
+            refresh(note: report.isEmpty
+                    ? "imported nothing new"
+                    : "imported \(report.issues) issue\(report.issues == 1 ? "" : "s")")
             search(query)
             return report
         } catch {
@@ -173,6 +211,7 @@ final class AppModel: ObservableObject {
     private func refresh(note: String) {
         issueCount = store?.issueCount ?? 0
         downloadedCount = store?.downloadedCount ?? 0
+        diskUsage = library?.diskUsage ?? 0
         search(query)
         status = note
     }

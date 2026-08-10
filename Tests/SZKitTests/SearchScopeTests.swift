@@ -171,3 +171,29 @@ final class SearchScopeTests: XCTestCase {
         XCTAssertFalse(try store.search("lms").isEmpty, "code lost when the title was set")
     }
 }
+
+final class CoverURLTests: XCTestCase {
+
+    /// stripovi.com 301s http image requests to https, so an http cover URL
+    /// costs two round-trips. On a 120-issue page that is 240 requests before
+    /// the first cover renders.
+    func testCoverURLsAreStoredAsHTTPS() throws {
+        let store = try Store()
+        try store.ingest(html: """
+            <title>Zagor - ZLATNA SERIJA - ZS i LMS - Stripzona</title>
+            <img src="http://www.stripovi.com/naslovnice/Zagor/TN/TN_ZG_ZS_13.jpg">
+            <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>
+            """)
+        let issue = try XCTUnwrap(try store.search("nasilje").first)
+        let cover = try XCTUnwrap(issue.coverURL)
+        XCTAssertTrue(cover.hasPrefix("https://"), "cover would pay a redirect: \(cover)")
+        XCTAssertTrue(cover.hasSuffix("TN_ZG_ZS_13.jpg"))
+    }
+
+    /// An https source must be left alone rather than double-rewritten.
+    func testHTTPSCoverIsUnchanged() {
+        let covers = Catalog.covers(in:
+            #"<img src="https://www.stripovi.com/naslovnice/Zagor/TN/TN_ZG_ZS_21.jpg">"#)
+        XCTAssertEqual(covers[21], "https://www.stripovi.com/naslovnice/Zagor/TN/TN_ZG_ZS_21.jpg")
+    }
+}

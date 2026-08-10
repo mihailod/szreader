@@ -2,6 +2,7 @@
 # Simulator helper: build, run, and keep the forum login alive between builds.
 #
 #   ./scripts/sim.sh run       build, install over the existing app, launch
+#   ./scripts/sim.sh seed      launch with the saved topic pages imported
 #   ./scripts/sim.sh paste     copy the Mac clipboard into the simulator
 #   ./scripts/sim.sh save      snapshot the logged-in session to .simsession/
 #   ./scripts/sim.sh restore   put a saved session back
@@ -43,6 +44,28 @@ cmd_run() {
   xcrun simctl install "$DEVICE" "$app"
   xcrun simctl launch "$DEVICE" "$BUNDLE" >/dev/null
   echo "==> running"
+}
+
+# Launch with the saved topic pages, so the simulator has a real library to
+# look at. The simulator cannot log in to the forum; these pages are checked
+# into spike/ and never ship (the import path is #if DEBUG).
+cmd_seed() {
+  local args=(-project SZReader.xcodeproj -scheme SZReader
+              -destination "platform=iOS Simulator,id=$DEVICE"
+              -derivedDataPath .xcbuild -quiet build)
+  echo "==> building"
+  xcodebuild "${args[@]}"
+  local app
+  app=$(find .xcbuild/Build/Products -name 'SZReader.app' -maxdepth 3 | head -1)
+  [[ -n "$app" ]] || { echo "no .app produced"; exit 1; }
+  xcrun simctl bootstatus "$DEVICE" -b >/dev/null 2>&1 || xcrun simctl boot "$DEVICE" || true
+  echo "==> installing (in place — keeps the login)"
+  xcrun simctl install "$DEVICE" "$app"
+  echo "==> seeding from spike/pages"
+  xcrun simctl terminate "$DEVICE" "$BUNDLE" 2>/dev/null || true
+  SIMCTL_CHILD_SZ_SEED_PAGES="$PWD/spike/pages" \
+    xcrun simctl launch "$DEVICE" "$BUNDLE" >/dev/null
+  echo "==> running (seeded)"
 }
 
 cmd_paste() {
@@ -89,6 +112,7 @@ cmd_wipe() {
 
 case "${1:-run}" in
   run)     cmd_run ;;
+  seed)    cmd_seed ;;
   paste)   cmd_paste ;;
   save)    cmd_save ;;
   restore) cmd_restore ;;

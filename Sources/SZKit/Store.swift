@@ -67,6 +67,11 @@ public final class Store {
         try? db.execute("ALTER TABLE issue ADD COLUMN context TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN search_text TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN cover_url TEXT")
+        // Covers stored before the https fix would each pay a 301 redirect.
+        try? db.execute("""
+            UPDATE issue SET cover_url = replace(cover_url, 'http://', 'https://')
+            WHERE cover_url LIKE 'http://%'
+            """)
 
         // The FTS table used to index title_folded alone. If an older index is
         // present, rebuild it over the wider search_text instead of leaving

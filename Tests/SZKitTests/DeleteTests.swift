@@ -212,3 +212,58 @@ extension DeleteTests {
         XCTAssertFalse(try store.search("kuca").isEmpty)
     }
 }
+
+/// Reporting how much disk the downloaded comics occupy.
+final class DiskUsageTests: XCTestCase {
+
+    private var root: URL!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    }
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+
+    /// Writes a fake unpacked comic of roughly `bytes` and registers it.
+    @discardableResult
+    private func fakeDownload(_ store: Store, issueID: Int, bytes: Int) throws -> URL {
+        let dir = root.appendingPathComponent("\(issueID)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("comic.cbz")
+        try Data(repeating: 0x41, count: bytes).write(to: file)
+        try store.recordDownload(issueID: issueID, mirrorURL: "http://x/\(issueID)",
+                                 path: file, bytes: Int64(bytes))
+        return file
+    }
+
+    private func library(_ store: Store) -> Library {
+        Library(store: store, paths: LibraryPaths(root: root),
+                transport: StubTransport { _ in HTTPResponse(status: 200) },
+                downloader: StubDownloader(bodies: [:]))
+    }
+
+    private func populated() throws -> Store {
+        let store = try Store()
+        try store.ingest(html: """
+            <div>013-One</div><div>http://www.mediafire.com/?FAKEKEY013</div>
+            <div>017-Two</div><div>http://www.mediafire.com/?FAKEKEY017</div>
+            <div>021-Three</div><div>http://www.mediafire.com/?FAKEKEY021</div>
+            """)
+        return store
+    }
+
+    func testUsageIsMeasuredOnDisk() throws {
+        let store = try populated()
+        let ids = try store.recent().map(\.id)
+        try fakeDownload(store, issueID: ids[0], bytes: 300_000)
+        try fakeDownload(store, issueID: ids[1], bytes: 200_000)
+        // Allocated size rounds up to block size, so assert a sane range.
+        let usage = library(store).diskUsage
+        XCTAssertGreaterThan(usage, 400_000)
+        XCTAssertLessThan(usage, 2_000_000)
+    }
+
+
+
+}
