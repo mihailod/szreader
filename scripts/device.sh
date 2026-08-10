@@ -1,7 +1,8 @@
 #!/bin/zsh
-# Build and install onto the connected iPad — the same thing as hitting Run in
-# Xcode, minus the launch.
+# Build, install and launch on the connected iPad — the same thing as hitting
+# Run in Xcode.
 #
+#   ./scripts/device.sh setup       record the connected device in .device
 #   ./scripts/device.sh             build, install, launch
 #   ./scripts/device.sh no-launch   build and install only, leave the iPad alone
 #
@@ -18,8 +19,34 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DEVICE="${SZ_IPAD:-CC1C5C3D-0634-5472-9F56-19A47F3F0E17}"   # Mihailo's iPad Pro 6
 BUNDLE="com.mihailod.szreader"
+
+# The device identifier lives in .device, which is gitignored — it names a
+# specific piece of hardware and belongs to this machine, not the repository.
+# Set SZ_IPAD to override for a one-off run.
+#
+#   ./scripts/device.sh setup     write .device from the connected iPad
+if [[ "${1:-}" == "setup" ]]; then
+  # Matched by shape, not by column: both the name and model columns contain
+  # spaces, so counting fields picks up a fragment of the model name.
+  id=$(xcrun devicectl list devices 2>/dev/null | grep connected \
+       | grep -oE '[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' | head -1)
+  [[ -n "$id" ]] || { echo "no connected device found — plug one in"; exit 1; }
+  print -r -- "$id" > .device
+  echo "==> wrote .device ($id)"
+  exit 0
+fi
+
+DEVICE="${SZ_IPAD:-}"
+if [[ -z "$DEVICE" && -r .device ]]; then
+  DEVICE=$(< .device)
+  DEVICE="${DEVICE//[[:space:]]/}"
+fi
+if [[ -z "$DEVICE" ]]; then
+  echo "no device configured — run: ./scripts/device.sh setup"
+  echo "(or set SZ_IPAD to a device identifier)"
+  exit 1
+fi
 
 state=$(xcrun devicectl list devices 2>/dev/null | awk -v d="$DEVICE" '$0 ~ d {print}')
 if [[ -z "$state" ]]; then

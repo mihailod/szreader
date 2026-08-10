@@ -18,6 +18,11 @@ DerivedData/
 .simbuild/
 # Snapshot of the simulator's logged-in forum session (cookies). Local only.
 .simsession/
+
+# The paired device's identifier. Names a specific piece of hardware, so it
+# belongs to this machine rather than the repository. Written by
+# `./scripts/device.sh setup`.
+.device
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcuserstate
