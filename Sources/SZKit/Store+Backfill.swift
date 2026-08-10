@@ -17,6 +17,19 @@ extension Store {
         let hasTitle: Bool
     }
 
+    /// Un-probed mirrors belonging to issues that still have no title.
+    ///
+    /// The backfill will happily probe every mirror in the library, but only
+    /// these change what the user sees. Probing is throttled to avoid getting
+    /// the IP blocked, so at ~1.5s each the difference is minutes rather than
+    /// most of an hour.
+    public var untitledMirrorCount: Int {
+        (try? db.scalarInt("""
+            SELECT COUNT(*) FROM mirror m JOIN issue i ON i.id = m.issue_id
+            WHERE m.filename IS NULL AND i.title IS NULL
+            """)) ?? 0
+    }
+
     /// Mirrors whose filename we have never resolved. Probe results are
     /// permanent, so this list only ever shrinks.
     func pendingProbes(limit: Int) throws -> [PendingProbe] {
@@ -80,10 +93,28 @@ extension Store {
 
             guard !pending.hasTitle,
                   let title = parsed.title, TitleCleaner.isPlausible(title) else { continue }
-            try setTitle(issueID: pending.issueID, title: title)
+            // Scanners shout inconsistently; the shelf should not.
+            try setTitle(issueID: pending.issueID, title: TitleCleaner.normaliseCase(title))
             result.titled += 1
         }
         return result
+    }
+
+    /// Evens out titles stored before casing was normalised.
+    ///
+    /// Runs at open, and only rewrites rows it actually changes, so it costs a
+    /// single scan once and nothing thereafter. Goes through `setTitle` rather
+    /// than a bulk UPDATE so the FTS index is rebuilt in step — a title changed
+    /// behind the index's back stops matching what the user types.
+    func normaliseStoredTitles() {
+        var rows: [(Int, String)] = []
+        try? db.query("SELECT id, title FROM issue WHERE title IS NOT NULL") { row in
+            if let id = row.int(0), let title = row.string(1) { rows.append((id, title)) }
+        }
+        for (id, title) in rows {
+            let tidied = TitleCleaner.normaliseCase(title)
+            if tidied != title { try? setTitle(issueID: id, title: tidied) }
+        }
     }
 
     func recordProbe(mirrorID: Int, meta: FileMeta) throws {
@@ -104,19 +135,36 @@ extension Store {
             code = row.string(0); number = row.int(1)
             series = row.string(2); context = row.string(3)
         }
-        let folded = Fold.fold(title)
+        // `title_folded` is deliberately NOT updated. It is the row's identity
+        // — part of the natural key `(code, number, title_folded)` that
+        // re-import matches on — and it records the label as the page carried
+        // it. Rewriting it to the resolved title changed the row's identity, so
+        // the next import of the same page matched nothing and inserted every
+        // issue a second time. Search does not use it; that goes through
+        // `search_text` and the FTS index.
         let searchText = Store.searchText(title: title, code: code, number: number,
                                           series: series, context: context)
         try db.run("""
-            UPDATE issue SET title = ?, title_folded = ?, search_text = ? WHERE id = ?
-            """, [.text(title), .text(folded), .text(searchText), .int(Int64(issueID))])
+            UPDATE issue SET title = ?, search_text = ? WHERE id = ?
+            """, [.text(title), .text(searchText), .int(Int64(issueID))])
         try db.run("DELETE FROM issue_fts WHERE rowid = ?", [.int(Int64(issueID))])
         try db.run("INSERT INTO issue_fts (rowid, search_text) VALUES (?, ?)",
                    [.int(Int64(issueID)), .text(searchText)])
     }
 
+    /// Issues still waiting for a name *and* still resolvable — untitled, with
+    /// at least one mirror never probed.
+    ///
+    /// Counted in issues rather than mirrors: an issue usually has two mirrors
+    /// but only needs one probed, so mirrors would overstate the work by about
+    /// double. Excluding the unresolvable ones matters too — an untitled issue
+    /// whose mirrors have all been probed can never be named, and counting it
+    /// would leave a progress readout permanently short of its total.
     public var untitledIssueCount: Int {
-        (try? db.scalarInt("SELECT COUNT(*) FROM issue WHERE title IS NULL")) ?? 0
+        (try? db.scalarInt("""
+            SELECT COUNT(DISTINCT i.id) FROM issue i JOIN mirror m ON m.issue_id = i.id
+            WHERE m.filename IS NULL AND i.title IS NULL
+            """)) ?? 0
     }
 
     public func filename(forMirrorAt url: String) throws -> String? {

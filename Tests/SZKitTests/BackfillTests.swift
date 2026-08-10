@@ -130,3 +130,110 @@ final class BackfillTests: XCTestCase {
         XCTAssertEqual(MediaFireHost.key(from: stub.requests[0].url), "untitled00000000")
     }
 }
+
+/// Scoping the backfill to what the user actually sees.
+final class UntitledMirrorCountTests: XCTestCase {
+
+    /// Some topics list only a code and a link — no title anywhere on the page.
+    private func codeOnlyStore() throws -> Store {
+        let store = try Store()
+        try store.ingest(html: """
+            <div>MN_LMS_511</div><div>http://www.mediafire.com/?FAKEKEY511</div>
+            <div>MN_LMS_513</div><div>http://www.mediafire.com/?FAKEKEY513</div>
+            """)
+        return store
+    }
+
+    func testUntitledMirrorsAreCounted() throws {
+        let store = try codeOnlyStore()
+        XCTAssertEqual(store.untitledMirrorCount, 2)
+    }
+
+    /// The count must reach zero, or a caller looping on it never stops.
+    func testCountFallsToZeroOnceNamed() async throws {
+        let store = try codeOnlyStore()
+        // MediaFire exposes the name in the download path it redirects to.
+        let stub = StubTransport { _ in
+            HTTPResponse(status: 302, headers: ["Location":
+                "https://download.mediafire.com/x/LMS - 511 - Mister No - Neki Naslov.cbr"])
+        }
+        _ = try await store.backfillTitles(via: stub, limit: 50)
+        XCTAssertEqual(store.untitledMirrorCount, 0, "a caller looping on this would spin")
+    }
+
+    /// An issue that already has a title is not what this counts.
+    /// The progress readout counts issues, not mirrors: two mirrors on one
+    /// issue is one name to resolve, and counting mirrors would show a total
+    /// roughly twice the real work.
+    func testIssueCountIgnoresTheSecondMirror() throws {
+        let store = try Store()
+        try store.ingest(html: """
+            <div>MN_LMS_511</div>
+            <div>http://www.mediafire.com/?FAKEKEY511</div>
+            <div>http://www.mediafire.com/?FAKEKEY511B</div>
+            """)
+        XCTAssertEqual(store.untitledIssueCount, 1)
+        XCTAssertGreaterThan(store.untitledMirrorCount, 1)
+    }
+
+    func testTitledIssuesAreNotCounted() throws {
+        let store = try Store()
+        try store.ingest(html: """
+            <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>
+            """)
+        XCTAssertEqual(store.untitledMirrorCount, 0)
+    }
+}
+
+/// Consistent casing for names recovered from filenames.
+final class TitleCaseTests: XCTestCase {
+
+    func testShoutedTitleBecomesSentenceCase() {
+        XCTAssertEqual(TitleCleaner.normaliseCase("DIJAMANTSKA KLOPKA"), "Dijamantska klopka")
+        XCTAssertEqual(TitleCleaner.normaliseCase("U CELJUSTI JAGUARA"), "U celjusti jaguara")
+    }
+
+    /// A title that already carries lowercase is the author's own casing.
+    func testMixedCaseIsLeftAlone() {
+        XCTAssertEqual(TitleCleaner.normaliseCase("Sablast doline"), "Sablast doline")
+        XCTAssertEqual(TitleCleaner.normaliseCase("Zagor Te-Nay"), "Zagor Te-Nay")
+        XCTAssertEqual(TitleCleaner.normaliseCase("Grupa TNT"), "Grupa TNT")
+    }
+
+    /// Acronyms inside an all-caps title are lowercased along with everything
+    /// else. Documented rather than fixed: no rule separates "NLO" and "TNT"
+    /// from "PAS", "SAN" and "ZUB", which are ordinary words here.
+    func testAcronymsInsideShoutedTitlesAreLowercasedToo() {
+        XCTAssertEqual(TitleCleaner.normaliseCase("NAPAD NLO"), "Napad nlo")
+    }
+
+    /// The case that actually matters: page labels keep their own casing, so
+    /// an acronym in a normally-cased title is never touched.
+    func testAcronymInAMixedCaseTitleIsUntouched() {
+        XCTAssertEqual(TitleCleaner.normaliseCase("Grupa TNT"), "Grupa TNT")
+    }
+
+    func testEmptyAndPunctuationAreSafe() {
+        XCTAssertEqual(TitleCleaner.normaliseCase(""), "")
+        XCTAssertEqual(TitleCleaner.normaliseCase("123"), "123")
+    }
+
+    /// Rows stored before the fix are evened out when the library opens.
+    func testStoredTitlesAreNormalisedOnOpen() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("library.sqlite").path
+
+        let store = try Store(path: file)
+        try store.ingest(html:
+            "<div>MN_LMS_511</div><div>http://www.mediafire.com/?FAKEKEY511</div>")
+        let id = try XCTUnwrap(try store.recent().first).id
+        try store.setTitle(issueID: id, title: "DIJAMANTSKA KLOPKA")
+
+        let reopened = try Store(path: file)
+        XCTAssertEqual(try reopened.recent().first?.title, "Dijamantska klopka")
+        // The index must follow the title, or search stops finding it.
+        XCTAssertEqual(try reopened.search("dijamantska", limit: 10).count, 1)
+    }
+}

@@ -267,3 +267,86 @@ final class DiskUsageTests: XCTestCase {
 
 
 }
+
+/// iOS gives the app container a new UUID on reinstall. Paths recorded as
+/// absolute went stale the moment that happened: the rows survived, the files
+/// were still on disk, but nothing could find them — the library reported
+/// downloads it measured as 0 bytes, and would have re-fetched every one.
+final class RelocatedContainerTests: XCTestCase {
+
+    private func makeRoot() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("SZReader/comics", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    private func library(_ store: Store, root: URL) -> Library {
+        Library(store: store, paths: LibraryPaths(root: root),
+                transport: StubTransport { _ in HTTPResponse(status: 200) },
+                downloader: StubDownloader(bodies: [:]))
+    }
+
+    private func seed(_ store: Store) throws -> Int {
+        try store.ingest(html: """
+            <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>
+            """)
+        return try XCTUnwrap(store.recent().first).id
+    }
+
+    /// The file must still be found after the container moves.
+    func testDownloadSurvivesARelocatedContainer() throws {
+        let store = try Store()
+        let issueID = try seed(store)
+
+        let oldRoot = try makeRoot()
+        _ = library(store, root: oldRoot)
+        let dir = oldRoot.appendingPathComponent("\(issueID)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("comic.cbz")
+        try Data(repeating: 0x50, count: 250_000).write(to: file)
+        try store.recordDownload(issueID: issueID, mirrorURL: "http://x/1",
+                                 path: file, bytes: 250_000)
+
+        // The container moves: same layout, different absolute prefix.
+        let newRoot = try makeRoot()
+        try FileManager.default.removeItem(at: newRoot)
+        try FileManager.default.copyItem(at: oldRoot, to: newRoot)
+        try FileManager.default.removeItem(at: oldRoot)
+
+        let moved = library(store, root: newRoot)
+        let found = try XCTUnwrap(store.downloadedFile(issueID: issueID))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: found.path.path),
+                      "file orphaned by the move: \(found.path.path)")
+        XCTAssertGreaterThan(moved.diskUsage, 200_000, "usage reported as ~0")
+    }
+
+    /// Rows written before the fix are absolute; they must be healed, not left
+    /// pointing at a container that no longer exists.
+    func testLegacyAbsolutePathsAreMigrated() throws {
+        let root = try makeRoot()
+        let store = try Store()
+        let issueID = try seed(store)
+        _ = library(store, root: root)
+
+        let dir = root.appendingPathComponent("\(issueID)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("comic.cbz")
+        try Data(repeating: 0x50, count: 120_000).write(to: file)
+        try store.recordDownload(issueID: issueID, mirrorURL: "http://x/1",
+                                 path: file, bytes: 120_000)
+
+        let stored = try XCTUnwrap(store.downloadedFile(issueID: issueID))
+        XCTAssertEqual(stored.path.path, file.path)
+        XCTAssertFalse(try storedPathIsAbsolute(store), "path recorded absolute")
+    }
+
+    private func storedPathIsAbsolute(_ store: Store) throws -> Bool {
+        var absolute = false
+        try store.db.query("SELECT path FROM download") { row in
+            if let p = row.string(0), p.hasPrefix("/") { absolute = true }
+        }
+        return absolute
+    }
+}

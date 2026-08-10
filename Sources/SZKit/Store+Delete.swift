@@ -12,14 +12,9 @@ extension Store {
     @discardableResult
     public func delete(issueID: Int) throws -> URL? {
         let file = try downloadedFile(issueID: issueID)?.path
-        try db.execute("BEGIN")
-        do {
+        try db.transaction {
             try db.run("DELETE FROM issue_fts WHERE rowid = ?", [.int(Int64(issueID))])
             try db.run("DELETE FROM issue WHERE id = ?", [.int(Int64(issueID))])
-            try db.execute("COMMIT")
-        } catch {
-            try? db.execute("ROLLBACK")
-            throw error
         }
         return file
     }
@@ -45,7 +40,7 @@ extension Store {
     public func deleteAllDownloads() throws -> [URL] {
         var files: [URL] = []
         try db.query("SELECT path FROM download") { row in
-            if let p = row.string(0) { files.append(URL(fileURLWithPath: p)) }
+            if let p = row.string(0) { files.append(resolvedURL(p)) }
         }
         try db.execute("DELETE FROM download")
         return files
@@ -56,20 +51,15 @@ extension Store {
     public func deleteAll() throws -> [URL] {
         var files: [URL] = []
         try db.query("SELECT path FROM download") { row in
-            if let p = row.string(0) { files.append(URL(fileURLWithPath: p)) }
+            if let p = row.string(0) { files.append(resolvedURL(p)) }
         }
-        try db.execute("BEGIN")
-        do {
+        try db.transaction {
             try db.execute("DELETE FROM issue_fts")
             try db.execute("DELETE FROM issue")
             // Belt and braces: cascade should have taken these, but a stray
             // row here would resurrect mirrors for issues that no longer exist.
             try db.execute("DELETE FROM mirror")
             try db.execute("DELETE FROM download")
-            try db.execute("COMMIT")
-        } catch {
-            try? db.execute("ROLLBACK")
-            throw error
         }
         return files
     }

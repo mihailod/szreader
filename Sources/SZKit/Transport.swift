@@ -59,8 +59,15 @@ public protocol Transport: Sendable {
 public final class URLSessionTransport: NSObject, Transport, URLSessionTaskDelegate {
 
     private let userAgent: String
-    private lazy var session: URLSession = URLSession(
-        configuration: .ephemeral, delegate: self, delegateQueue: nil)
+
+    /// Built without a delegate so it can be a constant.
+    ///
+    /// It used to be `lazy`, because a session-wide delegate has to be `self`
+    /// and `self` does not exist yet during `init`. A mutable stored property
+    /// on a `Sendable` class is a data race waiting to happen, though, and an
+    /// error under the Swift 6 language mode — so the delegate is supplied per
+    /// task instead, which suppresses redirects just the same.
+    private let session = URLSession(configuration: .ephemeral)
 
     public init(userAgent: String = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                 + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15") {
@@ -84,7 +91,8 @@ public final class URLSessionTransport: NSObject, Transport, URLSessionTaskDeleg
         req.setValue("en-US,en;q=0.9,hr;q=0.8", forHTTPHeaderField: "Accept-Language")
         for (k, v) in request.headers { req.setValue(v, forHTTPHeaderField: k) }
 
-        let (data, response) = try await session.data(for: req)
+        // Per-task delegate: this is what stops redirects being followed.
+        let (data, response) = try await session.data(for: req, delegate: self)
         guard let http = response as? HTTPURLResponse else { throw TransportError.notHTTP }
         let headers = Dictionary(
             http.allHeaderFields.compactMap { k, v -> (String, String)? in

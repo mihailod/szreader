@@ -9,7 +9,7 @@ import SZKit
 /// app just reads the page you are already looking at.
 struct ImportView: View {
 
-    let onImport: (String) -> ImportReport?
+    let onImport: (String) throws -> ImportReport
     @Environment(\.dismiss) private var dismiss
     @StateObject private var browser = BrowserModel()
 
@@ -123,10 +123,14 @@ struct ImportView: View {
             errorText = "Could not read the page."
             return
         }
-        guard let result = onImport(html) else {
-            errorText = "The library could not be written to."
-            return
+        do {
+            report = try onImport(html)
+        } catch {
+            // The real reason, not a guess at it. This used to report "the
+            // library could not be written to" for every failure, which sent
+            // an entire debugging session after a database problem that was
+            // never there.
+            errorText = SZKit.Library.reason(error)
         }
-        report = result
     }
 }

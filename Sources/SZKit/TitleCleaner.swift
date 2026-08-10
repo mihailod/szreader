@@ -103,6 +103,34 @@ public enum TitleCleaner {
         return t
     }
 
+    /// Evens out the casing of a title taken from a filename.
+    ///
+    /// Scanners are not consistent: one release names a file
+    /// "…- DIJAMANTSKA KLOPKA", the next "…- Sablast doline", so a library
+    /// built from filenames shouts at random. The corpus convention is
+    /// sentence case, which is what the titled pages already use.
+    ///
+    /// Only all-caps titles are touched. A title carrying any lowercase is the
+    /// author's own casing and is left exactly as it is, so "Grupa TNT" and
+    /// "Zagor Te-Nay" survive intact — which matters, because those come from
+    /// page labels and are the majority.
+    ///
+    /// Acronyms inside an all-caps title are lowercased with everything else
+    /// ("NAPAD NLO" becomes "Napad nlo"). That is deliberate: no rule
+    /// separates "NLO" and "TNT" from "PAS", "SAN" and "ZUB", which are
+    /// ordinary three-letter words in this corpus, and guessing wrong is more
+    /// visible than being uniformly plain. An all-caps string carries no case
+    /// information to preserve in the first place.
+    public static func normaliseCase(_ title: String) -> String {
+        guard title.contains(where: \.isLetter),
+              !title.contains(where: { $0.isLowercase }) else { return title }
+        var out = title.lowercased()
+        if let i = out.firstIndex(where: \.isLetter) {
+            out.replaceSubrange(i...i, with: out[i].uppercased())
+        }
+        return out
+    }
+
     /// Rejects codes and junk while keeping genuinely short titles ("UFO").
     public static func isPlausible(_ title: String?) -> Bool {
         guard let t = title?.trimmingCharacters(in: .whitespaces), !t.isEmpty else { return false }

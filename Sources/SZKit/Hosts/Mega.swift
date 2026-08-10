@@ -37,6 +37,11 @@ public struct MegaHost: FileHost {
 
     /// A file key is 32 bytes = 8 big-endian words. The AES key is the first
     /// half XORed with the second; the nonce follows it.
+    /// The storage node URL, forced to TLS.
+    static func secureNode(_ raw: String) -> URL? {
+        URL(string: raw.replacingOccurrences(of: "http://", with: "https://"))
+    }
+
     static func derive(fragment: String) throws -> (key: Data, nonce: Data) {
         guard let raw = Base64URL.decode(fragment), raw.count >= 32 else {
             throw HostError.decryptionFailed("key too short (folder link?)")
@@ -121,8 +126,16 @@ public struct MegaHost: FileHost {
         guard let link = Self.parse(url) else { throw HostError.unrecognisedURL(url.absoluteString) }
         let (key, nonce) = try Self.derive(fragment: link.fragment)
         let result = try await apiCall(["a": "g", "g": 1, "p": link.id], via: transport)
-        guard let temp = result["g"] as? String, let u = URL(string: temp) else {
+        guard let temp = result["g"] as? String else {
             throw HostError.apiError("no temp URL in response")
+        }
+        // The API hands back an http:// storage node, which App Transport
+        // Security refuses outright (NSURLErrorDomain -1022) — the request
+        // never leaves the device. The nodes serve the same bytes over TLS, so
+        // upgrade rather than widening the ATS exceptions for a hostname that
+        // changes per download anyway.
+        guard let u = Self.secureNode(temp) else {
+            throw HostError.apiError("unusable temp URL in response")
         }
         return DirectLink(url: u, postProcess: .aesCTR(key: key, nonce: nonce))
     }

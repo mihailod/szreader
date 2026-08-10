@@ -46,11 +46,25 @@ struct LibraryView: View {
                 IssueDetail(issue: issue, mirrors: model.mirrors(for: issue))
             }
             .alert(item: $pending) { action in confirmation(for: action) }
+            // On its own view deliberately: SwiftUI honours only one `.alert`
+            // per view, and the confirmation alert above already claims this
+            // one.
+            .background(
+                Color.clear
+                    .alert("Download failed", isPresented: Binding(
+                        get: { model.failure != nil },
+                        set: { if !$0 { model.failure = nil } }
+                    )) {
+                        Button("OK", role: .cancel) { model.failure = nil }
+                    } message: {
+                        Text(model.failure ?? "")
+                    }
+            )
         }
         // Kept off the view that owns .sheet(item:): SwiftUI honours only one
         // presentation modifier per view, and the sheet would win.
         .fullScreenCover(isPresented: $showingImport) {
-            ImportView { html in model.importPage(html: html) }
+            ImportView { html in try model.importPage(html: html) }
         }
     }
 
@@ -88,6 +102,22 @@ struct LibraryView: View {
             }
             .pickerStyle(.segmented)
             .frame(width: 120)
+
+            // Filled icon when a filter is on, so a narrowed library never
+            // looks like a missing one.
+            Menu {
+                Toggle(isOn: $model.downloadedOnly) {
+                    Label("Downloaded", systemImage: "arrow.down.circle")
+                }
+            } label: {
+                Image(systemName: model.downloadedOnly
+                      ? "line.3.horizontal.decrease.circle.fill"
+                      : "line.3.horizontal.decrease.circle")
+                    .font(.system(size: 30))
+                    .frame(height: 44)
+            }
+            .menuStyle(.borderlessButton)
+            .tint(model.downloadedOnly ? .accentColor : .secondary)
 
             Button { showingImport = true } label: {
                 Label("Import", systemImage: "square.and.arrow.down")
@@ -307,17 +337,49 @@ struct LibraryView: View {
         CoverImage(url: issue.coverURL, number: issue.number,
                    grayscale: !issue.isDownloaded)
             .opacity(issue.isDownloaded ? 1 : 0.75)
+            .overlay(alignment: .bottom) {
+                // These are ~80 MB over throttled third-party hosts, so a
+                // download runs for a while. Without a bar it reads as hung.
+                if let fraction = model.progress[issue.id] {
+                    ProgressView(value: fraction)
+                        .progressViewStyle(.linear)
+                        .tint(.green)
+                        .padding(.horizontal, 6)
+                        .padding(.bottom, 6)
+                }
+            }
+    }
+
+    /// Three distinct empty cases, because "nothing here" for three different
+    /// reasons needs three different next steps.
+    private var emptyIcon: String {
+        if model.downloadedOnly { return "arrow.down.circle" }
+        return model.issueCount == 0 ? "books.vertical" : "magnifyingglass"
+    }
+
+    private var emptyTitle: String {
+        if model.downloadedOnly { return "No downloaded comics yet" }
+        return model.issueCount == 0 ? "No comics yet" : "No match"
+    }
+
+    private var emptyDetail: String {
+        if model.downloadedOnly {
+            return model.query.isEmpty
+                ? "Long-press a comic and choose Download, or turn off the Downloaded filter"
+                : "Nothing you have downloaded matches “\(model.query)”."
+        }
+        return model.issueCount == 0
+            ? "Tap Import, browse StripZona, like a post, then import that page"
+            : "Nothing in your \(model.issueCount) imported issues matches “\(model.query)”."
     }
 
     private var emptyState: some View {
         VStack(spacing: 22) {
-            Image(systemName: model.issueCount == 0 ? "books.vertical" : "magnifyingglass")
+            Image(systemName: emptyIcon)
                 .font(.system(size: 96)).foregroundStyle(.tertiary)
-            Text(model.issueCount == 0 ? "No comics yet" : "No match")
+            Text(emptyTitle)
                 .font(.system(size: 44, weight: .bold))
-            Text(model.issueCount == 0
-                 ? "Tap Import, browse StripZona, like a post, then import that page"
-                 : "Nothing in your \(model.issueCount) imported issues matches “\(model.query)”.")
+            Text(emptyDetail)
                 .font(.system(size: 26, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -390,8 +452,14 @@ private struct CoverImage: View {
             }
         }
         .background(Color(.tertiarySystemFill))
+        // Keyed on the variant, so finishing a download re-runs this and the
+        // cover turns colour immediately. It must NOT bail on a non-nil image:
+        // that is exactly the case where a grey one is already showing.
         .task(id: (url ?? "") + (grayscale ? "#gray" : "")) {
-            guard image == nil else { return }
+            if let hit = CoverStore.shared.cached(url, grayscale: grayscale) {
+                image = hit          // both variants are cached, so this is instant
+                return
+            }
             image = await CoverStore.shared.image(url, grayscale: grayscale)
         }
     }

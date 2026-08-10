@@ -197,3 +197,47 @@ final class CoverURLTests: XCTestCase {
         XCTAssertEqual(covers[21], "https://www.stripovi.com/naslovnice/Zagor/TN/TN_ZG_ZS_21.jpg")
     }
 }
+
+/// The "Downloaded" filter.
+final class DownloadedFilterTests: XCTestCase {
+
+    /// 30 issues, with the only download last. A filter applied to the results
+    /// of a capped query would return nothing; applied in SQL it finds it.
+    private func populated() throws -> (Store, Int) {
+        let store = try Store()
+        var html = ""
+        for n in 1...30 {
+            html += "<div>\(String(format: "%03d", n))-Broj \(n)</div>"
+                 +  "<div>http://www.mediafire.com/?FAKEKEY\(String(format: "%03d", n))</div>"
+        }
+        try store.ingest(html: html)
+        let last = try XCTUnwrap(try store.recent(limit: 100).last)
+        try store.recordDownload(issueID: last.id, mirrorURL: "http://x/1",
+                                 path: URL(fileURLWithPath: "/tmp/x.cbz"), bytes: 10)
+        return (store, last.id)
+    }
+
+    func testFilterFindsADownloadPastTheRowCap() throws {
+        let (store, downloadedID) = try populated()
+        let unfiltered = try store.recent(limit: 5)
+        XCTAssertFalse(unfiltered.contains { $0.id == downloadedID },
+                       "precondition: the download should fall past this cap")
+
+        let filtered = try store.recent(limit: 5, downloadedOnly: true)
+        XCTAssertEqual(filtered.map(\.id), [downloadedID])
+    }
+
+    func testFilterAppliesToSearchToo() throws {
+        let (store, downloadedID) = try populated()
+        XCTAssertGreaterThan(try store.search("broj", limit: 100).count, 1)
+        let filtered = try store.search("broj", limit: 100, downloadedOnly: true)
+        XCTAssertEqual(filtered.map(\.id), [downloadedID])
+    }
+
+    func testFilterIsEmptyWhenNothingIsDownloaded() throws {
+        let store = try Store()
+        try store.ingest(html: "<div>013-Nasilje</div><div>http://www.mediafire.com/?FAKE013</div>")
+        XCTAssertTrue(try store.recent(limit: 50, downloadedOnly: true).isEmpty)
+        XCTAssertFalse(try store.recent(limit: 50).isEmpty)
+    }
+}

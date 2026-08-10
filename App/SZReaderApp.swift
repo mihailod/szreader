@@ -33,6 +33,20 @@ final class AppModel: ObservableObject {
     @Published var status = "starting…"
     @Published var issueCount = 0
     @Published var downloadedCount = 0
+    /// 0...1 per issue being fetched, for the progress bar.
+    @Published var progress: [Int: Double] = [:]
+    /// Show only comics whose archive is actually on disk.
+    @AppStorage("downloadedOnly") var downloadedOnly = false {
+        didSet { search(query) }
+    }
+    /// A failure worth interrupting for. The status line is too easy to miss,
+    /// and a download that silently does nothing looks like a broken app.
+    @Published var failure: String?
+    /// True while filenames are being probed to name untitled issues.
+    @Published var resolving = false
+
+    /// Kept so the backfill uses the same throttled transport as downloads.
+    private var transport: Transport?
     @Published var diskUsage: Int64 = 0
 
 
@@ -58,10 +72,14 @@ final class AppModel: ObservableObject {
             status = ""
             // Real downloads: throttled because these are third-party file
             // hosts that rate-limit, and a burst is what gets an IP blocked.
+            // One throttled transport for downloads and probes alike: these
+            // are third-party hosts that rate-limit, and a burst is what gets
+            // an IP blocked.
+            let transport = ThrottledTransport(URLSessionTransport(), minInterval: 1.5)
+            self.transport = transport
             library = Library(store: store,
                               paths: try LibraryPaths.standard(),
-                              transport: ThrottledTransport(URLSessionTransport(),
-                                                            minInterval: 1.5),
+                              transport: transport,
                               downloader: URLSessionDownloader())
 
             #if DEBUG
@@ -72,6 +90,7 @@ final class AppModel: ObservableObject {
             downloadedCount = store.downloadedCount
             diskUsage = library?.diskUsage ?? 0
             search("")
+            resolveTitles()
         } catch {
             status = "failed: \(error)"
         }
@@ -84,45 +103,127 @@ final class AppModel: ObservableObject {
             // Empty query lists the start of the library rather than nothing,
             // so the shelf is never blank on launch.
             results = text.trimmingCharacters(in: .whitespaces).isEmpty
-                ? try store.recent(limit: 200)
-                : try store.search(text, limit: 200)
+                ? try store.recent(limit: 200, downloadedOnly: downloadedOnly)
+                : try store.search(text, limit: 200, downloadedOnly: downloadedOnly)
         } catch {
             status = "search failed: \(error)"
         }
     }
 
-    /// Ingests a page captured from the in-app browser, then refreshes the shelf.
     #if DEBUG
+    /// Imports the saved topic pages so the simulator has a real library.
+    ///
+    /// The simulator cannot log in to the forum, so without this the only way
+    /// to look at the app with content in it is on the device. Debug-only, and
+    /// gated on a path handed in at launch, so it cannot reach a real build.
+    ///
+    /// Skipped once the library has anything in it, so it never fights with a
+    /// genuine import.
+    private func seedFromSavedPages(into store: Store) {
+        guard store.issueCount == 0,
+              let dir = ProcessInfo.processInfo.environment["SZ_SEED_PAGES"],
+              let names = try? FileManager.default.contentsOfDirectory(atPath: dir)
+        else { return }
+
+        var pages = 0
+        for name in names.sorted() where name.hasSuffix(".html") {
+            guard let html = try? String(contentsOfFile: dir + "/" + name,
+                                         encoding: .utf8) else { continue }
+            if (try? store.importPage(html: html, source: "seed: " + name)) != nil { pages += 1 }
+        }
+        if pages > 0 { status = "seeded \(pages) saved page\(pages == 1 ? "" : "s")" }
+    }
+    #endif
+
     /// Keeps the raw HTML of the last import, for diagnosing a page that
     /// parses oddly.
     ///
     /// Parsing a forum page is guesswork until you can see the markup: cover
     /// matching for the scanlations failed twice against markup that was
     /// inferred rather than read. Only the last page is kept, so this cannot
-    /// grow. Debug-only — a release build never writes it.
+    /// grow.
     private func dumpForDiagnosis(_ html: String) {
         guard let docs = FileManager.default.urls(for: .documentDirectory,
                                                   in: .userDomainMask).first else { return }
         try? html.write(to: docs.appendingPathComponent("last-import.html"),
                         atomically: true, encoding: .utf8)
     }
-    #endif
 
-    func importPage(html: String) -> ImportReport? {
-        #if DEBUG
+    /// Ingests a page captured from the in-app browser, then refreshes the shelf.
+    func importPage(html: String) throws -> ImportReport {
         dumpForDiagnosis(html)
-        #endif
-        guard let store else { return nil }
+        guard let store else { throw ImportFailure.notReady }
         do {
             let report = try store.importPage(html: html, source: "webview import")
             refresh(note: report.isEmpty
                     ? "imported nothing new"
                     : "imported \(report.issues) issue\(report.issues == 1 ? "" : "s")")
             search(query)
+            // A freshly imported page may be all codes and no titles.
+            resolveTitles()
             return report
         } catch {
-            status = "import failed: \(error)"
-            return nil
+            status = "import failed: \(Library.reason(error))"
+            throw error
+        }
+    }
+
+    enum ImportFailure: Error, CustomStringConvertible {
+        case notReady
+        var description: String { "the library is still opening — try again in a moment" }
+    }
+
+    /// Names issues the forum post never named.
+    ///
+    /// Some topics list only a code — Mister No's post is 120 lines of
+    /// `MN_LMS_511` and a link, with no titles anywhere on the page. The title
+    /// is in the file itself though ("LMS - 511 - Mister No - DIJAMANTSKA
+    /// KLOPKA"), so probing the mirror for its filename recovers it without
+    /// downloading anything.
+    ///
+    /// Runs in batches and reports as it goes, because probing is throttled and
+    /// a large import takes minutes. Results are permanent, so an interrupted
+    /// run simply resumes next launch.
+    func resolveTitles() {
+        guard let store, let transport, !resolving else { return }
+        // Fixed denominator: the work in front of us when the run started, so
+        // the readout counts up instead of chasing a moving target.
+        let total = store.untitledIssueCount
+        guard total > 0 else { return }
+
+        resolving = true
+        // Posted before the first probe, not after it. A batch is five probes
+        // at 1.5s apiece, so waiting for one to finish left the shelf silent
+        // for the better part of ten seconds while work was already underway.
+        status = "Resolving names: 0/\(total)"
+
+        Task { [weak self] in
+            var named = 0
+            var remaining = total
+            while remaining > 0 {
+                // Small batches: at 1.5s a probe this refreshes the shelf every
+                // few seconds rather than every half minute.
+                guard let batch = try? await store.backfillTitles(via: transport, limit: 5),
+                      batch.probed > 0 else { break }
+                named += batch.titled
+                // Stop when a batch makes no dent. A probe that yields no
+                // filename leaves the mirror unresolved, so looping on the
+                // count alone would re-probe the same rows for ever and hammer
+                // the host.
+                let now = store.untitledIssueCount
+                guard now < remaining else { break }
+                remaining = now
+                await MainActor.run {
+                    self?.status = "Resolving names: \(total - remaining)/\(total)"
+                    self?.search(self?.query ?? "")
+                }
+            }
+            await MainActor.run {
+                self?.resolving = false
+                self?.refresh(note: named > 0
+                              ? "named \(named) issue\(named == 1 ? "" : "s")"
+                              : "")
+            }
         }
     }
 
@@ -132,20 +233,37 @@ final class AppModel: ObservableObject {
     func download(_ issue: StoredIssue) {
         guard let library, !downloading.contains(issue.id) else { return }
         downloading.insert(issue.id)
+        progress[issue.id] = 0
         status = "downloading “\(issue.title ?? issue.code ?? "issue")”…"
         Task { [weak self] in
             do {
-                let outcome = try await library.fetch(issueID: issue.id)
+                let outcome = try await library.fetch(issueID: issue.id) { p in
+                    // expected is -1 when the server sends no length; with no
+                    // total there is no fraction to show.
+                    guard p.expected > 0 else { return }
+                    let fraction = Double(p.received) / Double(p.expected)
+                    Task { @MainActor [weak self] in self?.progress[issue.id] = fraction }
+                }
                 await MainActor.run {
                     self?.downloading.remove(issue.id)
+                    self?.progress[issue.id] = nil
                     let mb = Double(outcome.bytes) / 1_048_576
+                    // refresh() re-runs the search, so the row rebuilds with
+                    // isDownloaded true and the cover turns colour at once.
                     self?.refresh(note: String(format: "downloaded %.1f MB (%@)",
                                                mb, outcome.kind.rawValue))
                 }
             } catch {
                 await MainActor.run {
                     self?.downloading.remove(issue.id)
-                    self?.status = "download failed: \(error)"
+                    self?.progress[issue.id] = nil
+                    let name = issue.title ?? issue.code ?? "issue"
+                    self?.status = "download failed"
+                    // Summarised, not dumped: interpolating the raw error
+                    // filled the alert with NSError userInfo and buried the
+                    // one sentence that says what went wrong.
+                    self?.failure = "“\(name)” could not be downloaded.\n\n"
+                        + Library.reason(error)
                 }
             }
         }

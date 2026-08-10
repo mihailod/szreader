@@ -22,8 +22,26 @@ extension Store {
         try db.run("""
             INSERT OR REPLACE INTO download (issue_id, mirror_url, path, bytes, fetched_at)
             VALUES (?, ?, ?, ?, ?)
-            """, [.int(Int64(issueID)), .text(mirrorURL), .text(path.path),
+            """, [.int(Int64(issueID)), .text(mirrorURL), .text(relativePath(path)),
                   .int(bytes), .double(Date().timeIntervalSince1970)])
+    }
+
+    /// Relative to the comics root when it sits under it, so a relocated
+    /// container does not orphan the file.
+    func relativePath(_ url: URL) -> String {
+        guard let root = libraryRoot else { return url.path }
+        let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        return url.path.hasPrefix(rootPath)
+            ? String(url.path.dropFirst(rootPath.count))
+            : url.path
+    }
+
+    /// Absolute paths are still honoured: rows written before the migration,
+    /// and stores used without a root at all (tests).
+    func resolvedURL(_ stored: String) -> URL {
+        if stored.hasPrefix("/") { return URL(fileURLWithPath: stored) }
+        guard let root = libraryRoot else { return URL(fileURLWithPath: stored) }
+        return root.appendingPathComponent(stored)
     }
 
     public func downloadedFile(issueID: Int) throws -> DownloadOutcome? {
@@ -32,7 +50,7 @@ extension Store {
             SELECT path, bytes, mirror_url FROM download WHERE issue_id = ?
             """, [.int(Int64(issueID))]) { row in
             guard let p = row.string(0) else { return }
-            let url = URL(fileURLWithPath: p)
+            let url = resolvedURL(p)
             out = DownloadOutcome(issueID: issueID, path: url,
                                   kind: ArchiveKind.sniff(url),
                                   bytes: Int64(row.int(1) ?? 0),
@@ -75,7 +93,7 @@ extension Store {
         var total: Int64 = 0
         try? db.query("SELECT path FROM download") { row in
             guard let p = row.string(0) else { return }
-            total += Self.sizeOnDisk(URL(fileURLWithPath: p).deletingLastPathComponent())
+            total += Self.sizeOnDisk(resolvedURL(p).deletingLastPathComponent())
         }
         return total
     }

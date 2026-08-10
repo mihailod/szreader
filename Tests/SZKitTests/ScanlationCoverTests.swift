@@ -82,3 +82,24 @@ final class ScanlationCoverTests: XCTestCase {
         XCTAssertTrue(covers[21]!.hasPrefix("https://"))
     }
 }
+
+/// Mega hands back an http:// storage node. App Transport Security refuses it
+/// outright (NSURLErrorDomain -1022) and the request never leaves the device,
+/// so every mega.nz download failed while the error looked like a dead mirror.
+final class MegaSecureNodeTests: XCTestCase {
+
+    func testStorageNodeIsForcedToTLS() throws {
+        let url = try XCTUnwrap(MegaHost.secureNode(
+            "http://gfs302n518.userstorage.mega.co.nz/dl/abc123"))
+        XCTAssertEqual(url.scheme, "https")
+        XCTAssertEqual(url.host, "gfs302n518.userstorage.mega.co.nz")
+        XCTAssertEqual(url.path, "/dl/abc123")
+    }
+
+    func testAlreadySecureNodeIsUnchanged() throws {
+        let url = try XCTUnwrap(MegaHost.secureNode(
+            "https://gfs302n518.userstorage.mega.co.nz/dl/abc123"))
+        XCTAssertEqual(url.absoluteString,
+                       "https://gfs302n518.userstorage.mega.co.nz/dl/abc123")
+    }
+}

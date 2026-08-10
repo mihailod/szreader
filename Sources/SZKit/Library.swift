@@ -49,6 +49,44 @@ public final class Library {
                 registry: HostRegistry = HostRegistry()) {
         self.store = store; self.paths = paths; self.registry = registry
         self.transport = transport; self.downloader = downloader
+        // Downloads record paths relative to this root, so a relocated app
+        // container does not orphan every file.
+        store.libraryRoot = paths.root
+    }
+
+    /// A reason short enough to show a person.
+    ///
+    /// Interpolating an `NSError` dumps its whole userInfo — the failing URL,
+    /// the session task, the underlying error — which fills an alert and
+    /// buries the one sentence that says what went wrong.
+    public static func reason(_ error: Error) -> String {
+        // Matched explicitly: every Swift Error bridges to NSError, so an
+        // `is NSError` test is always true and would swallow our own messages.
+        switch error {
+        case let e as DownloadError:  return e.description
+        case let e as HostError:      return e.description
+        case let e as ArchiveError:   return e.description
+        case let e as TransportError: return e.description
+        // Without this a database failure renders as "SZKit.SQLiteError error
+        // 1" — the code with the message thrown away, which says nothing about
+        // what actually went wrong.
+        case let e as SQLiteError:    return "database: " + e.description
+        default: break
+        }
+        let ns = error as NSError
+        guard ns.domain == NSURLErrorDomain else { return ns.localizedDescription }
+        // The few URL errors worth distinguishing, in words that say what to
+        // do about it. The rest fall back to the system wording.
+        switch ns.code {
+        case NSURLErrorAppTransportSecurityRequiresSecureConnection:
+            return "blocked: the mirror offered an insecure connection"
+        case NSURLErrorNotConnectedToInternet:  return "no internet connection"
+        case NSURLErrorTimedOut:                return "timed out"
+        case NSURLErrorCannotFindHost, NSURLErrorCannotConnectToHost:
+            return "mirror unreachable"
+        case NSURLErrorNetworkConnectionLost:   return "connection lost"
+        default:                                return ns.localizedDescription
+        }
     }
 
     /// Bytes currently held by downloaded comics.
@@ -87,7 +125,7 @@ public final class Library {
                 failures.append("\(mirror.host): dead")
                 try store.markMirrorDead(url: mirror.url)
             } catch {
-                failures.append("\(mirror.host): \(error)")
+                failures.append("\(mirror.host): \(Self.reason(error))")
             }
         }
         throw DownloadError.allMirrorsFailed(failures)

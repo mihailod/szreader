@@ -18,6 +18,11 @@ public struct StoredIssue: Equatable, Sendable {
 /// The local library: issues, their mirrors, and a folded full-text index.
 public final class Store {
 
+    /// Where downloads live. Stored paths are relative to this, so they
+    /// survive the container being relocated.
+    public var libraryRoot: URL?
+
+
     let db: Database   // internal: Store+Backfill reaches in
 
     public init(path: String = ":memory:") throws {
@@ -67,6 +72,43 @@ public final class Store {
         try? db.execute("ALTER TABLE issue ADD COLUMN context TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN search_text TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN cover_url TEXT")
+
+        // Heal libraries damaged by the identity bug: naming an issue used to
+        // rewrite `title_folded`, which is part of the natural key, so the next
+        // import of the same page matched nothing and inserted every issue
+        // again.
+        //
+        // The spurious row is identifiable: `mirror.url` is UNIQUE, so the
+        // duplicate's mirror inserts were ignored and it has none, while the
+        // original kept them. Restricted to rows whose twin *does* have
+        // mirrors, so a genuinely link-less entry is never touched.
+        let spurious = """
+            SELECT i.id FROM issue i
+            WHERE NOT EXISTS (SELECT 1 FROM mirror m WHERE m.issue_id = i.id)
+              AND EXISTS (SELECT 1 FROM issue j
+                          WHERE j.id <> i.id
+                            AND IFNULL(j.code,'')   = IFNULL(i.code,'')
+                            AND IFNULL(j.number,-1) = IFNULL(i.number,-1)
+                            AND EXISTS (SELECT 1 FROM mirror m2 WHERE m2.issue_id = j.id))
+            """
+        try? db.execute("DELETE FROM issue_fts WHERE rowid IN (\(spurious))")
+        try? db.execute("DELETE FROM issue WHERE id IN (\(spurious))")
+
+        // Scanners shout inconsistently, so a library built from filenames ends
+        // up with a mix of "DIJAMANTSKA KLOPKA" and "Sablast doline".
+        normaliseStoredTitles()
+
+        // Paths used to be stored absolute. iOS gives the app container a new
+        // UUID on reinstall, so every one of them went stale: the rows survived
+        // and the files existed, but nothing could find them — the library
+        // reported "2 downloaded (0 MB)" and would have re-fetched both.
+        // Rewrite them relative to the comics root, which never moves.
+        try? db.execute("""
+            UPDATE download
+            SET path = substr(path, instr(path, '/SZReader/comics/')
+                                     + length('/SZReader/comics/'))
+            WHERE path LIKE '%/SZReader/comics/%'
+            """)
         // Covers stored before the https fix would each pay a 301 redirect.
         try? db.execute("""
             UPDATE issue SET cover_url = replace(cover_url, 'http://', 'https://')
@@ -97,8 +139,7 @@ public final class Store {
             rows.append((Int64(row.int(0) ?? 0), row.string(1), row.string(2),
                          row.int(3), row.string(4), row.string(5)))
         }
-        try db.execute("BEGIN")
-        do {
+        try db.transaction {
             try db.execute("DELETE FROM issue_fts")
             for (id, title, code, number, series, context) in rows {
                 let text = Self.searchText(title: title, code: code, number: number,
@@ -107,10 +148,6 @@ public final class Store {
                 try db.run("INSERT INTO issue_fts (rowid, search_text) VALUES (?, ?)",
                            [.int(id), .text(text)])
             }
-            try db.execute("COMMIT")
-        } catch {
-            try? db.execute("ROLLBACK")
-            throw error
         }
     }
 
@@ -140,8 +177,7 @@ public final class Store {
         // so they are read once per page and stamped onto each issue.
         let context = Catalog.pageContext(in: html).searchableText
         let covers = Catalog.covers(in: html)
-        try db.execute("BEGIN")
-        do {
+        try db.transaction {
             for parsed in Catalog.issues(in: html) {
                 let folded = Fold.fold(parsed.label.title ?? parsed.label.code ?? "")
                 let id = try upsertIssue(parsed, folded: folded, source: source,
@@ -160,10 +196,6 @@ public final class Store {
                     if try db.scalarInt("SELECT changes()") > 0 { newMirrors += 1 }
                 }
             }
-            try db.execute("COMMIT")
-        } catch {
-            try? db.execute("ROLLBACK")
-            throw error
         }
         return (newIssues, newMirrors)
     }
@@ -186,6 +218,10 @@ public final class Store {
             inserted += 1
             let id = try existingID(parsed, folded: folded)
             // Keep FTS in step manually; rowid ties it back to issue.id.
+            // Delete first: the index is maintained by hand, and a leftover row
+            // for this id makes the insert fail on its rowid constraint — which
+            // aborts the whole import rather than just that issue.
+            try db.run("DELETE FROM issue_fts WHERE rowid = ?", [.int(id)])
             try db.run("INSERT INTO issue_fts (rowid, search_text) VALUES (?, ?)",
                        [.int(id), .text(searchText)])
             return id
@@ -209,7 +245,8 @@ public final class Store {
 
     /// Prefix search over folded titles. The query is folded identically to
     /// the stored keys, so diacritics and punctuation cannot cause a miss.
-    public func search(_ text: String, limit: Int = 50) throws -> [StoredIssue] {
+    public func search(_ text: String, limit: Int = 50,
+                       downloadedOnly: Bool = false) throws -> [StoredIssue] {
         let tokens = Fold.fold(text).split(separator: " ").filter { !$0.isEmpty }
         guard !tokens.isEmpty else { return [] }
         // Folding leaves only letters, digits and spaces, so no FTS5
@@ -224,6 +261,8 @@ public final class Store {
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
+            \(downloadedOnly
+              ? "AND EXISTS(SELECT 1 FROM download f WHERE f.issue_id = i.id)" : "")
             ORDER BY rank
             LIMIT ?
             """, [.text(match), .int(Int64(limit))]) { row in
@@ -243,13 +282,17 @@ public final class Store {
 
     /// The library in insertion order, for the shelf when no query is active.
     /// An empty search field should show the library, not an empty screen.
-    public func recent(limit: Int = 100) throws -> [StoredIssue] {
+    public func recent(limit: Int = 100, downloadedOnly: Bool = false) throws -> [StoredIssue] {
         var out: [StoredIssue] = []
+        // Applied in SQL rather than to the results: the query is capped, so
+        // filtering afterwards would drop downloads that sit past the cap.
+        let filter = downloadedOnly
+            ? "WHERE EXISTS(SELECT 1 FROM download f WHERE f.issue_id = i.id)" : ""
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
                    (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id)
-            FROM issue i ORDER BY i.id LIMIT ?
+            FROM issue i \(filter) ORDER BY i.id LIMIT ?
             """, [.int(Int64(limit))]) { row in
             out.append(StoredIssue(
                 id: row.int(0) ?? 0, code: row.string(1), number: row.int(2),

@@ -1,4 +1,4 @@
-// swift-tools-version:5.9
+// swift-tools-version:6.0
 import PackageDescription
 
 // unrar's compiled set, taken from its own makefile. The other .cpp files in
@@ -80,8 +80,16 @@ let package = Package(
         ),
         // Deliberately UIKit-free so the parsers run as fast Mac unit tests
         // against the same fixtures the Python spike was validated on.
-        .target(name: "SZKit", dependencies: ["CUnrar"]),
-        .testTarget(name: "SZKitTests", dependencies: ["SZKit"])
+        // Swift 6 language mode: data-race safety is enforced rather than
+        // suggested. The database race that surfaced as "the library could not
+        // be written to" was a non-Sendable Store captured into a background
+        // Task — exactly what this rejects at compile time.
+        .target(name: "SZKit", dependencies: ["CUnrar"],
+                swiftSettings: [.swiftLanguageMode(.v6)]),
+        // Still v5: the concurrency tests deliberately share one Store across
+        // threads to prove the locking works, which mode 6 cannot see is safe.
+        .testTarget(name: "SZKitTests", dependencies: ["SZKit"],
+                    swiftSettings: [.swiftLanguageMode(.v5)])
     ],
     cxxLanguageStandard: .cxx14
 )

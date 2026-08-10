@@ -34,7 +34,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: StripZona
+        CFBundleDisplayName: SZ Reader
         UILaunchScreen:
           UIColorName: ""
         UISupportedInterfaceOrientations:

@@ -26,6 +26,24 @@ enum SQLValue {
 final class Database {
     fileprivate var handle: OpaquePointer?
 
+    /// Serialises every statement on this connection.
+    ///
+    /// One sqlite3 handle shared by the UI and the background title backfill:
+    /// WAL permits concurrent readers but only one writer, so an import racing
+    /// a probe write fails with "database is locked" and the import is lost.
+    ///
+    /// Recursive by necessity, not preference — these calls nest on one thread
+    /// (`scalarInt` calls `query`; `backfillTitles` calls `recordProbe` and
+    /// `setTitle` inside its own loop), and a plain lock or a serial queue's
+    /// `sync` would deadlock on the re-entry.
+    private let lock = NSRecursiveLock()
+
+    private func locked<T>(_ body: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try body()
+    }
+
     /// `path` may be ":memory:".
     init(path: String) throws {
         let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
@@ -34,6 +52,9 @@ final class Database {
             sqlite3_close(handle)
             throw SQLiteError(description: msg)
         }
+        // Defence in depth: the lock serialises this process, but a checkpoint
+        // or another connection can still hold a write lock briefly.
+        sqlite3_busy_timeout(handle, 5_000)
         try execute("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
     }
 
@@ -43,34 +64,65 @@ final class Database {
         SQLiteError(description: "\(context): \(String(cString: sqlite3_errmsg(handle)))")
     }
 
+    /// Runs `body` as one transaction, holding the connection lock throughout.
+    ///
+    /// Locking each statement is not enough on its own: two threads can still
+    /// interleave *between* BEGIN and COMMIT, and the second BEGIN fails with
+    /// "cannot start a transaction within a transaction" — which surfaced as an
+    /// import that reported the library could not be written to, and was lost.
+    func transaction<T>(_ body: () throws -> T) throws -> T {
+        try locked {
+            try execute("BEGIN")
+            do {
+                let out = try body()
+                try execute("COMMIT")
+                return out
+            } catch {
+                try? execute("ROLLBACK")
+                throw error
+            }
+        }
+    }
+
     /// Runs one or more statements with no bindings.
     func execute(_ sql: String) throws {
+        try locked {
         var err: UnsafeMutablePointer<CChar>?
         guard sqlite3_exec(handle, sql, nil, nil, &err) == SQLITE_OK else {
             let msg = err.map { String(cString: $0) } ?? "exec failed"
             sqlite3_free(err)
             throw SQLiteError(description: msg)
         }
+        }
     }
 
     @discardableResult
     func run(_ sql: String, _ args: [SQLValue] = []) throws -> Int64 {
-        let stmt = try prepare(sql, args)
-        defer { sqlite3_finalize(stmt) }
-        let rc = sqlite3_step(stmt)
-        guard rc == SQLITE_DONE || rc == SQLITE_ROW else { throw fail("run") }
-        return sqlite3_last_insert_rowid(handle)
+        try locked {
+            let stmt = try prepare(sql, args)
+            defer { sqlite3_finalize(stmt) }
+            let rc = sqlite3_step(stmt)
+            guard rc == SQLITE_DONE || rc == SQLITE_ROW else {
+                // The statement, not just "run": SQLITE_ERROR is a logic error
+                // ("no such column", "no such table"), and without the SQL the
+                // message says nothing about which statement is wrong.
+                throw fail("run \(sql.prefix(90))")
+            }
+            return sqlite3_last_insert_rowid(handle)
+        }
     }
 
     /// Streams rows; the closure receives a column accessor.
     func query(_ sql: String, _ args: [SQLValue] = [], _ row: (Row) -> Void) throws {
-        let stmt = try prepare(sql, args)
-        defer { sqlite3_finalize(stmt) }
-        while true {
-            let rc = sqlite3_step(stmt)
-            if rc == SQLITE_DONE { break }
-            guard rc == SQLITE_ROW else { throw fail("query") }
-            row(Row(stmt: stmt))
+        try locked {
+            let stmt = try prepare(sql, args)
+            defer { sqlite3_finalize(stmt) }
+            while true {
+                let rc = sqlite3_step(stmt)
+                if rc == SQLITE_DONE { break }
+                guard rc == SQLITE_ROW else { throw fail("query \(sql.prefix(90))") }
+                row(Row(stmt: stmt))
+            }
         }
     }
 
