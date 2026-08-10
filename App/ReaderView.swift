@@ -16,6 +16,10 @@ struct ReaderView: View {
     @State private var index = 0
     @State private var cache: [Int: CGImage] = [:]
     @State private var chromeVisible = true
+    /// Where the scrubber's thumb is, which is only the same as `index` when
+    /// the user is not dragging it.
+    @State private var scrubTarget: Double = 0
+    @State private var scrubbing = false
 
     var body: some View {
         ZStack {
@@ -52,10 +56,79 @@ struct ReaderView: View {
             }
             .padding()
             .background(.ultraThinMaterial)
+
             Spacer()
+
+            // A single page is not worth a scrubber.
+            if document.pageCount > 1 { scrubber }
         }
         .foregroundStyle(.primary)
         .transition(.opacity)
+    }
+
+    /// Drag to any page.
+    ///
+    /// The page only changes when the thumb is released. Following the drag
+    /// live would decode every page it crosses, which on a 200-page scan is
+    /// hundreds of decodes for one gesture — the bubble is what tells you
+    /// where you are on the way.
+    private var scrubber: some View {
+        VStack(spacing: 4) {
+            GeometryReader { geo in
+                // Always on, not just while dragging. Appearing only on the
+                // first scrub meant the one number you want before deciding
+                // where to drag was the one number missing.
+                Group {
+                    Text("\(Int(scrubTarget) + 1) / \(document.pageCount)")
+                        // Read at arm's length, mid-drag, with a thumb over
+                        // the bar — the previous footnote size was too small
+                        // to check without stopping.
+                        .font(.title3.weight(.semibold).monospacedDigit())
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(.thinMaterial, in: Capsule())
+                        .overlay(Capsule().strokeBorder(.quaternary))
+                        .fixedSize()
+                        // Tracks the thumb, inset by its radius so the label
+                        // sits over it at both ends rather than past them.
+                        .position(x: thumbX(width: geo.size.width),
+                                  y: geo.size.height / 2)
+                }
+                // Lifted while dragging, so the label you are steering by
+                // stands out from the one that is merely reporting.
+                .opacity(scrubbing ? 1 : 0.85)
+            }
+            .frame(height: 44)
+
+            Slider(
+                value: $scrubTarget,
+                in: 0...Double(max(document.pageCount - 1, 1)),
+                step: 1,
+                onEditingChanged: { editing in
+                    withAnimation(.easeOut(duration: 0.12)) { scrubbing = editing }
+                    if !editing { index = Int(scrubTarget) }
+                }
+            )
+            .tint(.white)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 10)
+        .background(.ultraThinMaterial)
+        // Keep the thumb honest when pages are turned by swiping instead.
+        // Single-parameter form: the two-parameter onChange is iOS 17+, and
+        // this app targets 16.
+        .onChange(of: index) { page in
+            if !scrubbing { scrubTarget = Double(page) }
+        }
+        .onAppear { scrubTarget = Double(index) }
+    }
+
+    private static let thumbRadius: CGFloat = 15
+
+    private func thumbX(width: CGFloat) -> CGFloat {
+        let span = max(width - Self.thumbRadius * 2, 1)
+        let last = Double(max(document.pageCount - 1, 1))
+        return Self.thumbRadius + span * CGFloat(scrubTarget / last)
     }
 
     /// Decode the current page plus a small window either side, so a back-flip

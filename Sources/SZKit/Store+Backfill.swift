@@ -167,6 +167,23 @@ extension Store {
             """)) ?? 0
     }
 
+    /// Largest recorded size among an issue's mirrors, if any were probed.
+    ///
+    /// Nil means no mirror has been probed yet, which is not the same as zero
+    /// — a caller must not read it as "this file is empty".
+    public func knownSize(forIssue issueID: Int) throws -> Int64? {
+        var out: Int64?
+        try db.query("SELECT MAX(size) FROM mirror WHERE issue_id = ? AND size IS NOT NULL",
+                     [.int(Int64(issueID))]) { row in
+            if let value = row.int(0), value > 0 { out = Int64(value) }
+        }
+        return out
+    }
+
+    public func recordSize(_ size: Int64, forMirrorAt url: String) throws {
+        try db.run("UPDATE mirror SET size = ? WHERE url = ?", [.int(size), .text(url)])
+    }
+
     public func filename(forMirrorAt url: String) throws -> String? {
         var out: String?
         try db.query("SELECT filename FROM mirror WHERE url = ?", [.text(url)]) { out = $0.string(0) }

@@ -53,6 +53,9 @@ final class AppModel: ObservableObject {
     /// Kept so the backfill uses the same throttled transport as downloads.
     private var transport: Transport?
     @Published var diskUsage: Int64 = 0
+    /// Free space on the volume the library lives on. Zero when it cannot be
+    /// read, which the status bar treats as "say nothing".
+    @Published var freeSpace: Int64 = 0
 
 
     /// Issues currently being fetched, so the row can show progress instead of
@@ -94,6 +97,8 @@ final class AppModel: ObservableObject {
             issueCount = store.issueCount
             downloadedCount = store.downloadedCount
             diskUsage = library?.diskUsage ?? 0
+        freeSpace = Self.freeSpace()
+            freeSpace = Self.freeSpace()
             search("")
             resolveTitles()
         } catch {
@@ -183,6 +188,22 @@ final class AppModel: ObservableObject {
     enum ImportFailure: Error, CustomStringConvertible {
         case notReady
         var description: String { "the library is still opening — try again in a moment" }
+    }
+
+    /// Bytes free on the volume holding the library.
+    ///
+    /// `volumeAvailableCapacityForImportantUsage` rather than the plain free
+    /// count: it reports what iOS will actually hand an app, since the system
+    /// reclaims purgeable space on demand. The plain figure understates it,
+    /// sometimes badly.
+    static func freeSpace() -> Int64 {
+        guard let url = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                 in: .userDomainMask).first,
+              let values = try? url.resourceValues(
+                forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+              let capacity = values.volumeAvailableCapacityForImportantUsage
+        else { return 0 }
+        return Int64(capacity)
     }
 
     /// Opens a downloaded comic in the reader.

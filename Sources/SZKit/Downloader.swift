@@ -9,8 +9,24 @@ public struct DownloadProgress: Equatable, Sendable {
 /// without a network.
 public protocol FileDownloader: Sendable {
     /// Writes the (still encrypted, if applicable) bytes to `destination`.
+    ///
+    /// `check` is handed the declared content length once, before any bytes are
+    /// written, and aborts the transfer by throwing. That is where the free
+    /// space guard lives: the size arrives in the response headers of the
+    /// transfer itself, so nothing has to ask the host a second question — and
+    /// a second request moments after resolving a link is exactly what looks
+    /// like scraping.
     func download(_ link: DirectLink, to destination: URL,
-                  progress: (@Sendable (DownloadProgress) -> Void)?) async throws
+                  progress: (@Sendable (DownloadProgress) -> Void)?,
+                  check: (@Sendable (Int64) throws -> Void)?) async throws
+}
+
+public extension FileDownloader {
+    /// Most callers do not care about the size up front.
+    func download(_ link: DirectLink, to destination: URL,
+                  progress: (@Sendable (DownloadProgress) -> Void)?) async throws {
+        try await download(link, to: destination, progress: progress, check: nil)
+    }
 }
 
 public enum DownloadError: Error, CustomStringConvertible {
@@ -18,6 +34,7 @@ public enum DownloadError: Error, CustomStringConvertible {
     case badStatus(Int)
     case emptyFile
     case notAnArchive(String)
+    case insufficientSpace(required: Int64, available: Int64)
 
     public var description: String {
         switch self {
@@ -26,7 +43,16 @@ public enum DownloadError: Error, CustomStringConvertible {
         case .badStatus(let c): return "HTTP \(c)"
         case .emptyFile: return "server returned no bytes"
         case .notAnArchive(let m): return "not a CBZ/CBR archive: \(m)"
+        case .insufficientSpace:
+            return "No free space on device — make room or remove some downloads"
         }
+    }
+}
+
+extension DownloadError {
+    var isInsufficientSpace: Bool {
+        if case .insufficientSpace = self { return true }
+        return false
     }
 }
 
@@ -44,7 +70,8 @@ public final class URLSessionDownloader: NSObject, FileDownloader, @unchecked Se
     }
 
     public func download(_ link: DirectLink, to destination: URL,
-                         progress: (@Sendable (DownloadProgress) -> Void)?) async throws {
+                         progress: (@Sendable (DownloadProgress) -> Void)?,
+                         check: (@Sendable (Int64) throws -> Void)? = nil) async throws {
         var request = URLRequest(url: link.url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         for (k, v) in link.headers { request.setValue(v, forHTTPHeaderField: k) }
@@ -55,6 +82,9 @@ public final class URLSessionDownloader: NSObject, FileDownloader, @unchecked Se
             throw DownloadError.badStatus(http.statusCode)
         }
         let expected = response.expectedContentLength
+
+        // Before the file is created, so a refusal leaves nothing behind.
+        try check?(expected)
 
         FileManager.default.createFile(atPath: destination.path, contents: nil)
         let handle = try FileHandle(forWritingTo: destination)

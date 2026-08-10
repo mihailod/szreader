@@ -10,10 +10,14 @@ final class StubDownloader: FileDownloader, @unchecked Sendable {
     init(bodies: [String: Data]) { self.bodies = bodies }
 
     func download(_ link: DirectLink, to destination: URL,
-                  progress: (@Sendable (DownloadProgress) -> Void)?) async throws {
+                  progress: (@Sendable (DownloadProgress) -> Void)?,
+                  check: (@Sendable (Int64) throws -> Void)?) async throws {
         if let failWith { throw failWith }
         fetched.append(link.url)
         let data = bodies[link.url.host ?? ""] ?? Data()
+        // Announced before writing, exactly as the real downloader does, so the
+        // free-space guard sees the same thing here as in production.
+        try check?(Int64(data.count))
         guard !data.isEmpty else { throw DownloadError.emptyFile }
         try data.write(to: destination)
         progress?(DownloadProgress(received: Int64(data.count), expected: Int64(data.count)))

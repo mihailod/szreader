@@ -430,6 +430,25 @@ struct LibraryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var summaryLine: String {
+        var line = "\(model.results.count) shown · \(model.issueCount) imported"
+        line += " · \(model.downloadedCount) downloaded (\(Self.gb(model.diskUsage)))"
+        return line
+    }
+
+    /// Under a gigabyte, which is not enough for one more comic — these run
+    /// 80–100 MB each, but a download also needs room to unpack alongside the
+    /// archive before it is deleted.
+    private var lowOnSpace: Bool { model.freeSpace < 1_000_000_000 }
+
+    /// Whole gigabytes, rounded down: this is a "have I room for another one"
+    /// figure, and rounding up would promise space that is not there. Below a
+    /// gigabyte that rounds to "0 GB free", which reads like a bug, so it
+    /// becomes "<1 GB free".
+    private var freeText: String {
+        lowOnSpace ? "<1 GB free" : "\(model.freeSpace / 1_000_000_000) GB free"
+    }
+
     private static func gb(_ bytes: Int64) -> String {
         let f = ByteCountFormatter()
         f.allowedUnits = [.useMB, .useGB]
@@ -443,8 +462,15 @@ struct LibraryView: View {
 
     private var statusBar: some View {
         HStack(spacing: 14) {
-            Text("\(model.results.count) shown · \(model.issueCount) imported · "
-                 + "\(model.downloadedCount) downloaded (\(Self.gb(model.diskUsage)))")
+            Text(summaryLine)
+            if model.freeSpace > 0 {
+                Text("·")
+                Text(freeText)
+                    // Red only when the disk is nearly full — a colour that
+                    // means "act on this" loses its meaning if it is on screen
+                    // all the time.
+                    .foregroundStyle(lowOnSpace ? Color.red : Color.secondary)
+            }
             // Only present when something actually happened; the counts above
             // are the resting state.
             if !model.status.isEmpty {

@@ -44,9 +44,22 @@ public final class Library {
     private let transport: Transport
     private let downloader: FileDownloader
 
+    /// Space a download needs relative to the archive size.
+    ///
+    /// The archive lands first, then unpacks alongside itself before the
+    /// archive is deleted, so peak usage is already roughly double. 3x leaves
+    /// room for unpacked pages exceeding the compressed archive and for the
+    /// system needing air — running out mid-unpack leaves a half-written comic
+    /// and a full disk, which is far worse than refusing up front.
+    public static let spaceHeadroom = 3.0
+
+    private let availableSpace: @Sendable () -> Int64
+
     public init(store: Store, paths: LibraryPaths,
                 transport: Transport, downloader: FileDownloader,
-                registry: HostRegistry = HostRegistry()) {
+                registry: HostRegistry = HostRegistry(),
+                availableSpace: @escaping @Sendable () -> Int64 = Library.systemFreeSpace) {
+        self.availableSpace = availableSpace
         self.store = store; self.paths = paths; self.registry = registry
         self.transport = transport; self.downloader = downloader
         // Downloads record paths relative to this root, so a relocated app
@@ -89,6 +102,53 @@ public final class Library {
         }
     }
 
+    /// Aborts a transfer whose declared size will not fit.
+    ///
+    /// Runs on the response headers, before a byte is written, so nothing has
+    /// to be cleaned up and the host is asked nothing extra.
+    private func spaceCheck() -> @Sendable (Int64) throws -> Void {
+        let free = availableSpace()
+        let headroom = Self.spaceHeadroom
+        return { expected in
+            guard free > 0, expected > 0 else { return }
+            let required = Int64(Double(expected) * headroom)
+            if free < required {
+                throw DownloadError.insufficientSpace(required: required, available: free)
+            }
+        }
+    }
+
+    /// Free space iOS will actually hand this app.
+    public static func systemFreeSpace() -> Int64 {
+        guard let url = try? FileManager.default.url(for: .applicationSupportDirectory,
+                                                     in: .userDomainMask,
+                                                     appropriateFor: nil, create: false),
+              let values = try? url.resourceValues(
+                forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+              let capacity = values.volumeAvailableCapacityForImportantUsage
+        else { return 0 }
+        return Int64(capacity)
+    }
+
+    /// Refuses a download that cannot fit, before a byte is fetched.
+    ///
+    /// Checked once for the issue rather than per mirror: running out of disk
+    /// is not a bad mirror, and trying the next one would waste the user's
+    /// bandwidth to fail the same way. Unknown size means no check — a missing
+    /// figure must not block a download that would have fitted.
+    func checkSpace(forIssue issueID: Int) throws {
+        // Only what is already known. Asking the host costs a request, and a
+        // second request moments after resolving a link looks like scraping —
+        // the transfer's own Content-Length covers the rest, in `spaceCheck`.
+        guard let size = try store.knownSize(forIssue: issueID), size > 0 else { return }
+        let required = Int64(Double(size) * Self.spaceHeadroom)
+        let free = availableSpace()
+        guard free > 0 else { return }        // could not read the volume
+        if free < required {
+            throw DownloadError.insufficientSpace(required: required, available: free)
+        }
+    }
+
     /// Opens a downloaded comic for reading.
     ///
     /// Unpacking a solid RAR is slow enough to notice, so callers should do
@@ -124,6 +184,10 @@ public final class Library {
         let directory = paths.directory(forIssue: issueID)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
+        // Before the network, and outside the mirror loop: a full disk is not a
+        // dead mirror, so this must abort rather than be collected as one.
+        try checkSpace(forIssue: issueID)
+
         var failures: [String] = []
         for mirror in try store.liveMirrors(forIssue: issueID) {
             guard let url = URL(string: mirror.url) else { continue }
@@ -134,6 +198,8 @@ public final class Library {
                 try store.recordDownload(issueID: issueID, mirrorURL: mirror.url,
                                          path: outcome.path, bytes: outcome.bytes)
                 return outcome
+            } catch let error as DownloadError where error.isInsufficientSpace {
+                throw error
             } catch HostError.notFound {
                 failures.append("\(mirror.host): dead")
                 try store.markMirrorDead(url: mirror.url)
@@ -159,7 +225,8 @@ public final class Library {
         let rawURL = directory.appendingPathComponent(filename + ".part")
 
         try? FileManager.default.removeItem(at: rawURL)
-        try await downloader.download(link, to: rawURL, progress: progress)
+        try await downloader.download(link, to: rawURL, progress: progress,
+                                      check: spaceCheck())
 
         switch link.postProcess {
         case .aesCTR(let key, let nonce)?:
