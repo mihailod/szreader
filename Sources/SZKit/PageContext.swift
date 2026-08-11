@@ -59,11 +59,15 @@ public struct PageContext: Equatable, Sendable {
         // leaf crumb is sometimes a section ("ZS i LMS") rather than a hero.
         guard let key = topicParts.first, !key.isEmpty else { return trail.last }
         let folded = Fold.fold(key)
-        if let match = trail.first(where: {
+        // No match means the topic is not about a character at all. The forum
+        // indexes its heroes as breadcrumbs, so a first part that appears
+        // nowhere in the trail — "Kolorka", "Orka Specijal", "Alef" — is a
+        // publication in its own right, and nil here routes `edition` to treat
+        // it as one.
+        return trail.first {
             let crumb = Fold.fold($0)
             return crumb.hasPrefix(folded) || folded.hasPrefix(crumb)
-        }) { return match }
-        return key
+        }
     }
 
     public var hero: String? { heroCrumb }
@@ -87,9 +91,15 @@ public struct PageContext: Equatable, Sendable {
     /// carry an extra section crumb below it ("ZS i LMS"), which shifts every
     /// fixed offset by one.
     public var publisher: String? {
-        guard let crumb = heroCrumb, let index = trail.firstIndex(of: crumb),
-              index > 0 else { return nil }
-        return trail[index - 1]
+        // Character topics: the crumb above the hero.
+        if let crumb = heroCrumb, let index = trail.firstIndex(of: crumb), index > 0 {
+            return trail[index - 1]
+        }
+        // Magazine topics: the shouted part of the title is the imprint.
+        guard heroCrumb == nil else { return nil }
+        return topicParts.dropFirst().first { part in
+            part.contains(where: \.isLetter) && !part.contains(where: { $0.isLowercase })
+        }
     }
 
     /// The edition a topic collects, e.g. "LUNOV MAGNUS STRIP".
@@ -100,6 +110,18 @@ public struct PageContext: Equatable, Sendable {
     /// hero is also stripped from the front of the remainder, and bracketed
     /// asides (issue counts, publisher tags) are dropped first.
     public var edition: String? {
+        // A magazine names itself first and its publisher second: "Kolorka -
+        // FIBRA - …". Taking the shouted part would file Orka, Kolorka and
+        // both Specijals under one "FIBRA", which is the publisher they share
+        // rather than the series that tells them apart.
+        //
+        // Requires a trail to be present: "no crumb matches" only means
+        // "not a character" when there were crumbs to check. With none at all
+        // there is no evidence either way, and the shouted part is the better
+        // guess — that is what every character topic uses.
+        if !trail.isEmpty, heroCrumb == nil,
+           let own = topicParts.first, !own.isEmpty { return own }
+
         let heroFolded = hero.map(Fold.fold)
         let parts = topicParts.filter { Fold.fold($0) != heroFolded }
 

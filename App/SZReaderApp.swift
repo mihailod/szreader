@@ -61,6 +61,51 @@ final class AppModel: ObservableObject {
     @Published var downloadedCount = 0
     /// 0...1 per issue being fetched, for the progress bar.
     @Published var progress: [Int: Double] = [:]
+    /// Series the reader has narrowed to. Empty means every series.
+    ///
+    /// Persisted as newline-joined text: `AppStorage` cannot hold a Set, and a
+    /// newline is the one separator a series name will never contain.
+    @AppStorage("seriesFilter") private var seriesFilterRaw = "" {
+        didSet { search(query) }
+    }
+
+    var selectedSeries: Set<String> {
+        get { Set(seriesFilterRaw.split(separator: "\n").map(String.init)) }
+        set { seriesFilterRaw = newValue.sorted().joined(separator: "\n") }
+    }
+
+    /// Publishers the reader has narrowed to. Empty means every publisher.
+    @AppStorage("publisherFilter") private var publisherFilterRaw = "" {
+        didSet { search(query) }
+    }
+
+    var selectedPublishers: Set<String> {
+        get { Set(publisherFilterRaw.split(separator: "\n").map(String.init)) }
+        set { publisherFilterRaw = newValue.sorted().joined(separator: "\n") }
+    }
+
+    /// Heroes the reader has narrowed to. Empty means every hero.
+    @AppStorage("heroFilter") private var heroFilterRaw = "" {
+        didSet { search(query) }
+    }
+
+    var selectedHeroes: Set<String> {
+        get { Set(heroFilterRaw.split(separator: "\n").map(String.init)) }
+        set { heroFilterRaw = newValue.sorted().joined(separator: "\n") }
+    }
+
+    /// Every series in the library, for building the filter menu.
+    @Published var availableSeries: [String] = []
+    /// Every publisher in the library, likewise.
+    @Published var availablePublishers: [String] = []
+    /// Every hero in the library, in the spelling the rows hold.
+    @Published var availableHeroes: [String] = []
+
+    /// How the shelf is ordered. `imported` keeps the query's own order.
+    @AppStorage("shelfSort") var sortOrder: ShelfSort = .imported {
+        didSet { search(query) }
+    }
+
     /// Show only comics whose archive is actually on disk.
     @AppStorage("downloadedOnly") var downloadedOnly = false {
         didSet { search(query) }
@@ -123,8 +168,10 @@ final class AppModel: ObservableObject {
             issueCount = store.issueCount
             downloadedCount = store.downloadedCount
             diskUsage = library?.diskUsage ?? 0
-        freeSpace = Self.freeSpace()
             freeSpace = Self.freeSpace()
+            availableSeries = (try? store.editions()) ?? []
+            availablePublishers = (try? store.publishers()) ?? []
+            availableHeroes = (try? store.heroes()) ?? []
             search("")
             resolveTitles()
         } catch {
@@ -142,8 +189,20 @@ final class AppModel: ObservableObject {
                 // No cap: the grid and list are lazy, so only visible cells are
                 // built, and a silent 200-row ceiling made a 613-issue library
                 // look like it ended at 200.
-                ? try store.recent(limit: nil, downloadedOnly: downloadedOnly)
-                : try store.search(text, limit: nil, downloadedOnly: downloadedOnly)
+                ? try store.recent(limit: nil, downloadedOnly: downloadedOnly,
+                                   editions: selectedSeries,
+                                   publishers: selectedPublishers,
+                                   heroes: selectedHeroes)
+                : try store.search(text, limit: nil, downloadedOnly: downloadedOnly,
+                                   editions: selectedSeries,
+                                   publishers: selectedPublishers,
+                                   heroes: selectedHeroes)
+            // Applied on top of the query, so the default costs nothing and
+            // leaves insertion order when browsing and relevance when
+            // searching — each view's own answer to what it was asked.
+            if let comparator = StoredIssue.comparator(for: sortOrder) {
+                results.sort(by: comparator)
+            }
         } catch {
             status = "search failed: \(error)"
         }
@@ -260,6 +319,32 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Turns one series on or off. Series are additive: several selected means
+    /// "any of these", and the Downloaded filter narrows whatever is left.
+    func toggleSeries(_ edition: String) {
+        var chosen = selectedSeries
+        if chosen.contains(edition) { chosen.remove(edition) } else { chosen.insert(edition) }
+        selectedSeries = chosen
+    }
+
+    func togglePublisher(_ publisher: String) {
+        var chosen = selectedPublishers
+        if chosen.contains(publisher) { chosen.remove(publisher) } else { chosen.insert(publisher) }
+        selectedPublishers = chosen
+    }
+
+    func toggleHero(_ hero: String) {
+        var chosen = selectedHeroes
+        if chosen.contains(hero) { chosen.remove(hero) } else { chosen.insert(hero) }
+        selectedHeroes = chosen
+    }
+
+    func clearSeriesFilter() {
+        selectedHeroes = []
+        selectedSeries = []
+        selectedPublishers = []
+    }
+
     /// Names issues the forum post never named.
     ///
     /// Some topics list only a code — Mister No's post is 120 lines of
@@ -284,7 +369,17 @@ final class AppModel: ObservableObject {
         // for the better part of ten seconds while work was already underway.
         status = "Resolving names: 0/\(total)"
 
-        Task { [weak self] in
+        // Isolated to the main actor for its whole life, rather than a
+        // free-floating task that reaches back for `self` through nested
+        // `MainActor.run` blocks. Those reads of a weak, non-Sendable model
+        // from concurrent code are a data race — the same shape as the one
+        // that surfaced as "the library could not be written to" — and an
+        // error under the Swift 6 language mode.
+        //
+        // Nothing is serialised onto the main thread by this: `backfillTitles`
+        // is a nonisolated async function, so each await hops off and the
+        // probing and database work still happen in the background.
+        Task { @MainActor [weak self] in
             var named = 0
             var remaining = total
             while remaining > 0 {
@@ -300,17 +395,18 @@ final class AppModel: ObservableObject {
                 let now = store.untitledIssueCount
                 guard now < remaining else { break }
                 remaining = now
-                await MainActor.run {
-                    self?.status = "Resolving names: \(total - remaining)/\(total)"
-                    self?.search(self?.query ?? "")
-                }
+
+                // Bound once per pass: if the model has gone, so has the shelf
+                // this was updating.
+                guard let self else { return }
+                self.status = "Resolving names: \(total - remaining)/\(total)"
+                self.search(self.query)
             }
-            await MainActor.run {
-                self?.resolving = false
-                self?.refresh(note: named > 0
-                              ? "named \(named) issue\(named == 1 ? "" : "s")"
-                              : "")
-            }
+            guard let self else { return }
+            self.resolving = false
+            self.refresh(note: named > 0
+                         ? "named \(named) issue\(named == 1 ? "" : "s")"
+                         : "")
         }
     }
 
@@ -319,39 +415,56 @@ final class AppModel: ObservableObject {
     /// one is dead.
     func download(_ issue: StoredIssue) {
         guard let library, !downloading.contains(issue.id) else { return }
-        downloading.insert(issue.id)
-        progress[issue.id] = 0
-        status = "downloading “\(issue.title ?? issue.code ?? "issue")”…"
-        Task { [weak self] in
+        let issueID = issue.id
+        let name = issue.title ?? issue.code ?? "issue"
+        downloading.insert(issueID)
+        progress[issueID] = 0
+        status = "downloading “\(name)”…"
+
+        // Progress crosses threads as plain numbers.
+        //
+        // The downloader calls back from whichever thread is moving bytes, so
+        // its closure must not reach for the model: reading a captured, weak,
+        // non-Sendable AppModel from concurrent code is a data race, and an
+        // error under the Swift 6 language mode. A stream continuation *is*
+        // Sendable, so that is all the closure holds; the fractions are
+        // consumed on the main actor, where the model lives.
+        var sink: AsyncStream<Double>.Continuation!
+        let fractions = AsyncStream<Double> { sink = $0 }
+        let continuation = sink!
+        let report: @Sendable (DownloadProgress) -> Void = { p in
+            // expected is -1 when the server sends no length; with no total
+            // there is no fraction to show.
+            guard p.expected > 0 else { return }
+            continuation.yield(Double(p.received) / Double(p.expected))
+        }
+
+        Task { @MainActor [weak self] in
+            for await fraction in fractions { self?.progress[issueID] = fraction }
+        }
+
+        Task { @MainActor [weak self] in
+            defer { continuation.finish() }
             do {
-                let outcome = try await library.fetch(issueID: issue.id) { p in
-                    // expected is -1 when the server sends no length; with no
-                    // total there is no fraction to show.
-                    guard p.expected > 0 else { return }
-                    let fraction = Double(p.received) / Double(p.expected)
-                    Task { @MainActor [weak self] in self?.progress[issue.id] = fraction }
-                }
-                await MainActor.run {
-                    self?.downloading.remove(issue.id)
-                    self?.progress[issue.id] = nil
-                    let mb = Double(outcome.bytes) / 1_048_576
-                    // refresh() re-runs the search, so the row rebuilds with
-                    // isDownloaded true and the cover turns colour at once.
-                    self?.refresh(note: String(format: "downloaded %.1f MB (%@)",
-                                               mb, outcome.kind.rawValue))
-                }
+                let outcome = try await library.fetch(issueID: issueID, progress: report)
+                guard let self else { return }
+                self.downloading.remove(issueID)
+                self.progress[issueID] = nil
+                let mb = Double(outcome.bytes) / 1_048_576
+                // refresh() re-runs the search, so the row rebuilds with
+                // isDownloaded true and the cover turns colour at once.
+                self.refresh(note: String(format: "downloaded %.1f MB (%@)",
+                                          mb, outcome.kind.rawValue))
             } catch {
-                await MainActor.run {
-                    self?.downloading.remove(issue.id)
-                    self?.progress[issue.id] = nil
-                    let name = issue.title ?? issue.code ?? "issue"
-                    self?.status = "download failed"
-                    // Summarised, not dumped: interpolating the raw error
-                    // filled the alert with NSError userInfo and buried the
-                    // one sentence that says what went wrong.
-                    self?.failure = "“\(name)” could not be downloaded.\n\n"
-                        + Library.reason(error)
-                }
+                guard let self else { return }
+                self.downloading.remove(issueID)
+                self.progress[issueID] = nil
+                self.status = "download failed"
+                // Summarised, not dumped: interpolating the raw error filled
+                // the alert with NSError userInfo and buried the one sentence
+                // that says what went wrong.
+                self.failure = "“\(name)” could not be downloaded.\n\n"
+                    + Library.reason(error)
             }
         }
     }
@@ -417,6 +530,11 @@ final class AppModel: ObservableObject {
         issueCount = store?.issueCount ?? 0
         downloadedCount = store?.downloadedCount ?? 0
         diskUsage = library?.diskUsage ?? 0
+        freeSpace = Self.freeSpace()
+        // A newly imported page can bring a series the menu has not offered.
+        availableSeries = (try? store?.editions()) ?? []
+        availablePublishers = (try? store?.publishers()) ?? []
+        availableHeroes = (try? store?.heroes()) ?? []
         search(query)
         status = note
     }

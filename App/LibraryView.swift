@@ -106,21 +106,100 @@ struct LibraryView: View {
             .pickerStyle(.segmented)
             .frame(width: 120)
 
+            // Filled icon when the order is not the default, for the same
+            // reason the filter fills: a shelf in an unexpected order should
+            // say so rather than look wrong.
+            Menu {
+                Picker("Sort by", selection: $model.sortOrder) {
+                    ForEach(ShelfSort.allCases, id: \.self) { order in
+                        Label(order.label, systemImage: order.symbol).tag(order)
+                    }
+                }
+            } label: {
+                Image(systemName: model.sortOrder == .imported
+                      ? "arrow.up.arrow.down.circle"
+                      : "arrow.up.arrow.down.circle.fill")
+                    .font(.system(size: 30))
+                    .frame(height: 44)
+            }
+            .menuStyle(.borderlessButton)
+            .tint(model.sortOrder == .imported ? .secondary : .accentColor)
+
             // Filled icon when a filter is on, so a narrowed library never
             // looks like a missing one.
             Menu {
                 Toggle(isOn: $model.downloadedOnly) {
                     Label("Downloaded", systemImage: "arrow.down.circle")
                 }
+
+                // Series are built from what has actually been imported, so
+                // the menu never offers an edition the library does not hold.
+                if !model.availableSeries.isEmpty {
+                    Section("Series") {
+                        ForEach(model.availableSeries, id: \.self) { edition in
+                            Toggle(isOn: Binding(
+                                get: { model.selectedSeries.contains(edition) },
+                                set: { _ in model.toggleSeries(edition) }
+                            )) {
+                                // Shown in sentence case: the forum shouts its
+                                // editions, and a menu of LUNOV MAGNUS STRIP
+                                // reads as an error message.
+                                Text(TitleCleaner.normaliseCase(edition))
+                            }
+                        }
+                    }
+                }
+
+                if !model.availableHeroes.isEmpty {
+                    Section("Hero") {
+                        ForEach(model.availableHeroes, id: \.self) { hero in
+                            Toggle(isOn: Binding(
+                                get: { model.selectedHeroes.contains(hero) },
+                                set: { _ in model.toggleHero(hero) }
+                            )) {
+                                // Shown short, filtered long: the row holds
+                                // "Zagor Te-Nay" and the menu says "Zagor".
+                                Text(PageContext.displayName(forHero: hero))
+                            }
+                        }
+                    }
+                }
+
+                if !model.availablePublishers.isEmpty {
+                    // "Publisher/Creator" because the crumb above a hero is
+                    // whichever the forum happened to file it under — an
+                    // imprint for BONELLI and FIBRA, the authors for
+                    // "Magnus - Bunker" or "Hugo Pratt". Naming it for both
+                    // beats inventing logic to tell them apart.
+                    Section("Publisher/Creator") {
+                        ForEach(model.availablePublishers, id: \.self) { publisher in
+                            Toggle(isOn: Binding(
+                                get: { model.selectedPublishers.contains(publisher) },
+                                set: { _ in model.togglePublisher(publisher) }
+                            )) {
+                                Text(TitleCleaner.normaliseCase(publisher))
+                            }
+                        }
+                    }
+                }
+
+                if !model.selectedSeries.isEmpty || !model.selectedPublishers.isEmpty
+                    || !model.selectedHeroes.isEmpty {
+                    Section {
+                        Button("Show everything", systemImage: "xmark.circle") {
+                            model.clearSeriesFilter()
+                        }
+                    }
+                }
             } label: {
-                Image(systemName: model.downloadedOnly
+                Image(systemName: filtering
                       ? "line.3.horizontal.decrease.circle.fill"
                       : "line.3.horizontal.decrease.circle")
                     .font(.system(size: 30))
                     .frame(height: 44)
             }
             .menuStyle(.borderlessButton)
-            .tint(model.downloadedOnly ? .accentColor : .secondary)
+            .tint(filtering ? .accentColor : .secondary)
 
             Button { showingImport = true } label: {
                 Label("Import", systemImage: "square.and.arrow.down")
@@ -393,6 +472,13 @@ struct LibraryView: View {
             }
     }
 
+    /// Anything narrowing the shelf, so the icon reports the whole filter and
+    /// not just its first switch.
+    private var filtering: Bool {
+        model.downloadedOnly || !model.selectedSeries.isEmpty
+            || !model.selectedPublishers.isEmpty || !model.selectedHeroes.isEmpty
+    }
+
     /// Three distinct empty cases, because "nothing here" for three different
     /// reasons needs three different next steps.
     private var emptyIcon: String {
@@ -556,6 +642,7 @@ struct IssueDetail: View {
                     LabeledContent("Title", value: issue.title ?? "—")
                     LabeledContent("Hero", value: issue.heroDisplay ?? "—")
                     LabeledContent("Series", value: issue.edition ?? "—")
+                    LabeledContent("Publisher/Creator", value: issue.publisher ?? "—")
                     // Spelled out, because the shelf shows only the short form
                     // and an unexplained "LMS" is not obviously an abbreviation
                     // of anything.

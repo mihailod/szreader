@@ -11,6 +11,8 @@ public struct StoredIssue: Equatable, Sendable {
     public let hero: String?
     /// Edition the topic collects, spelled out: "Lunov Magnus Strip".
     public let edition: String?
+    /// Who published it: "BONELLI", "FIBRA", "Magnus - Bunker".
+    public let publisher: String?
     public let style: LabelStyle
     public let mirrorCount: Int
     public let coverURL: String?
@@ -42,6 +44,7 @@ public struct StoredIssue: Equatable, Sendable {
         hero.map(PageContext.displayName(forHero:))
     }
 
+
     /// "SSB 1 · Alan Ford · Grupa TNT" — how the reader names what is open.
     ///
     /// Wider than the shelf's label because the reader is the one place with
@@ -60,17 +63,36 @@ public struct StoredIssue: Equatable, Sendable {
 
     /// "Mister No, Lunov Magnus Strip" — who it is about and what it is from.
     public var provenance: String? {
-        let parts = [heroDisplay, edition].compactMap { $0 }.filter { !$0.isEmpty }
+        // Publisher included: for a magazine there is no hero, so without it a
+        // row read "Kolorka" alone and lost the FIBRA it belongs to.
+        let parts = [heroDisplay, edition, publisher]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 }
 
 /// The local library: issues, their mirrors, and a folded full-text index.
-public final class Store {
+/// Thread-safe by construction: every statement goes through `Database`, which
+/// serialises on a recursive lock, and the one other piece of mutable state
+/// (`libraryRoot`) is guarded below. That is what makes `@unchecked Sendable`
+/// a statement of fact here rather than a promise — a `Store` is handed to the
+/// background title backfill while the UI keeps reading from it.
+public final class Store: @unchecked Sendable {
 
     /// Where downloads live. Stored paths are relative to this, so they
     /// survive the container being relocated.
-    public var libraryRoot: URL?
+    ///
+    /// Guarded because it is written once by `Library.init` and then read from
+    /// whichever thread happens to resolve a path — "written once, early" is a
+    /// convention, not something the compiler or anything else enforces.
+    public var libraryRoot: URL? {
+        get { rootLock.lock(); defer { rootLock.unlock() }; return storedRoot }
+        set { rootLock.lock(); storedRoot = newValue; rootLock.unlock() }
+    }
+
+    private var storedRoot: URL?
+    private let rootLock = NSLock()
 
 
     let db: Database   // internal: Store+Backfill reaches in
@@ -124,6 +146,7 @@ public final class Store {
         try? db.execute("ALTER TABLE issue ADD COLUMN cover_url TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN hero TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN edition TEXT")
+        try? db.execute("ALTER TABLE issue ADD COLUMN publisher TEXT")
 
         // Heal libraries damaged by the identity bug: naming an issue used to
         // rewrite `title_folded`, which is part of the natural key, so the next
@@ -236,15 +259,19 @@ public final class Store {
                 let id = try upsertIssue(parsed, folded: folded, source: source,
                                          context: context, hero: pageContext.hero,
                                          edition: pageContext.edition,
+                                         publisher: pageContext.publisher,
                                          inserted: &newIssues)
                 // Covers arrive per page; fill one in if this issue lacks one.
                 // Fills these in for rows created before the columns existed,
                 // so a re-import upgrades an old library rather than only
                 // helping new arrivals.
                 try db.run("""
-                    UPDATE issue SET hero = COALESCE(hero, ?), edition = COALESCE(edition, ?)
+                    UPDATE issue SET hero = COALESCE(hero, ?),
+                                     edition = COALESCE(edition, ?),
+                                     publisher = COALESCE(publisher, ?)
                     WHERE id = ?
-                    """, [SQLValue(pageContext.hero), SQLValue(pageContext.edition), .int(id)])
+                    """, [SQLValue(pageContext.hero), SQLValue(pageContext.edition),
+                          SQLValue(pageContext.publisher), .int(id)])
                 if let number = parsed.label.number, let cover = covers[number] {
                     try db.run("UPDATE issue SET cover_url = ? WHERE id = ? AND cover_url IS NULL",
                                [.text(cover), .int(id)])
@@ -264,20 +291,20 @@ public final class Store {
 
     private func upsertIssue(_ parsed: ParsedIssue, folded: String, source: String?,
                              context: String, hero: String?, edition: String?,
-                             inserted: inout Int) throws -> Int64 {
+                             publisher: String?, inserted: inout Int) throws -> Int64 {
         let searchText = Self.searchText(title: parsed.label.title, code: parsed.label.code,
                                          number: parsed.label.number,
                                          series: parsed.label.series, context: context)
         try db.run("""
             INSERT OR IGNORE INTO issue
               (code, number, title, title_folded, series, style, source, context,
-               search_text, hero, edition)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               search_text, hero, edition, publisher)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [SQLValue(parsed.label.code), SQLValue(parsed.label.number),
                   SQLValue(parsed.label.title), .text(folded),
                   SQLValue(parsed.label.series), .text(parsed.style.rawValue),
                   SQLValue(source), .text(context), .text(searchText),
-                  SQLValue(hero), SQLValue(edition)])
+                  SQLValue(hero), SQLValue(edition), SQLValue(publisher)])
 
         if try db.scalarInt("SELECT changes()") > 0 {
             inserted += 1
@@ -311,7 +338,10 @@ public final class Store {
     /// Prefix search over folded titles. The query is folded identically to
     /// the stored keys, so diacritics and punctuation cannot cause a miss.
     public func search(_ text: String, limit: Int? = 50,
-                       downloadedOnly: Bool = false) throws -> [StoredIssue] {
+                       downloadedOnly: Bool = false,
+                       editions: Set<String> = [],
+                       publishers: Set<String> = [],
+                       heroes: Set<String> = []) throws -> [StoredIssue] {
         let tokens = Fold.fold(text).split(separator: " ").filter { !$0.isEmpty }
         guard !tokens.isEmpty else { return [] }
         // Folding leaves only letters, digits and spaces, so no FTS5
@@ -319,19 +349,22 @@ public final class Store {
         let match = tokens.map { "\($0)*" }.joined(separator: " ")
 
         var out: [StoredIssue] = []
+        let terms = Self.filterClauses(downloadedOnly: downloadedOnly, editions: editions,
+                                       publishers: publishers, heroes: heroes)
+        let filter = terms.sql.isEmpty ? "" : "AND " + terms.sql.joined(separator: " AND ")
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
                    (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
-                   i.hero, i.edition
+                   i.hero, i.edition, i.publisher
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
-            \(downloadedOnly
-              ? "AND EXISTS(SELECT 1 FROM download f WHERE f.issue_id = i.id)" : "")
+            \(filter)
             ORDER BY rank
             \(limit == nil ? "" : "LIMIT ?")
-            """, [.text(match)] + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
+            """, [.text(match)] + terms.args
+                  + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
                 id: row.int(0) ?? 0,
                 code: row.string(1),
@@ -339,6 +372,7 @@ public final class Store {
                 title: row.string(3),
                 series: row.string(4),
                 hero: row.string(9), edition: row.string(10),
+                publisher: row.string(11),
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
@@ -352,23 +386,106 @@ public final class Store {
     /// `limit: nil` returns everything. The shelf uses that: a cap there is
     /// invisible — the library simply appears to stop, with no indication that
     /// more exists.
-    public func recent(limit: Int? = 100, downloadedOnly: Bool = false) throws -> [StoredIssue] {
+    /// Every series present in the library, for the filter menu.
+    ///
+    /// Read from the issues themselves rather than a fixed list: the forum
+    /// gains editions, and a hard-coded menu would quietly stop matching what
+    /// has actually been imported.
+    public func editions() throws -> [String] {
+        var out: [String] = []
+        try db.query("""
+            SELECT DISTINCT edition FROM issue
+            WHERE edition IS NOT NULL AND edition <> ''
+            ORDER BY edition COLLATE NOCASE
+            """) { row in
+            if let edition = row.string(0) { out.append(edition) }
+        }
+        return out
+    }
+
+    /// Every hero present in the library, for the filter menu.
+    ///
+    /// Stored spellings, not display ones: the menu shows "Zagor" but has to
+    /// filter on "Zagor Te-Nay", which is what the rows actually hold.
+    public func heroes() throws -> [String] {
+        var out: [String] = []
+        try db.query("""
+            SELECT DISTINCT hero FROM issue
+            WHERE hero IS NOT NULL AND hero <> ''
+            ORDER BY hero COLLATE NOCASE
+            """) { row in
+            if let hero = row.string(0) { out.append(hero) }
+        }
+        return out
+    }
+
+    /// Every publisher present in the library, for the filter menu.
+    public func publishers() throws -> [String] {
+        var out: [String] = []
+        try db.query("""
+            SELECT DISTINCT publisher FROM issue
+            WHERE publisher IS NOT NULL AND publisher <> ''
+            ORDER BY publisher COLLATE NOCASE
+            """) { row in
+            if let publisher = row.string(0) { out.append(publisher) }
+        }
+        return out
+    }
+
+    /// The WHERE terms shared by both queries.
+    ///
+    /// Series are OR'd against each other and AND'd with Downloaded: picking
+    /// two series means "either of these", not "both at once", which nothing
+    /// could satisfy.
+    static func filterClauses(downloadedOnly: Bool, editions: Set<String>,
+                              publishers: Set<String>,
+                              heroes: Set<String>) -> (sql: [String], args: [SQLValue]) {
+        var sql: [String] = []
+        var args: [SQLValue] = []
+        if downloadedOnly {
+            sql.append("EXISTS(SELECT 1 FROM download f WHERE f.issue_id = i.id)")
+        }
+        // Bound, never interpolated: these names come out of forum HTML.
+        if !editions.isEmpty {
+            let slots = editions.map { _ in "?" }.joined(separator: ", ")
+            sql.append("i.edition IN (\(slots))")
+            args += editions.sorted().map { SQLValue.text($0) }
+        }
+        if !publishers.isEmpty {
+            let slots = publishers.map { _ in "?" }.joined(separator: ", ")
+            sql.append("i.publisher IN (\(slots))")
+            args += publishers.sorted().map { SQLValue.text($0) }
+        }
+        if !heroes.isEmpty {
+            let slots = heroes.map { _ in "?" }.joined(separator: ", ")
+            sql.append("i.hero IN (\(slots))")
+            args += heroes.sorted().map { SQLValue.text($0) }
+        }
+        return (sql, args)
+    }
+
+    public func recent(limit: Int? = 100, downloadedOnly: Bool = false,
+                       editions: Set<String> = [],
+                       publishers: Set<String> = [],
+                       heroes: Set<String> = []) throws -> [StoredIssue] {
         var out: [StoredIssue] = []
-        // Applied in SQL rather than to the results: the query is capped, so
-        // filtering afterwards would drop downloads that sit past the cap.
-        let filter = downloadedOnly
-            ? "WHERE EXISTS(SELECT 1 FROM download f WHERE f.issue_id = i.id)" : ""
+        // Applied in SQL rather than to the results, so a filter cannot be
+        // defeated by a cap the caller happens to pass.
+        let terms = Self.filterClauses(downloadedOnly: downloadedOnly, editions: editions,
+                                       publishers: publishers, heroes: heroes)
+        let filter = terms.sql.isEmpty ? "" : "WHERE " + terms.sql.joined(separator: " AND ")
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
                    (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
-                   i.hero, i.edition
+                   i.hero, i.edition, i.publisher
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
-            """, limit.map { [SQLValue.int(Int64($0))] } ?? []) { row in
+            """, terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
                 id: row.int(0) ?? 0, code: row.string(1), number: row.int(2),
                 title: row.string(3), series: row.string(4),
                 hero: row.string(9), edition: row.string(10),
+                publisher: row.string(11),
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
