@@ -222,14 +222,15 @@ extension Catalog {
     private static let coverImage =
         Rx(#"(https?://[^"'\s]*naslovnice/[^"'\s]*?_(\d{1,4})\.jpe?g)"#, [.caseInsensitive])
 
-    /// The same `_<number>` convention, on any host.
+    /// The same trailing-number convention, on any host and with or without a
+    /// separator: `TN_ZG_ZS_13.jpg`, `Dzudas_01.jpg`, `alef-SF01.jpg`.
     ///
     /// StripZona's own scanlations are not on stripovi.com — their art is
     /// posted alongside the topic, e.g. `thumbs/strider/Dzudas/Dzudas_01.jpg`.
     /// The filename still names the issue, which beats inferring it from
     /// position, so this runs before the positional tier rather than after.
     private static let numberedImage =
-        Rx(#"(https?://[^"'\s]*?_(\d{1,4})\.(?:jpe?g|png))"#, [.caseInsensitive])
+        Rx(#"(https?://[^"'\s]*?[A-Za-z][-_ ]?(\d{1,4})\.(?:jpe?g|png))"#, [.caseInsensitive])
 
     /// Issue number → cover URL, for the covers referenced by one page.
     ///
@@ -281,6 +282,11 @@ extension Catalog {
         "style_emoticons", "style_images", "style_avatars", "avatar", "smilie",
         "emoticon", "spacer", "blank.", "logo", "banner", "icon", "rating",
         "pip.", "bullet", "arrow", "quote", "profile", "signature",
+        // Member avatars are named "av-68.jpg". Now that a cover need not have
+        // an underscore before its number, one of those would otherwise claim
+        // to be issue 68 — and on a page that has an issue 68, silently take
+        // its cover.
+        "/uploads/av-", "sharelinks",
     ]
 
     /// Covers are photographs; furniture is overwhelmingly GIF.

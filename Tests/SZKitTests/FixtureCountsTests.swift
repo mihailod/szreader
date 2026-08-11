@@ -17,9 +17,16 @@ final class FixtureCountsTests: XCTestCase {
     }
 
     /// (filename fragment, total links, attributed) — measured by survey.py.
+    ///
+    /// Two entries have moved past the spike, and deliberately: the spike could
+    /// not read labels that put the number after a dashed name ("Alef - SF
+    /// magazin 01"), so it left most of Alef unattributed. Both pages were
+    /// checked issue by issue after the change — Alef parses 1…26 complete,
+    /// Martin Mystere 1…78 — with no implausible numbers, so these are links
+    /// the spike missed rather than new mis-parses.
     private let expected: [(String, Int, Int)] = [
         ("Alan Ford",       70,  70),
-        ("Alef",            51,  20),
+        ("Alef",            51,  50),
         ("Asteriks",        20,  20),
         ("Dzudas",          33,  33),
         // Mostly locked (250 hidden blocks) — the like quota ran out. The six
@@ -28,7 +35,7 @@ final class FixtureCountsTests: XCTestCase {
         ("Kolorka -",      144, 144),
         ("Kolorka Specijal", 34, 34),
         ("Korto Malteze",   34,   0),
-        ("Martin Mystere",  84,  78),
+        ("Martin Mystere",  84,  79),
         ("Mister No",      268, 268),
         ("Orka -",          62,  62),
         ("Orka Specijal",   30,  30),
@@ -70,7 +77,7 @@ final class FixtureCountsTests: XCTestCase {
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
         XCTAssertEqual(total, 1004)
-        XCTAssertEqual(attributed, 933)
+        XCTAssertEqual(attributed, 964)
     }
 
     /// Entity decoding is not optional: IPB writes `http&#58;//...`, and

@@ -27,8 +27,12 @@ enum Labels {
 
     // Name before number, optional title, trailing (author) (date) groups.
     private static let letter = "A-Za-zČĆŠŽĐčćšžđ"
+    // Words may be joined by a dash as well as a space: Alef lists its issues
+    // as "Alef - SF magazin 01 (scanners)", and a name that allows only spaces
+    // stops at the first hyphen and matches nothing.
     static let nameNum = Rx(
-        "^([\(letter)][\(letter)]{1,14}(?:\\s+[\(letter)]{2,14}){0,2})\\s+(\\d{1,4})\\s*[-–_.:]?\\s*(.*)$")
+        "^([\(letter)][\(letter)]{1,14}(?:(?:\\s+|\\s*[-–]\\s*)[\(letter)]{2,14}){0,3})"
+        + "\\s+(\\d{1,4})\\s*[-–_.:]?\\s*(.*)$")
     static let trailingParens = Rx(#"(?:\s*[\(\[][^)\]]*[\)\]])+\s*$"#)
 
     /// Lines that look like labels but are forum chrome. Without this,

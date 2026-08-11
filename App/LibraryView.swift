@@ -293,8 +293,14 @@ struct LibraryView: View {
         }
     }
 
-    private func name(_ issue: StoredIssue) -> String {
-        issue.title ?? issue.code ?? "this issue"
+    /// The title, or the code when the post gave none.
+    ///
+    /// Nil when there is neither, which is the normal case for a magazine
+    /// listed only as "Alef - SF magazin 01": the shelf mark already says
+    /// "Alef 1", and the placeholder that used to sit here read as though
+    /// every issue were actually called "this issue".
+    private func name(_ issue: StoredIssue) -> String? {
+        issue.title ?? issue.code
     }
 
     // MARK: - Content
@@ -365,10 +371,12 @@ struct LibraryView: View {
 
     private func caption(_ issue: StoredIssue) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(name(issue))
-                .font(.callout.weight(.medium))
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if let name = name(issue) {
+                Text(name)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             if let mark = issue.shelfMark {
                 Text(mark).font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -404,7 +412,9 @@ struct LibraryView: View {
                                 .font(.title3.weight(.semibold).monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
-                        Text(name(issue)).font(.title3.weight(.medium))
+                        if let name = name(issue) {
+                            Text(name).font(.title3.weight(.medium))
+                        }
                     }
                     // Who it is about and what it is from. The mirror count
                     // lived here and told the reader nothing about the comic;

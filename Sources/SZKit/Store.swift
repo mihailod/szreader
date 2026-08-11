@@ -250,6 +250,9 @@ public final class Store: @unchecked Sendable {
         var newIssues = 0, newMirrors = 0
         // Publisher, hero and edition live in the page chrome, not the posts,
         // so they are read once per page and stamped onto each issue.
+        // A few topics are only reliable in one member's posts; for the rest
+        // this hands back the page untouched.
+        let html = Catalog.authoritativeHTML(html)
         let pageContext = Catalog.pageContext(in: html)
         let context = pageContext.searchableText
         let covers = Catalog.covers(in: html)
