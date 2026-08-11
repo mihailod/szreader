@@ -7,7 +7,7 @@ final class ShelfSortTests: XCTestCase {
     private func issue(_ id: Int, edition: String? = nil, number: Int? = nil,
                        title: String? = nil, hero: String? = nil) -> StoredIssue {
         StoredIssue(id: id, code: "C\(id)", number: number, title: title, series: nil,
-                    hero: hero, edition: edition, publisher: nil, style: .labeledBlock,
+                    hero: hero, edition: edition, publisher: nil, isRead: false, style: .labeledBlock,
                     mirrorCount: 1, coverURL: nil, isDownloaded: false)
     }
 
@@ -392,5 +392,68 @@ final class HeroFilterTests: XCTestCase {
     func testNoHeroSelectedMeansEveryHero() throws {
         let store = try library()
         XCTAssertEqual(try store.recent(limit: nil, heroes: []).count, store.issueCount)
+    }
+}
+
+/// Marking issues read, and filtering on it.
+final class ReadStateTests: XCTestCase {
+
+    private func populated() throws -> (Store, [StoredIssue]) {
+        let store = try Store()
+        try store.ingest(html: """
+            <div>001-Prvi</div><div>http://www.mediafire.com/?FAKE001</div>
+            <div>002-Drugi</div><div>http://www.mediafire.com/?FAKE002</div>
+            <div>003-Treci</div><div>http://www.mediafire.com/?FAKE003</div>
+            """)
+        return (store, try store.recent(limit: nil))
+    }
+
+    func testIssuesStartUnread() throws {
+        let (store, rows) = try populated()
+        XCTAssertTrue(rows.allSatisfy { !$0.isRead })
+        XCTAssertEqual(try store.recent(limit: nil, readState: .unread).count, 3)
+        XCTAssertTrue(try store.recent(limit: nil, readState: .read).isEmpty)
+    }
+
+    func testMarkingReadAndBack() throws {
+        let (store, rows) = try populated()
+        try store.setRead(true, issueID: rows[0].id)
+
+        XCTAssertEqual(try store.recent(limit: nil, readState: .read).map(\.id), [rows[0].id])
+        XCTAssertEqual(try store.recent(limit: nil, readState: .unread).count, 2)
+        XCTAssertTrue(try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id }).isRead)
+
+        try store.setRead(false, issueID: rows[0].id)
+        XCTAssertTrue(try store.recent(limit: nil, readState: .read).isEmpty)
+        XCTAssertFalse(try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id }).isRead)
+    }
+
+    /// Asking for read *and* unread is the same as not asking.
+    func testAnyMeansEverything() throws {
+        let (store, rows) = try populated()
+        try store.setRead(true, issueID: rows[0].id)
+        XCTAssertEqual(try store.recent(limit: nil, readState: .any).count, 3)
+    }
+
+    /// Read state narrows whatever the other filters left.
+    func testCombinesWithTheOtherFilters() throws {
+        let (store, rows) = try populated()
+        try store.setRead(true, issueID: rows[0].id)
+        try store.recordDownload(issueID: rows[1].id, mirrorURL: "http://x/2",
+                                 path: URL(fileURLWithPath: "/tmp/b.cbz"), bytes: 1)
+        // Downloaded and read describe different issues here, so together they
+        // match nothing.
+        XCTAssertTrue(try store.recent(limit: nil, downloadedOnly: true,
+                                       readState: .read).isEmpty)
+        XCTAssertEqual(try store.recent(limit: nil, downloadedOnly: true,
+                                        readState: .unread).count, 1)
+    }
+
+    /// Search honours it too, not only browsing.
+    func testSearchRespectsReadState() throws {
+        let (store, rows) = try populated()
+        try store.setRead(true, issueID: rows[0].id)
+        XCTAssertEqual(try store.search("prvi", limit: nil, readState: .read).count, 1)
+        XCTAssertTrue(try store.search("prvi", limit: nil, readState: .unread).isEmpty)
     }
 }

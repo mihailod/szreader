@@ -13,6 +13,8 @@ public struct StoredIssue: Equatable, Sendable {
     public let edition: String?
     /// Who published it: "BONELLI", "FIBRA", "Magnus - Bunker".
     public let publisher: String?
+    /// Whether the reader has marked it read.
+    public let isRead: Bool
     public let style: LabelStyle
     public let mirrorCount: Int
     public let coverURL: String?
@@ -147,6 +149,7 @@ public final class Store: @unchecked Sendable {
         try? db.execute("ALTER TABLE issue ADD COLUMN hero TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN edition TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN publisher TEXT")
+        try? db.execute("ALTER TABLE issue ADD COLUMN read_at REAL")
 
         // Heal libraries damaged by the identity bug: naming an issue used to
         // rewrite `title_folded`, which is part of the natural key, so the next
@@ -344,7 +347,8 @@ public final class Store: @unchecked Sendable {
                        downloadedOnly: Bool = false,
                        editions: Set<String> = [],
                        publishers: Set<String> = [],
-                       heroes: Set<String> = []) throws -> [StoredIssue] {
+                       heroes: Set<String> = [],
+                       readState: ReadFilter = .any) throws -> [StoredIssue] {
         let tokens = Fold.fold(text).split(separator: " ").filter { !$0.isEmpty }
         guard !tokens.isEmpty else { return [] }
         // Folding leaves only letters, digits and spaces, so no FTS5
@@ -353,13 +357,15 @@ public final class Store: @unchecked Sendable {
 
         var out: [StoredIssue] = []
         let terms = Self.filterClauses(downloadedOnly: downloadedOnly, editions: editions,
-                                       publishers: publishers, heroes: heroes)
+                                       publishers: publishers, heroes: heroes,
+                                       readState: readState)
         let filter = terms.sql.isEmpty ? "" : "AND " + terms.sql.joined(separator: " AND ")
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
                    (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
-                   i.hero, i.edition, i.publisher
+                   i.hero, i.edition, i.publisher,
+                   i.read_at IS NOT NULL
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
@@ -376,6 +382,7 @@ public final class Store: @unchecked Sendable {
                 series: row.string(4),
                 hero: row.string(9), edition: row.string(10),
                 publisher: row.string(11),
+                isRead: (row.int(12) ?? 0) == 1,
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
@@ -404,6 +411,15 @@ public final class Store: @unchecked Sendable {
             if let edition = row.string(0) { out.append(edition) }
         }
         return out
+    }
+
+    /// Marks an issue read or unread.
+    ///
+    /// A timestamp rather than a flag: it costs nothing now and leaves "what
+    /// did I read recently" answerable later.
+    public func setRead(_ read: Bool, issueID: Int) throws {
+        try db.run("UPDATE issue SET read_at = ? WHERE id = ?",
+                   [read ? .double(Date().timeIntervalSince1970) : .null, .int(Int64(issueID))])
     }
 
     /// Every hero present in the library, for the filter menu.
@@ -440,9 +456,12 @@ public final class Store: @unchecked Sendable {
     /// Series are OR'd against each other and AND'd with Downloaded: picking
     /// two series means "either of these", not "both at once", which nothing
     /// could satisfy.
+    /// Which read states to show. Both switches on — or both off — means all.
+    public enum ReadFilter: Sendable { case any, read, unread }
+
     static func filterClauses(downloadedOnly: Bool, editions: Set<String>,
-                              publishers: Set<String>,
-                              heroes: Set<String>) -> (sql: [String], args: [SQLValue]) {
+                              publishers: Set<String>, heroes: Set<String>,
+                              readState: ReadFilter) -> (sql: [String], args: [SQLValue]) {
         var sql: [String] = []
         var args: [SQLValue] = []
         if downloadedOnly {
@@ -464,24 +483,32 @@ public final class Store: @unchecked Sendable {
             sql.append("i.hero IN (\(slots))")
             args += heroes.sorted().map { SQLValue.text($0) }
         }
+        switch readState {
+        case .any:    break
+        case .read:   sql.append("i.read_at IS NOT NULL")
+        case .unread: sql.append("i.read_at IS NULL")
+        }
         return (sql, args)
     }
 
     public func recent(limit: Int? = 100, downloadedOnly: Bool = false,
                        editions: Set<String> = [],
                        publishers: Set<String> = [],
-                       heroes: Set<String> = []) throws -> [StoredIssue] {
+                       heroes: Set<String> = [],
+                       readState: ReadFilter = .any) throws -> [StoredIssue] {
         var out: [StoredIssue] = []
         // Applied in SQL rather than to the results, so a filter cannot be
         // defeated by a cap the caller happens to pass.
         let terms = Self.filterClauses(downloadedOnly: downloadedOnly, editions: editions,
-                                       publishers: publishers, heroes: heroes)
+                                       publishers: publishers, heroes: heroes,
+                                       readState: readState)
         let filter = terms.sql.isEmpty ? "" : "WHERE " + terms.sql.joined(separator: " AND ")
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
                    (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
-                   i.hero, i.edition, i.publisher
+                   i.hero, i.edition, i.publisher,
+                   i.read_at IS NOT NULL
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
             """, terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
@@ -489,6 +516,7 @@ public final class Store: @unchecked Sendable {
                 title: row.string(3), series: row.string(4),
                 hero: row.string(9), edition: row.string(10),
                 publisher: row.string(11),
+                isRead: (row.int(12) ?? 0) == 1,
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),

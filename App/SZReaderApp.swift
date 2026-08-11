@@ -84,6 +84,19 @@ final class AppModel: ObservableObject {
         set { publisherFilterRaw = newValue.sorted().joined(separator: "\n") }
     }
 
+    /// Read-state switches. Both on, or both off, means show everything —
+    /// asking for read *and* unread is the same as not asking.
+    @AppStorage("showRead") var showRead = false { didSet { search(query) } }
+    @AppStorage("showUnread") var showUnread = false { didSet { search(query) } }
+
+    var readFilter: Store.ReadFilter {
+        switch (showRead, showUnread) {
+        case (true, false): return .read
+        case (false, true): return .unread
+        default:            return .any
+        }
+    }
+
     /// Heroes the reader has narrowed to. Empty means every hero.
     @AppStorage("heroFilter") private var heroFilterRaw = "" {
         didSet { search(query) }
@@ -192,11 +205,13 @@ final class AppModel: ObservableObject {
                 ? try store.recent(limit: nil, downloadedOnly: downloadedOnly,
                                    editions: selectedSeries,
                                    publishers: selectedPublishers,
-                                   heroes: selectedHeroes)
+                                   heroes: selectedHeroes,
+                                   readState: readFilter)
                 : try store.search(text, limit: nil, downloadedOnly: downloadedOnly,
                                    editions: selectedSeries,
                                    publishers: selectedPublishers,
-                                   heroes: selectedHeroes)
+                                   heroes: selectedHeroes,
+                                   readState: readFilter)
             // Applied on top of the query, so the default costs nothing and
             // leaves insertion order when browsing and relevance when
             // searching — each view's own answer to what it was asked.
@@ -333,6 +348,26 @@ final class AppModel: ObservableObject {
         selectedPublishers = chosen
     }
 
+    /// Marks by id, for the reader — which knows what it has open but not the
+    /// row it came from.
+    func markRead(issueID: Int) {
+        guard let store else { return }
+        try? store.setRead(true, issueID: issueID)
+        refresh(note: "marked as read")
+    }
+
+    /// Marks an issue read or unread and refreshes the shelf, so a row that no
+    /// longer matches an active read filter leaves at once.
+    func setRead(_ read: Bool, for issue: StoredIssue) {
+        guard let store else { return }
+        do {
+            try store.setRead(read, issueID: issue.id)
+            refresh(note: read ? "marked as read" : "marked as unread")
+        } catch {
+            status = "could not mark: \(Library.reason(error))"
+        }
+    }
+
     func toggleHero(_ hero: String) {
         var chosen = selectedHeroes
         if chosen.contains(hero) { chosen.remove(hero) } else { chosen.insert(hero) }
@@ -340,6 +375,8 @@ final class AppModel: ObservableObject {
     }
 
     func clearSeriesFilter() {
+        showRead = false
+        showUnread = false
         selectedHeroes = []
         selectedSeries = []
         selectedPublishers = []

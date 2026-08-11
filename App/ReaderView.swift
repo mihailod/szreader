@@ -11,6 +11,8 @@ import SZKit
 struct ReaderView: View {
     let document: ComicDocument
     let title: String
+    /// Called once when the last page is reached.
+    var onFinished: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
     @State private var index = 0
@@ -20,6 +22,9 @@ struct ReaderView: View {
     /// the user is not dragging it.
     @State private var scrubTarget: Double = 0
     @State private var scrubbing = false
+    /// Fired once per sitting: turning back a page and forward again is not
+    /// finishing it a second time.
+    @State private var finished = false
 
     var body: some View {
         ZStack {
@@ -39,7 +44,20 @@ struct ReaderView: View {
             if chromeVisible { chrome }
         }
         .statusBarHidden(!chromeVisible)
-        .onAppear { load(around: 0) }
+        .onAppear {
+            load(around: 0)
+            // A one-page comic is finished the moment it opens.
+            if document.pageCount <= 1 { markFinished() }
+        }
+        .onChange(of: index) { page in
+            if page >= document.pageCount - 1 { markFinished() }
+        }
+    }
+
+    private func markFinished() {
+        guard !finished else { return }
+        finished = true
+        onFinished()
     }
 
     private var chrome: some View {

@@ -1,3 +1,3 @@
 - remember where reading stopped
-- on long hold popup add "mark as read/unread" depending on the state and add filter "Unread" below "Downloaded"
+
 

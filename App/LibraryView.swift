@@ -47,7 +47,9 @@ struct LibraryView: View {
             }
             .alert(item: $pending) { action in confirmation(for: action) }
             .fullScreenCover(item: $model.reading) { open in
-                ReaderView(document: open.document, title: open.title)
+                ReaderView(document: open.document, title: open.title) {
+                    model.markRead(issueID: open.id)
+                }
             }
             // On its own view deliberately: SwiftUI honours only one `.alert`
             // per view, and the confirmation alert above already claims this
@@ -130,6 +132,13 @@ struct LibraryView: View {
             Menu {
                 Toggle(isOn: $model.downloadedOnly) {
                     Label("Downloaded", systemImage: "arrow.down.circle")
+                }
+
+                Toggle(isOn: $model.showUnread) {
+                    Label("Unread", systemImage: "circle")
+                }
+                Toggle(isOn: $model.showRead) {
+                    Label("Read", systemImage: "checkmark.circle")
                 }
 
                 // Series are built from what has actually been imported, so
@@ -244,6 +253,13 @@ struct LibraryView: View {
             pending = .removeAllDownloads(model.downloadedCount)
         } label: { Label("Remove All Downloads", systemImage: "arrow.down.circle.dotted") }
             .disabled(model.downloadedCount == 0)
+
+        Button {
+            model.setRead(!issue.isRead, for: issue)
+        } label: {
+            Label(issue.isRead ? "Mark as Unread" : "Mark as Read",
+                  systemImage: issue.isRead ? "circle" : "checkmark.circle")
+        }
 
         Divider()
 
@@ -360,11 +376,10 @@ struct LibraryView: View {
                 // Unpacking a solid RAR takes a moment; without this the tap
                 // looks ignored.
                 ProgressView().padding(8)
-            } else if issue.isDownloaded {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.white, .green)
-                    .padding(6)
             }
+            // No "downloaded" tick: the cover being in colour already says it,
+            // and a second green check would compete with the read badge —
+            // two marks meaning different things and looking the same.
         }
         .contentShape(Rectangle())
     }
@@ -480,6 +495,25 @@ struct LibraryView: View {
                         .padding(.bottom, 6)
                 }
             }
+            // Sized against the cover rather than fixed, so it reads the same
+            // on a grid thumbnail and on a list row.
+            .overlay(alignment: .bottomTrailing) {
+                if issue.isRead {
+                    GeometryReader { geo in
+                        let side = min(geo.size.width, geo.size.height) * 0.25
+                        Image(systemName: "checkmark.circle.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: side, height: side)
+                            .foregroundStyle(.white, Color(red: 0.24, green: 0.63, blue: 0.29))
+                            // Sits over the corner, so it reads as a stamp on
+                            // the cover rather than part of the artwork.
+                            .position(x: geo.size.width - side * 0.45,
+                                      y: geo.size.height - side * 0.45)
+                            .shadow(radius: 2)
+                    }
+                }
+            }
     }
 
     /// Anything narrowing the shelf, so the icon reports the whole filter and
@@ -487,6 +521,7 @@ struct LibraryView: View {
     private var filtering: Bool {
         model.downloadedOnly || !model.selectedSeries.isEmpty
             || !model.selectedPublishers.isEmpty || !model.selectedHeroes.isEmpty
+            || model.readFilter != .any
     }
 
     /// Three distinct empty cases, because "nothing here" for three different
