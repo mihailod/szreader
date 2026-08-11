@@ -32,8 +32,16 @@ enum Labels {
     // stops at the first hyphen and matches nothing.
     static let nameNum = Rx(
         "^([\(letter)][\(letter)]{1,14}(?:(?:\\s+|\\s*[-–]\\s*)[\(letter)]{2,14}){0,3})"
-        + "\\s+(\\d{1,4})\\s*[-–_.:]?\\s*(.*)$")
+        // The number may be introduced by a dash as well as a space: Korto
+        // Malteze writes "Corto Maltese - 01 - Mladost", and a separator that
+        // allows only whitespace stops at the dash and matches nothing.
+        + "(?:\\s+|\\s*[-–]\\s*)(\\d{1,4})\\s*[-–_.:]?\\s*(.*)$")
     static let trailingParens = Rx(#"(?:\s*[\(\[][^)\]]*[\)\]])+\s*$"#)
+
+    /// A trailing archive extension or a size, which describe the file rather
+    /// than the comic: "… 24Mb", "… 77.43 MB", "….cbr".
+    static let fileNoise = Rx(
+        #"(?i)(?:\s*\.(?:cbr|cbz|rar|zip|pdf))?(?:\s*[\(\[]?\s*\d+(?:[.,]\d+)?\s*[MG]B?\s*[\)\]]?)?\s*$"#)
 
     /// Lines that look like labels but are forum chrome. Without this,
     /// "Posted 06 March 2011 - 09:26 PM" becomes a label and claims every
@@ -52,8 +60,15 @@ enum Labels {
               let head = g[1].split(separator: " ").first,
               !furniture.contains(head.lowercased())
         else { return nil }
+        // Size and filename first, then trailing parentheses.
+        //
+        // Order matters: "Etiopljani (boja preklop by fantom).cbr" only has a
+        // trailing bracket once the extension is gone. Without this the same
+        // comic arrives twice — once plain, once with a size or filename stuck
+        // to it — and the two land as separate issues because the title is
+        // part of the natural key.
         let title = trailingParens
-            .replacing(g[3], with: "")
+            .replacing(fileNoise.replacing(g[3], with: ""), with: "")
             .trimmingCharacters(in: CharacterSet(charactersIn: " -–_.:"))
         return NameNum(number: g[2], title: title.isEmpty ? nil : title, name: g[1])
     }

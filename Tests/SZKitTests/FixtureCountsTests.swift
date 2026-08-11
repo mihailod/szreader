@@ -25,22 +25,26 @@ final class FixtureCountsTests: XCTestCase {
     /// Martin Mystere 1…78 — with no implausible numbers, so these are links
     /// the spike missed rather than new mis-parses.
     private let expected: [(String, Int, Int)] = [
-        ("Alan Ford",       70,  70),
-        ("Alef",            51,  50),
-        ("Asteriks",        20,  20),
-        ("Dzudas",          33,  33),
-        // Mostly locked (250 hidden blocks) — the like quota ran out. The six
-        // visible links still parse, so it stays in the corpus.
-        ("Kit Teler - LUNOV", 6,   6),
-        ("Kolorka -",      144, 144),
-        ("Kolorka Specijal", 34, 34),
-        ("Korto Malteze",   34,   0),
-        ("Martin Mystere",  84,  79),
-        ("Mister No",      268, 268),
-        ("Orka -",          62,  62),
-        ("Orka Specijal",   30,  30),
-        ("Zagor - LUNOV",   43,  43),
-        ("Zagor - ZLATNA", 125, 125),
+        ("Alan Ford",        70,   70),
+        ("Alef",             51,   50),
+        ("Asteriks",         20,   20),
+        ("Dzudas",           33,   33),
+        ("Kapetan Miki",     67,   67),
+        // Both Kit Teler pages and Martin Mystere were re-saved on 10 Aug 2026
+        // with more of their content unlocked, so these are larger than the
+        // spike measured. The fixtures changed, not the parser — each page was
+        // checked for implausible numbers before these were moved.
+        ("Kit Teler - LUNOV", 82,   82),
+        ("Kit Teler - ZLATNA", 15,  15),
+        ("Kolorka -",        144,  144),
+        ("Kolorka Specijal",  34,   34),
+        ("Korto Malteze",     34,   34),
+        ("Martin Mystere",   114,  109),
+        ("Mister No",        268,  268),
+        ("Orka -",            62,   62),
+        ("Orka Specijal",     30,   30),
+        ("Zagor - LUNOV",     43,   43),
+        ("Zagor - ZLATNA",   125,  125),
     ]
 
     private func html(matching fragment: String) throws -> String? {
@@ -76,8 +80,8 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 1004)
-        XCTAssertEqual(attributed, 964)
+        XCTAssertEqual(total, 1192)
+        XCTAssertEqual(attributed, 1186)
     }
 
     /// Entity decoding is not optional: IPB writes `http&#58;//...`, and

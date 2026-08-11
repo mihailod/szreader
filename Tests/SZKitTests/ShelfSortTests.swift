@@ -7,7 +7,7 @@ final class ShelfSortTests: XCTestCase {
     private func issue(_ id: Int, edition: String? = nil, number: Int? = nil,
                        title: String? = nil, hero: String? = nil) -> StoredIssue {
         StoredIssue(id: id, code: "C\(id)", number: number, title: title, series: nil,
-                    hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, style: .labeledBlock,
+                    hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, downloadFailed: false, style: .labeledBlock,
                     mirrorCount: 1, coverURL: nil, isDownloaded: false)
     }
 
@@ -545,5 +545,127 @@ final class ReadingProgressTests: XCTestCase {
         try store.setRead(true, issueID: rows[1].id)
         XCTAssertEqual(try store.recent(limit: nil, states: [.reading, .read]).count, 2)
         XCTAssertTrue(try store.recent(limit: nil, states: [.unread]).isEmpty)
+    }
+}
+
+/// Remembering that a download failed.
+///
+/// Some links really are dead. A shelf that looks identical before and after
+/// trying one is a shelf you keep retrying from tomorrow.
+final class DownloadFailureMarkTests: XCTestCase {
+
+    private func populated() throws -> (Store, [StoredIssue]) {
+        let store = try Store()
+        try store.ingest(html: """
+            <div>001-Prvi</div><div>http://www.mediafire.com/?FAKE001</div>
+            <div>002-Drugi</div><div>http://www.mediafire.com/?FAKE002</div>
+            """)
+        return (store, try store.recent(limit: nil))
+    }
+
+    func testIssuesStartUnmarked() throws {
+        let (_, rows) = try populated()
+        XCTAssertTrue(rows.allSatisfy { !$0.downloadFailed })
+    }
+
+    func testFailureIsRemembered() throws {
+        let (store, rows) = try populated()
+        try store.setDownloadFailed(true, issueID: rows[0].id)
+
+        let marked = try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id })
+        XCTAssertTrue(marked.downloadFailed)
+        let other = try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[1].id })
+        XCTAssertFalse(other.downloadFailed, "the mark spread to another issue")
+    }
+
+    /// A success clears it, so the mark always describes the latest attempt.
+    func testSuccessClearsTheMark() throws {
+        let (store, rows) = try populated()
+        try store.setDownloadFailed(true, issueID: rows[0].id)
+        try store.setDownloadFailed(false, issueID: rows[0].id)
+        XCTAssertFalse(try XCTUnwrap(store.recent(limit: nil)
+            .first { $0.id == rows[0].id }).downloadFailed)
+    }
+
+    /// It survives a reopen — a dead link is still dead next launch.
+    func testMarkPersists() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("library.sqlite").path
+
+        let store = try Store(path: file)
+        try store.ingest(html:
+            "<div>001-Prvi</div><div>http://www.mediafire.com/?FAKE001</div>")
+        let id = try XCTUnwrap(try store.recent().first).id
+        try store.setDownloadFailed(true, issueID: id)
+
+        let reopened = try Store(path: file)
+        XCTAssertTrue(try XCTUnwrap(reopened.recent().first).downloadFailed)
+    }
+
+    /// The mark is about downloading, not reading: the two are independent.
+    func testFailureIsIndependentOfReadState() throws {
+        let (store, rows) = try populated()
+        try store.setDownloadFailed(true, issueID: rows[0].id)
+        try store.setLastPage(3, issueID: rows[0].id)
+
+        let issue = try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id })
+        XCTAssertTrue(issue.downloadFailed)
+        XCTAssertEqual(issue.readState, .reading)
+    }
+}
+
+/// Labels that separate the name from the number with a dash.
+final class DashedNameLabelTests: XCTestCase {
+
+    /// Korto Malteze writes "Corto Maltese - 01 - Mladost". A separator that
+    /// allows only whitespace stops at the dash, which left that topic with 34
+    /// links and no issues at all.
+    func testNameDashNumberDashTitle() {
+        let match = Labels.matchNameFirst("Corto Maltese - 01 - Mladost")
+        XCTAssertEqual(match?.number, "01")
+        XCTAssertEqual(match?.name, "Corto Maltese")
+        XCTAssertEqual(match?.title, "Mladost")
+    }
+
+    /// A size stuck to the end describes the file, not the comic. Left in, it
+    /// splits one issue into two rows, because the title is part of the key
+    /// that decides whether two entries are the same comic.
+    func testTrailingSizeIsNotPartOfTheTitle() {
+        XCTAssertEqual(Labels.matchNameFirst("Corto Maltese - 01 - Mladost 24Mb")?.title,
+                       "Mladost")
+        XCTAssertEqual(Labels.matchNameFirst("Corto Maltese - 02 - Balada 77.43Mb")?.title,
+                       "Balada")
+        XCTAssertEqual(Labels.matchNameFirst("Corto Maltese - 05 - Kelti [120 MB]")?.title,
+                       "Kelti")
+    }
+
+    /// Nor is a filename extension — and the bracket only becomes trailing
+    /// once the extension is gone.
+    func testTrailingExtensionIsRemoved() {
+        XCTAssertEqual(Labels.matchNameFirst(
+            "Corto Maltese - 06 - Etiopljani (boja preklop by fantom).cbr")?.title,
+            "Etiopljani")
+        XCTAssertEqual(Labels.matchNameFirst("Corto Maltese - 07 - U Sibiru.cbz")?.title,
+                       "U Sibiru")
+    }
+
+    /// A number in the title itself must survive — it is not a size.
+    func testNumbersInsideTitlesSurvive() {
+        XCTAssertEqual(Labels.matchNameFirst("Corto Maltese - 09 - Blago Samarkanda")?.title,
+                       "Blago Samarkanda")
+        XCTAssertEqual(Labels.matchNameFirst("Zagor 13 - Tajna 7 zlatnika")?.title,
+                       "Tajna 7 zlatnika")
+    }
+
+    /// Sub-volumes stay distinct: 3a and 3b are different comics.
+    func testSubVolumesRemainSeparate() {
+        let a = Labels.matchNameFirst("Corto Maltese - 03a - Karipska svita")
+        let b = Labels.matchNameFirst("Corto Maltese - 03b - Pod gusarskom zastavom")
+        XCTAssertEqual(a?.number, "03")
+        XCTAssertEqual(b?.number, "03")
+        XCTAssertNotEqual(a?.title, b?.title, "the two volumes would merge into one row")
     }
 }

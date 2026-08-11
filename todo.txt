@@ -1,0 +1,8 @@
+- landscape reading: auto enlarge image to fit horizontally and then page turns is swipe down/up not left/right. this is done to seamlessly read comics which are too small to read in portrait.
+
+- LMS ken parker has redirects to LMS
+- fibra ken parker 1st 32 are on the libelus page, needs a join
+
+- lms veliki blek pics messed up
+
+- add settings (/ help / about) screen

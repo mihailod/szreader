@@ -225,12 +225,23 @@ extension Catalog {
     /// The same trailing-number convention, on any host and with or without a
     /// separator: `TN_ZG_ZS_13.jpg`, `Dzudas_01.jpg`, `alef-SF01.jpg`.
     ///
+    /// A cache-busting suffix after the number is tolerated too — Photobucket
+    /// rewrites covers as `AS_PZAL_1_zps96t63e0n.jpg`, which is the number in
+    /// the middle rather than at the end.
+    ///
+    /// The digits must be introduced by a separator, or be at least two long
+    /// after a letter. Without that guard a random imgur id like
+    /// `wW7QGs8.jpg` reads as issue 8 — and because this tier runs before
+    /// positional matching, that false reading takes the slot from the cover
+    /// actually sitting beside issue 8.
+    ///
     /// StripZona's own scanlations are not on stripovi.com — their art is
     /// posted alongside the topic, e.g. `thumbs/strider/Dzudas/Dzudas_01.jpg`.
     /// The filename still names the issue, which beats inferring it from
     /// position, so this runs before the positional tier rather than after.
     private static let numberedImage =
-        Rx(#"(https?://[^"'\s]*?[A-Za-z][-_ ]?(\d{1,4})\.(?:jpe?g|png))"#, [.caseInsensitive])
+        Rx(#"(https?://[^"'\s]*?(?:[-_ ]|[A-Za-z](?=\d{2}))(\d{1,4})"#
+           + #"(?:_[A-Za-z0-9]{4,})?\.(?:jpe?g|png))"#, [.caseInsensitive])
 
     /// Issue number → cover URL, for the covers referenced by one page.
     ///
@@ -300,45 +311,73 @@ extension Catalog {
 
     /// Tier 2: match images to issues by position.
     ///
-    /// Deliberately direction-agnostic. Posts put the art above the title as
-    /// often as below it, and both readings are natural, so an image is taken
-    /// by the nearest title on either side rather than by an assumed layout.
-    /// A window keeps that from reaching across the whole post: an image with
-    /// no title near it belongs to no issue.
+    /// Which side the art sits on is decided once for the whole page rather
+    /// than per image. Posts put the cover above the title as often as below,
+    /// and guessing per image goes wrong on a topic that opens with an index:
+    /// the last index entry sits there waiting, claims the first real cover,
+    /// and every issue after it is off by one — wrong covers throughout, which
+    /// is worse than none.
     static func positionalCovers(in html: String) -> [Int: String] {
-        var out: [Int: String] = [:]
-        var unclaimed: String?          // image seen before its title
-        var awaiting: Int?              // title still without an image
-        var distance = 0
-        let window = 4
+        let events = pageEvents(in: html)
+        guard !events.isEmpty else { return [:] }
 
-        for line in HTMLText.plainLines(html, keepingImages: true) {
-            if let url = HTMLText.markedImage(line) {
-                guard isPlausibleCover(url) else { continue }
-                if let number = awaiting, distance <= window, out[number] == nil {
-                    out[number] = https(url)    // art below its title
-                    awaiting = nil
-                } else {
-                    unclaimed = url
-                    distance = 0
-                }
-            } else if let number = label(in: line) {
-                if out[number] == nil, distance <= window, let url = unclaimed {
-                    out[number] = https(url)    // art above its title
-                }
-                unclaimed = nil
-                awaiting = number
-                distance = 0
-            } else {
-                distance += 1
-            }
+        var out: [Int: String] = [:]
+        let imageFirst = leans(toImageFirst: events)
+        for (index, event) in events.enumerated() {
+            guard case .label(let number) = event.kind, out[number] == nil else { continue }
+            let neighbour = imageFirst ? index - 1 : index + 1
+            guard events.indices.contains(neighbour),
+                  case .image(let url) = events[neighbour].kind else { continue }
+            // An image with no title near it belongs to no issue.
+            guard abs(events[neighbour].line - event.line) <= window else { continue }
+            out[number] = https(url)
         }
         return out
+    }
+
+    private static let window = 4
+
+    private enum PageEvent { case image(String), label(Int) }
+    private struct Positioned { let kind: PageEvent; let line: Int }
+
+    /// Images and labels in document order, with the line each sits on so the
+    /// distance between them can be judged.
+    private static func pageEvents(in html: String) -> [Positioned] {
+        var events: [Positioned] = []
+        for (number, line) in HTMLText.plainLines(html, keepingImages: true).enumerated() {
+            if let url = HTMLText.markedImage(line) {
+                guard isPlausibleCover(url) else { continue }
+                events.append(Positioned(kind: .image(url), line: number))
+            } else if let issue = label(in: line) {
+                events.append(Positioned(kind: .label(issue), line: number))
+            }
+        }
+        return events
+    }
+
+    /// Whether this page puts the cover before its title, by counting which
+    /// way round adjacent pairs actually run.
+    private static func leans(toImageFirst events: [Positioned]) -> Bool {
+        var before = 0, after = 0
+        for (index, event) in events.enumerated() where index + 1 < events.count {
+            let next = events[index + 1]
+            guard next.line - event.line <= window else { continue }
+            switch (event.kind, next.kind) {
+            case (.image, .label): before += 1
+            case (.label, .image): after += 1
+            default: break
+            }
+        }
+        return before >= after
     }
 
     private static func label(in line: String) -> Int? {
         if let g = Labels.num.firstGroups(line), let n = Int(g[1]) { return n }
         if let g = Labels.code.firstGroups(line), let n = Int(g[2]) { return n }
+        // Name-first labels count too. Without this a topic written as
+        // "Corto Maltese - 01 - Mladost" has no labels as far as cover
+        // matching is concerned, so no image can ever be attached to one.
+        if let match = Labels.matchNameFirst(line), let n = Int(match.number) { return n }
         return nil
     }
 

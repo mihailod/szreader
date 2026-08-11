@@ -532,6 +532,8 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
+                // A success clears any earlier failure mark.
+                try? self.store?.setDownloadFailed(false, issueID: issueID)
                 let mb = Double(outcome.bytes) / 1_048_576
                 // refresh() re-runs the search, so the row rebuilds with
                 // isDownloaded true and the cover turns colour at once.
@@ -541,6 +543,11 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
+                // Marked on the shelf, not just in an alert that is gone the
+                // moment it is dismissed: some of these links really are dead,
+                // and without a mark you retry them for ever.
+                try? self.store?.setDownloadFailed(true, issueID: issueID)
+                self.search(self.query)
                 self.status = "download failed"
                 // Summarised, not dumped: interpolating the raw error filled
                 // the alert with NSError userInfo and buried the one sentence

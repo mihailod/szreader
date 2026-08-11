@@ -247,7 +247,7 @@ final class ShelfLabelTests: XCTestCase {
 
     private func issue(hero: String?, edition: String?, number: Int?) -> StoredIssue {
         StoredIssue(id: 1, code: "MN_LMS_511", number: number, title: "Dijamantska klopka",
-                    series: nil, hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, style: .labeledBlock,
+                    series: nil, hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, downloadFailed: false, style: .labeledBlock,
                     mirrorCount: 2, coverURL: nil, isDownloaded: false)
     }
 
@@ -380,7 +380,7 @@ final class ReaderTitleTests: XCTestCase {
     private func issue(edition: String?, hero: String?, title: String?,
                        number: Int? = 511, code: String? = "MN_LMS_511") -> StoredIssue {
         StoredIssue(id: 1, code: code, number: number, title: title, series: nil,
-                    hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, style: .labeledBlock,
+                    hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, downloadFailed: false, style: .labeledBlock,
                     mirrorCount: 2, coverURL: nil, isDownloaded: true)
     }
 
@@ -445,7 +445,7 @@ final class EditionCodeTests: XCTestCase {
     /// The alias must reach the shelf, not just the parser.
     func testStoredIssueUsesTheAlias() {
         let issue = StoredIssue(id: 1, code: "JD_01", number: 1, title: "Takav je bio Alan Skot",
-                                series: nil, hero: "Dzudas", edition: "STRIPZONA SCANLATION", publisher: nil, isRead: false, lastPage: nil,
+                                series: nil, hero: "Dzudas", edition: "STRIPZONA SCANLATION", publisher: nil, isRead: false, lastPage: nil, downloadFailed: false,
                                 style: .labeledBlock, mirrorCount: 2, coverURL: nil,
                                 isDownloaded: false)
         XCTAssertEqual(issue.editionCode, "SZScanlation")

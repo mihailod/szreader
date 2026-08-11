@@ -120,9 +120,105 @@ final class NumberedCoverTests: XCTestCase {
             #"<img src="https://www.stripzona.com/port/uploads/av-68.jpg">"#).isEmpty)
     }
 
+    /// Photobucket rewrites a cover as "AS_PZAL_1_zps96t63e0n.jpg" — the
+    /// number in the middle, followed by a cache-busting suffix. Requiring the
+    /// digits to sit immediately before the extension missed every one, which
+    /// is why that topic had 20 issues and 4 covers.
+    func testCacheBusterAfterTheNumberIsTolerated() {
+        let covers = Catalog.covers(in: """
+            <img src="https://i.photobucket.com/albums/a602/x/asteriks/AS_PZAL_1_zps96t63e0n.jpg">
+            <img src="https://i.photobucket.com/albums/a602/x/asteriks/AS_PZAL_12_zpszlgdlwbu.jpg">
+            """)
+        XCTAssertEqual(covers[1]?.hasSuffix("AS_PZAL_1_zps96t63e0n.jpg"), true)
+        XCTAssertEqual(covers[12]?.hasSuffix("AS_PZAL_12_zpszlgdlwbu.jpg"), true)
+    }
+
+    /// The suffix must not swallow the number: a digits-only run after the
+    /// separator is still the issue number, not a cache key.
+    func testNumberIsTakenFromBeforeTheSuffix() {
+        let covers = Catalog.covers(in:
+            #"<img src="https://example.com/x/AS_PZAL_7_zpsfbexslad.jpg">"#)
+        XCTAssertEqual(covers.keys.sorted(), [7])
+    }
+
     func testUnderscoreStyleStillWorks() {
         let covers = Catalog.covers(in:
             #"<img src="http://www.stripovi.com/naslovnice/Zagor/TN/TN_ZG_ZS_13.jpg">"#)
         XCTAssertEqual(covers[13], "https://www.stripovi.com/naslovnice/Zagor/TN/TN_ZG_ZS_13.jpg")
+    }
+}
+
+/// Cover matching by position, for pages whose images carry no number.
+final class PositionalCoverTests: XCTestCase {
+
+    /// Korto Malteze hosts its covers on imgur under random ids, so no
+    /// filename rule can work — position is the only evidence there is.
+    func testRandomIdIsNotReadAsAnIssueNumber() {
+        // "wW7QGs8.jpg" ends in s8, which a looser rule read as issue 8 — and
+        // that false reading took the slot from the cover actually beside it.
+        XCTAssertTrue(Catalog.covers(in:
+            #"<img src="https://imgur.com/wW7QGs8.jpg">"#).isEmpty)
+        XCTAssertTrue(Catalog.covers(in:
+            #"<img src="https://imgur.com/yUH6Hce.jpg">"#).isEmpty)
+        XCTAssertTrue(Catalog.covers(in:
+            #"<img src="https://imgur.com/1RAEajM.jpg">"#).isEmpty)
+    }
+
+    /// The genuine conventions still read, so tightening did not overshoot.
+    func testRealNumberedNamesStillRead() {
+        XCTAssertEqual(Catalog.covers(in:
+            #"<img src="https://x/alef-SF01.jpg">"#)[1], "https://x/alef-SF01.jpg")
+        XCTAssertEqual(Catalog.covers(in:
+            #"<img src="https://x/Dzudas_07.jpg">"#)[7], "https://x/Dzudas_07.jpg")
+        XCTAssertEqual(Catalog.covers(in:
+            #"<img src="https://x/AS_PZAL_3_zpsabcd1234.jpg">"#)[3],
+            "https://x/AS_PZAL_3_zpsabcd1234.jpg")
+    }
+
+    /// A topic that opens with an index of every issue, then lists the entries
+    /// with the cover above each title.
+    ///
+    /// Deciding direction per image goes wrong here: the last index entry sits
+    /// waiting, claims the first real cover, and everything after it is off by
+    /// one — wrong covers throughout, which is worse than none.
+    func testIndexBlockDoesNotShiftTheCovers() {
+        let html = """
+            <div>Corto Maltese - 01 - Mladost</div>
+            <div>Corto Maltese - 02 - Balada</div>
+            <div>Corto Maltese - 03 - Karipska</div>
+            <div><img src="https://imgur.com/aaaaaaa.jpg"></div>
+            <div>Corto Maltese - 01 - Mladost</div>
+            <div><img src="https://imgur.com/bbbbbbb.jpg"></div>
+            <div>Corto Maltese - 02 - Balada</div>
+            <div><img src="https://imgur.com/ccccccc.jpg"></div>
+            <div>Corto Maltese - 03 - Karipska</div>
+            """
+        let covers = Catalog.covers(in: html)
+        XCTAssertEqual(covers[1], "https://imgur.com/aaaaaaa.jpg")
+        XCTAssertEqual(covers[2], "https://imgur.com/bbbbbbb.jpg")
+        XCTAssertEqual(covers[3], "https://imgur.com/ccccccc.jpg")
+    }
+
+    /// The other convention — cover below its title — must still work.
+    func testCoverBelowTitleStillWorks() {
+        let html = """
+            <div>Corto Maltese - 01 - Mladost</div>
+            <div><img src="https://imgur.com/aaaaaaa.jpg"></div>
+            <div>Corto Maltese - 02 - Balada</div>
+            <div><img src="https://imgur.com/bbbbbbb.jpg"></div>
+            """
+        let covers = Catalog.covers(in: html)
+        XCTAssertEqual(covers[1], "https://imgur.com/aaaaaaa.jpg")
+        XCTAssertEqual(covers[2], "https://imgur.com/bbbbbbb.jpg")
+    }
+
+    /// Name-first labels have to count as labels here too, or a topic written
+    /// that way has nothing for an image to attach to.
+    func testNameFirstLabelsAnchorCovers() {
+        let covers = Catalog.covers(in: """
+            <div><img src="https://imgur.com/zzzzzzz.jpg"></div>
+            <div>Corto Maltese - 09 - Blago Samarkanda</div>
+            """)
+        XCTAssertEqual(covers[9], "https://imgur.com/zzzzzzz.jpg")
     }
 }

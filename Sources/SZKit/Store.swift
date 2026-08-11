@@ -23,6 +23,10 @@ public struct StoredIssue: Equatable, Sendable {
     /// Furthest page reached, zero-based. Nil until the reader moves off the
     /// cover.
     public let lastPage: Int?
+    /// Whether the last download attempt failed. Some links really are dead,
+    /// and a shelf that looks identical before and after trying is a shelf you
+    /// try again from tomorrow.
+    public let downloadFailed: Bool
 
     /// Where this issue stands. Deliberately exclusive: an issue is exactly
     /// one of these, so the three filters partition the library rather than
@@ -169,6 +173,7 @@ public final class Store: @unchecked Sendable {
         try? db.execute("ALTER TABLE issue ADD COLUMN publisher TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN read_at REAL")
         try? db.execute("ALTER TABLE issue ADD COLUMN last_page INTEGER")
+        try? db.execute("ALTER TABLE issue ADD COLUMN download_failed_at REAL")
 
         // Heal libraries damaged by the identity bug: naming an issue used to
         // rewrite `title_folded`, which is part of the natural key, so the next
@@ -385,7 +390,8 @@ public final class Store: @unchecked Sendable {
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
                    i.hero, i.edition, i.publisher,
                    i.read_at IS NOT NULL,
-                   i.last_page
+                   i.last_page,
+                   i.download_failed_at IS NOT NULL
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
@@ -404,6 +410,7 @@ public final class Store: @unchecked Sendable {
                 publisher: row.string(11),
                 isRead: (row.int(12) ?? 0) == 1,
                 lastPage: row.int(13),
+                downloadFailed: (row.int(14) ?? 0) == 1,
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
@@ -432,6 +439,16 @@ public final class Store: @unchecked Sendable {
             if let edition = row.string(0) { out.append(edition) }
         }
         return out
+    }
+
+    /// Records whether the last download attempt failed.
+    ///
+    /// Cleared by a success, so the mark always describes the most recent
+    /// attempt rather than accumulating history.
+    public func setDownloadFailed(_ failed: Bool, issueID: Int) throws {
+        try db.run("UPDATE issue SET download_failed_at = ? WHERE id = ?",
+                   [failed ? .double(Date().timeIntervalSince1970) : .null,
+                    .int(Int64(issueID))])
     }
 
     /// Marks an issue read or unread.
@@ -552,7 +569,8 @@ public final class Store: @unchecked Sendable {
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
                    i.hero, i.edition, i.publisher,
                    i.read_at IS NOT NULL,
-                   i.last_page
+                   i.last_page,
+                   i.download_failed_at IS NOT NULL
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
             """, terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
@@ -562,6 +580,7 @@ public final class Store: @unchecked Sendable {
                 publisher: row.string(11),
                 isRead: (row.int(12) ?? 0) == 1,
                 lastPage: row.int(13),
+                downloadFailed: (row.int(14) ?? 0) == 1,
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),

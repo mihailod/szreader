@@ -5,29 +5,33 @@ enum LibraryLayout: String {
     case list, grid
 }
 
+/// A destructive action awaiting confirmation.
+///
+/// At file scope because the detail sheet raises these too, and a
+/// confirmation that only exists on the shelf would mean the same action
+/// asking in one place and not the other.
+enum PendingAction: Identifiable {
+    case deleteDownload(StoredIssue)
+    case remove(StoredIssue)
+    case removeAllDownloads(Int)
+    case deleteAll(Int)
+
+    var id: String {
+        switch self {
+        case .deleteDownload(let i): return "dl-\(i.id)"
+        case .remove(let i): return "rm-\(i.id)"
+        case .removeAllDownloads: return "all-downloads"
+        case .deleteAll: return "all"
+        }
+    }
+}
+
 struct LibraryView: View {
     @ObservedObject var model: AppModel
     @State private var selected: StoredIssue?
     @State private var showingImport = false
     @AppStorage("libraryLayout") private var layoutRaw = LibraryLayout.grid.rawValue
     @State private var pending: PendingAction?
-
-    /// A destructive action awaiting confirmation.
-    private enum PendingAction: Identifiable {
-        case deleteDownload(StoredIssue)
-        case remove(StoredIssue)
-        case removeAllDownloads(Int)
-        case deleteAll(Int)
-
-        var id: String {
-            switch self {
-            case .deleteDownload(let i): return "dl-\(i.id)"
-            case .remove(let i): return "rm-\(i.id)"
-            case .removeAllDownloads: return "all-downloads"
-            case .deleteAll: return "all"
-            }
-        }
-    }
 
     private var layout: LibraryLayout { LibraryLayout(rawValue: layoutRaw) ?? .grid }
 
@@ -43,7 +47,8 @@ struct LibraryView: View {
             // nothing, and its search field slid the toolbar away when focused.
             .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $selected) { issue in
-                IssueDetail(issue: issue, mirrors: model.mirrors(for: issue))
+                IssueDetail(model: model, issue: issue,
+                            mirrors: model.mirrors(for: issue), pending: $pending)
             }
             .alert(item: $pending) { action in confirmation(for: action) }
             .fullScreenCover(item: $model.reading) { open in
@@ -490,13 +495,37 @@ struct LibraryView: View {
     private static let readGreen = Color(red: 0.24, green: 0.63, blue: 0.29)
     private static let readingYellow = Color(red: 0.95, green: 0.75, blue: 0.10)
 
-    /// A tick for finished, an ellipsis for part-way.
+    private static let failedRed = Color(red: 0.90, green: 0.16, blue: 0.16)
+
+    private func badged(_ issue: StoredIssue) -> Bool {
+        issue.downloadFailed || issue.readState != .unread
+    }
+
+    /// A cross for a failed download, a tick for finished, an ellipsis for
+    /// part-way.
     ///
-    /// Colour alone was not enough: a tick says "done" whatever colour it is,
-    /// so a yellow one on a comic you are halfway through reads as a
-    /// contradiction. Three dots say "still going" on their own.
+    /// Each state gets its own shape as well as its own colour: a tick says
+    /// "done" whatever colour it is, so a yellow one on a comic you are
+    /// halfway through reads as a contradiction. Shape carries the meaning
+    /// and colour reinforces it.
+    ///
+    /// A failed download wins the corner. It is the only one of the three that
+    /// asks the reader to do something, and it is cleared the moment a
+    /// download succeeds.
     @ViewBuilder
-    private func badge(for state: ReadState) -> some View {
+    private func badge(for issue: StoredIssue) -> some View {
+        if issue.downloadFailed {
+            Image(systemName: "xmark.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(.white, Self.failedRed)
+        } else {
+            readBadge(for: issue.readState)
+        }
+    }
+
+    @ViewBuilder
+    private func readBadge(for state: ReadState) -> some View {
         switch state {
         case .read:
             Image(systemName: "checkmark.circle.fill")
@@ -543,10 +572,10 @@ struct LibraryView: View {
             // Sized against the cover rather than fixed, so it reads the same
             // on a grid thumbnail and on a list row.
             .overlay(alignment: .bottomTrailing) {
-                if issue.readState != .unread {
+                if badged(issue) {
                     GeometryReader { geo in
                         let side = min(geo.size.width, geo.size.height) * 0.25
-                        badge(for: issue.readState)
+                        badge(for: issue)
                             .frame(width: side, height: side)
                             // Sits over the corner, so it reads as a stamp on
                             // the cover rather than part of the artwork.
@@ -718,13 +747,51 @@ private struct CoverImage: View {
 }
 
 struct IssueDetail: View {
+    @ObservedObject var model: AppModel
     let issue: StoredIssue
     let mirrors: [MirrorLink]
+    @Binding var pending: PendingAction?
     @Environment(\.dismiss) private var dismiss
+
+    /// The row as it stands now, not as it was when the sheet opened.
+    ///
+    /// `sheet(item:)` hands over a snapshot and never revisits it, so a
+    /// download finishing while this is open would otherwise leave the button
+    /// offering to download a comic that is already on disk.
+    private var current: StoredIssue {
+        model.results.first { $0.id == issue.id } ?? issue
+    }
 
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    // The same one-button pair as the shelf row: a comic is
+                    // either here or not, so one control covers both.
+                    if model.downloading.contains(current.id) {
+                        HStack {
+                            ProgressView()
+                            Text(model.progress[current.id].map {
+                                String(format: "downloading… %.0f%%", $0 * 100)
+                            } ?? "downloading…")
+                            .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Button {
+                            if current.isDownloaded {
+                                pending = .deleteDownload(current)
+                            } else {
+                                model.download(current)
+                            }
+                        } label: {
+                            Label(current.isDownloaded ? "Remove Download" : "Download",
+                                  systemImage: current.isDownloaded
+                                  ? "trash" : "arrow.down.circle")
+                        }
+                        .tint(current.isDownloaded ? .red : .green)
+                    }
+                }
+
                 Section("Issue") {
                     LabeledContent("Title", value: issue.title ?? "—")
                     LabeledContent("Hero", value: issue.heroDisplay ?? "—")
@@ -740,10 +807,6 @@ struct IssueDetail: View {
                         }
                     }
                     LabeledContent("Number", value: issue.number.map(String.init) ?? "—")
-                    LabeledContent("Code", value: issue.code ?? "—")
-                    LabeledContent("Mirrors", value: "\(issue.mirrorCount)")
-                    LabeledContent("Parsed as", value: issue.style.rawValue)
-                    LabeledContent("Downloaded", value: issue.isDownloaded ? "yes" : "no")
                 }
                 Section("Mirrors") {
                     ForEach(Array(mirrors.enumerated()), id: \.offset) { index, mirror in
