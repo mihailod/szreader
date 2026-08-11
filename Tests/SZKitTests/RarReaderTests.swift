@@ -4,7 +4,7 @@ import XCTest
 // Fixtures from libarchive's BSD-licensed test suite: one RAR4 archive
 // (magic 52 61 72 21 1a 07 00) and one RAR5 (… 1a 07 01). The corpus spans
 // 2009-2026 uploads, so both format generations have to work.
-private let rar4Base64 = """
+let rarFixtureBase64 = """
     UmFyIRoHAM+QcwAADQAAAAAAAACEUnQgkDIAFAAAABQAAAADQqLIvrd22j4UMAgApIEAAHRlc3Qu\
     dHh0gAi3dto+t3baPnRlc3QgdGV4dCBkb2N1bWVudA0KnS90IJAyAAgAAAAIAAAAA3tEybbRTNg+\
     FDAIAP+hAAB0ZXN0bGlua8AI0UzYPlBf2j50ZXN0LnR4dM3gdCCQOgAUAAAAFAAAAANCosi+Y3fa\
@@ -44,7 +44,7 @@ final class RarReaderTests: XCTestCase {
     // MARK: - RAR4
 
     func testListsRar4EntriesWithoutUnpacking() throws {
-        let url = try write(rar4Base64, as: "v4.rar")
+        let url = try write(rarFixtureBase64, as: "v4.rar")
         let names = try RarReader.list(archiveAt: url)
         XCTAssertTrue(names.contains("test.txt"), "\(names)")
         XCTAssertTrue(names.contains { $0.hasSuffix("test.txt") && $0 != "test.txt" },
@@ -54,7 +54,7 @@ final class RarReaderTests: XCTestCase {
     }
 
     func testExtractsRar4Content() throws {
-        let url = try write(rar4Base64, as: "v4.rar")
+        let url = try write(rarFixtureBase64, as: "v4.rar")
         let reader = try RarReader(url: url, workDirectory: scratch.appendingPathComponent("out4"))
         let entries = try reader.entries()
         XCTAssertTrue(entries.contains("test.txt"), "\(entries)")
@@ -67,7 +67,7 @@ final class RarReaderTests: XCTestCase {
     /// Nested paths must survive extraction, since comics are often one
     /// directory deep inside the archive.
     func testPreservesNestedPaths() throws {
-        let url = try write(rar4Base64, as: "v4.rar")
+        let url = try write(rarFixtureBase64, as: "v4.rar")
         let reader = try RarReader(url: url, workDirectory: scratch.appendingPathComponent("nested"))
         let nested = try XCTUnwrap(try reader.entries().first { $0.contains("/") })
         XCTAssertTrue(nested.hasSuffix("test.txt"))
@@ -140,7 +140,7 @@ final class RarReaderTests: XCTestCase {
     /// empty frame and a spinner that never resolved; it now fails with a
     /// message naming what the archive does contain.
     func testComicDocumentOverRarWithoutPages() throws {
-        let url = try write(rar4Base64, as: "pages.cbr")
+        let url = try write(rarFixtureBase64, as: "pages.cbr")
         XCTAssertThrowsError(try ComicDocument(
             fileURL: url, workDirectory: scratch.appendingPathComponent("doc"))) { error in
             let message = "\(error)"
@@ -151,5 +151,71 @@ final class RarReaderTests: XCTestCase {
         let archive = try ArchiveOpener.open(
             url, workDirectory: scratch.appendingPathComponent("raw"))
         XCTAssertFalse(try archive.entries().isEmpty)
+    }
+}
+
+/// Unpacking is done once, not on every open.
+///
+/// `szunrar_extract_all` used to run each time a comic was opened — 90 MB
+/// re-extracted to read pages already sitting on disk, which was most of the
+/// delay between tapping a cover and seeing one.
+final class RarUnpackCacheTests: XCTestCase {
+
+    private var scratch: URL!
+
+    override func setUpWithError() throws {
+        scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+    }
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: scratch) }
+
+    private func archive() throws -> URL {
+        let url = scratch.appendingPathComponent("pages.cbr")
+        try XCTUnwrap(Data(base64Encoded: rarFixtureBase64, options: .ignoreUnknownCharacters))
+            .write(to: url)
+        return url
+    }
+
+    /// Deleting an extracted file and reopening proves it: if extraction ran
+    /// again the file would be back. Timing would only prove the machine was
+    /// busy.
+    func testSecondOpenDoesNotExtractAgain() throws {
+        let url = try archive()
+        let work = scratch.appendingPathComponent("work")
+
+        let first = try RarReader(url: url, workDirectory: work)
+        let entry = try XCTUnwrap(first.entries().first)
+        let victim = work.appendingPathComponent(entry)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: victim.path))
+        try FileManager.default.removeItem(at: victim)
+
+        _ = try RarReader(url: url, workDirectory: work)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: victim.path),
+                       "the archive was extracted a second time")
+    }
+
+    /// A directory left behind by an interrupted unpack has no marker, so it
+    /// must be extracted rather than trusted.
+    func testUnfinishedUnpackIsRedone() throws {
+        let url = try archive()
+        let work = scratch.appendingPathComponent("work")
+
+        let first = try RarReader(url: url, workDirectory: work)
+        let entry = try XCTUnwrap(first.entries().first)
+        try FileManager.default.removeItem(at: work.appendingPathComponent(entry))
+        // Drop the marker: this is what a half-finished extraction looks like.
+        try FileManager.default.removeItem(at: work.appendingPathComponent(".szunpacked"))
+
+        let second = try RarReader(url: url, workDirectory: work)
+        XCTAssertTrue(try second.entries().contains(entry),
+                      "an interrupted unpack was trusted")
+    }
+
+    /// The marker is bookkeeping, not a page.
+    func testMarkerIsNotListedAsAnEntry() throws {
+        let reader = try RarReader(url: try archive(),
+                                   workDirectory: scratch.appendingPathComponent("work"))
+        XCTAssertFalse(try reader.entries().contains { $0.contains(".szunpacked") })
     }
 }

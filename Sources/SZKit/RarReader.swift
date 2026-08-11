@@ -33,15 +33,29 @@ public struct RarReader: ArchiveReader {
         }
     }
 
+    /// Written once extraction has finished, so a directory left behind by an
+    /// interrupted unpack is not mistaken for a complete one.
+    private static let doneMarker = ".szunpacked"
+
     /// Unpacks `url` beneath `workDirectory` and indexes the result.
+    ///
+    /// Unpacking is skipped when the directory already holds a finished
+    /// extraction. It used to run on every open: re-unpacking 90 MB to read a
+    /// comic already sitting unpacked on disk is most of the delay between
+    /// tapping a cover and seeing a page.
     public init(url: URL, workDirectory: URL) throws {
-        try FileManager.default.createDirectory(at: workDirectory,
-                                                withIntermediateDirectories: true)
-        let code = szunrar_extract_all(url.path, workDirectory.path)
-        guard code == SZUNRAR_OK else { throw ArchiveError.rar(code) }
+        let fm = FileManager.default
+        try fm.createDirectory(at: workDirectory, withIntermediateDirectories: true)
+
+        let marker = workDirectory.appendingPathComponent(Self.doneMarker)
+        if !fm.fileExists(atPath: marker.path) {
+            let code = szunrar_extract_all(url.path, workDirectory.path)
+            guard code == SZUNRAR_OK else { throw ArchiveError.rar(code) }
+            fm.createFile(atPath: marker.path, contents: nil)
+        }
 
         self.root = workDirectory
-        self.names = Self.walk(workDirectory)
+        self.names = Self.walk(workDirectory).filter { $0 != Self.doneMarker }
 
         // unrar accepts a bare RAR signature with no headers as an "empty
         // archive" and reports success, so a truncated download would otherwise

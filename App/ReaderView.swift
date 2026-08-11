@@ -9,14 +9,20 @@ import SZKit
 /// a 2500x3500 scan is ~35 MB decoded, and a handful of those is enough to get
 /// the app killed on a base-model iPad.
 struct ReaderView: View {
-    let document: ComicDocument
+    /// Observed rather than handed a document.
+    ///
+    /// `fullScreenCover(item:)` snapshots its item when it presents and never
+    /// looks at it again, so a document that arrives after the reader is on
+    /// screen never reached it — the spinner ran for ever while the pages sat
+    /// ready in the model.
+    @ObservedObject var model: AppModel
+    let comicID: Int
     let title: String
     /// Where to open. Zero-based; the reader was left here last time.
-    var startPage: Int = 0
-    /// Called as the reader moves, so the place is kept.
-    var onPageChanged: (Int) -> Void = { _ in }
-    /// Called once when the last page is reached.
-    var onFinished: () -> Void = {}
+    let startPage: Int
+
+    /// Nil until unpacking finishes; the reader is on screen before then.
+    private var document: ComicDocument? { model.reading?.document }
 
     @Environment(\.dismiss) private var dismiss
     @State private var index = 0
@@ -30,12 +36,16 @@ struct ReaderView: View {
     /// finishing it a second time.
     @State private var finished = false
 
+    private var pageCount: Int { document?.pageCount ?? 0 }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
+            if document == nil { opening }
+
             TabView(selection: $index) {
-                ForEach(0..<max(document.pageCount, 1), id: \.self) { page in
+                ForEach(0..<max(pageCount, 1), id: \.self) { page in
                     PageView(image: cache[page])
                         .tag(page)
                         .onAppear { load(around: page) }
@@ -48,25 +58,42 @@ struct ReaderView: View {
             if chromeVisible { chrome }
         }
         .statusBarHidden(!chromeVisible)
-        .onAppear {
-            // Resume where reading stopped, clamped in case the archive has
-            // been re-downloaded with a different page count.
-            index = min(max(startPage, 0), max(document.pageCount - 1, 0))
-            scrubTarget = Double(index)
-            load(around: index)
-            // A one-page comic is finished the moment it opens.
-            if document.pageCount <= 1 { markFinished() }
+        // Driven by the document arriving rather than by onAppear: the reader
+        // is on screen first, and there is nothing to resume to until then.
+        .onChange(of: document == nil) { stillOpening in
+            if !stillOpening { begin() }
         }
+        .onAppear { if document != nil { begin() } }
         .onChange(of: index) { page in
-            onPageChanged(page)
-            if page >= document.pageCount - 1 { markFinished() }
+            guard pageCount > 0 else { return }
+            model.rememberPlace(issueID: comicID, page: page)
+            if page >= pageCount - 1 { markFinished() }
+        }
+    }
+
+    /// Settles on the resumed page and starts decoding around it.
+    private func begin() {
+        guard pageCount > 0 else { return }
+        // Clamped, in case the archive has been re-downloaded with a
+        // different page count since it was last read.
+        index = min(max(startPage, 0), pageCount - 1)
+        scrubTarget = Double(index)
+        load(around: index)
+        // A one-page comic is finished the moment it opens.
+        if pageCount <= 1 { markFinished() }
+    }
+
+    private var opening: some View {
+        VStack(spacing: 14) {
+            ProgressView().tint(.white).controlSize(.large)
+            Text("Opening…").font(.headline).foregroundStyle(.secondary)
         }
     }
 
     private func markFinished() {
         guard !finished else { return }
         finished = true
-        onFinished()
+        model.markRead(issueID: comicID)
     }
 
     private var chrome: some View {
@@ -78,7 +105,7 @@ struct ReaderView: View {
                 Spacer()
                 Text(title).font(.headline)
                 Spacer()
-                Text("\(index + 1) / \(document.pageCount)")
+                Text(pageCount > 0 ? "\(index + 1) / \(pageCount)" : "…")
                     .font(.subheadline.monospacedDigit())
             }
             .padding()
@@ -87,7 +114,7 @@ struct ReaderView: View {
             Spacer()
 
             // A single page is not worth a scrubber.
-            if document.pageCount > 1 { scrubber }
+            if pageCount > 1 { scrubber }
         }
         .foregroundStyle(.primary)
         .transition(.opacity)
@@ -106,7 +133,7 @@ struct ReaderView: View {
                 // first scrub meant the one number you want before deciding
                 // where to drag was the one number missing.
                 Group {
-                    Text("\(Int(scrubTarget) + 1) / \(document.pageCount)")
+                    Text("\(Int(scrubTarget) + 1) / \(pageCount)")
                         // Read at arm's length, mid-drag, with a thumb over
                         // the bar — the previous footnote size was too small
                         // to check without stopping.
@@ -129,7 +156,7 @@ struct ReaderView: View {
 
             Slider(
                 value: $scrubTarget,
-                in: 0...Double(max(document.pageCount - 1, 1)),
+                in: 0...Double(max(pageCount - 1, 1)),
                 step: 1,
                 onEditingChanged: { editing in
                     withAnimation(.easeOut(duration: 0.12)) { scrubbing = editing }
@@ -154,13 +181,14 @@ struct ReaderView: View {
 
     private func thumbX(width: CGFloat) -> CGFloat {
         let span = max(width - Self.thumbRadius * 2, 1)
-        let last = Double(max(document.pageCount - 1, 1))
+        let last = Double(max(pageCount - 1, 1))
         return Self.thumbRadius + span * CGFloat(scrubTarget / last)
     }
 
     /// Decode the current page plus a small window either side, so a back-flip
     /// is as smooth as a forward one.
     private func load(around page: Int) {
+        guard let document else { return }
         let wanted = [page] + document.prefetchWindow(around: page, radius: 2)
         let scale = UIScreen.main.scale
         let maxPixel = Int(max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * scale)

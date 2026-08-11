@@ -86,7 +86,12 @@ public final class ComicDocument {
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
             let unwrapped = work.appendingPathComponent(
                 "nested-\(depth)-" + (nested as NSString).lastPathComponent)
-            try current.data(for: nested).write(to: unwrapped, options: .atomic)
+            // Written once. This is a full copy of the inner archive — around
+            // 100 MB for a scanlation — and rewriting it on every open is time
+            // spent reproducing a file that is already there.
+            if !FileManager.default.fileExists(atPath: unwrapped.path) {
+                try current.data(for: nested).write(to: unwrapped, options: .atomic)
+            }
             current = try ArchiveOpener.open(
                 unwrapped, workDirectory: work.appendingPathComponent("nested-\(depth)-work"))
         }

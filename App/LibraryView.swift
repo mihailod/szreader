@@ -47,12 +47,8 @@ struct LibraryView: View {
             }
             .alert(item: $pending) { action in confirmation(for: action) }
             .fullScreenCover(item: $model.reading) { open in
-                ReaderView(document: open.document, title: open.title,
-                           startPage: open.startPage,
-                           onPageChanged: { page in
-                               model.rememberPlace(issueID: open.id, page: page)
-                           },
-                           onFinished: { model.markRead(issueID: open.id) })
+                ReaderView(model: model, comicID: open.id, title: open.title,
+                           startPage: open.startPage)
                     // The place is saved on every page turn but the shelf is
                     // deliberately not rebuilt for each one. Closing the reader
                     // is when it needs to catch up — otherwise the badge for a

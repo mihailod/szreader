@@ -1,2 +1,0 @@
-- optimize opening of a comic, it is laggy now, make it asynchronous -- only need the current (or 1st if 1st time) page to be shown asap, the rest can load in the background or in another thread because user won't flip immediatelly
-

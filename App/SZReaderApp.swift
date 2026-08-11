@@ -283,9 +283,14 @@ final class AppModel: ObservableObject {
     }
 
     /// A comic handed to the reader. Identifiable so it can drive a cover.
+    /// A comic handed to the reader.
+    ///
+    /// The document arrives after the reader is already on screen: opening one
+    /// means unpacking an archive, and making the shelf sit there for a second
+    /// with a spinner on a cover feels like a tap that did nothing.
     struct OpenComic: Identifiable {
         let id: Int
-        let document: ComicDocument
+        var document: ComicDocument?
         let title: String
         /// Where the reader stopped last time.
         let startPage: Int
@@ -317,24 +322,27 @@ final class AppModel: ObservableObject {
     /// Unpacking happens off the main thread: a solid RAR of 80 MB takes long
     /// enough that doing it inline freezes the shelf mid-tap.
     func read(_ issue: StoredIssue) {
-        guard let library, issue.isDownloaded, opening == nil else { return }
-        opening = issue.id
+        guard let library, issue.isDownloaded, reading == nil else { return }
         let name = issue.readerTitle
-        Task { [weak self] in
+        let resumeAt = (try? store?.lastPage(forIssue: issue.id)) ?? 0
+
+        // On screen straight away, holding nothing but a title and a place.
+        // The reader shows its own progress until the pages arrive.
+        reading = OpenComic(id: issue.id, document: nil, title: name, startPage: resumeAt)
+
+        Task { @MainActor [weak self] in
             do {
-                let document = try library.document(forIssue: issue.id)
-                let resumeAt = (try? self?.store?.lastPage(forIssue: issue.id)) ?? 0 ?? 0
-                await MainActor.run {
-                    self?.opening = nil
-                    self?.reading = OpenComic(id: issue.id, document: document, title: name,
-                                              startPage: resumeAt)
-                }
+                // Off the main actor: unpacking is the slow part, and the
+                // reader has to stay responsive while it runs.
+                let document = try await Task.detached(priority: .userInitiated) {
+                    try library.document(forIssue: issue.id)
+                }.value
+                guard let self, self.reading?.id == issue.id else { return }
+                self.reading?.document = document
             } catch {
-                await MainActor.run {
-                    self?.opening = nil
-                    self?.failure = "“\(name)” could not be opened.\n\n"
-                        + Library.reason(error)
-                }
+                guard let self else { return }
+                self.reading = nil
+                self.failure = "“\(name)” could not be opened.\n\n" + Library.reason(error)
             }
         }
     }
