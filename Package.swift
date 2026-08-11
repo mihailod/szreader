@@ -55,6 +55,32 @@ let unrarSources: [String] = [
         "unrar/volume.cpp",
 ]
 
+// The LZMA SDK's own 7z decoder set, as named by its Util/7z makefile. Public
+// domain (see lzma/LICENSE-lzma-sdk.txt). Decode only — nothing here writes an
+// archive.
+let sevenZipSources: [String] = [
+    "sz7z.c",
+        "lzma/7zAlloc.c",
+        "lzma/7zArcIn.c",
+        "lzma/7zBuf.c",
+        "lzma/7zBuf2.c",
+        "lzma/7zCrc.c",
+        "lzma/7zCrcOpt.c",
+        "lzma/7zDec.c",
+        "lzma/7zFile.c",
+        "lzma/7zStream.c",
+        "lzma/Bcj2.c",
+        "lzma/Bra.c",
+        "lzma/Bra86.c",
+        "lzma/BraIA64.c",
+        "lzma/CpuArch.c",
+        "lzma/Delta.c",
+        "lzma/Lzma2Dec.c",
+        "lzma/LzmaDec.c",
+        "lzma/Ppmd7.c",
+        "lzma/Ppmd7Dec.c",
+]
+
 let package = Package(
     name: "SZReader",
     platforms: [.macOS(.v13), .iOS(.v16)],
@@ -84,7 +110,17 @@ let package = Package(
         // suggested. The database race that surfaced as "the library could not
         // be written to" was a non-Sendable Store captured into a background
         // Task — exactly what this rejects at compile time.
-        .target(name: "SZKit", dependencies: ["CUnrar"],
+        // Vendored the same way as unrar, and for the same reason: a comic is
+        // whatever container the scanner used, and neither format is available
+        // on iOS.
+        .target(
+            name: "C7z",
+            path: "Sources/C7z",
+            sources: sevenZipSources,
+            publicHeadersPath: "include",
+            cSettings: [.headerSearchPath("lzma")]
+        ),
+        .target(name: "SZKit", dependencies: ["CUnrar", "C7z"],
                 swiftSettings: [.swiftLanguageMode(.v6)]),
         // Still v5: the concurrency tests deliberately share one Store across
         // threads to prove the locking works, which mode 6 cannot see is safe.

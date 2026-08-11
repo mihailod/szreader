@@ -1,3 +1,4 @@
+import C7z
 import Compression
 import CUnrar
 import Foundation
@@ -9,15 +10,18 @@ public enum ArchiveError: Error, CustomStringConvertible {
     case entryNotFound(String)
     /// A failure reported by the vendored unrar sources.
     case rar(Int32)
+    /// A failure reported by the vendored LZMA SDK.
+    case sevenZip(Int32)
 
     public var description: String {
         switch self {
-        case .notAnArchive: return "file is neither zip nor rar"
+        case .notAnArchive: return "file is not a zip, rar or 7z archive"
         case .corrupt(let m): return "corrupt archive: \(m)"
         case .unsupportedCompression(let m): return "unsupported zip compression method \(m)"
         case .entryNotFound(let n): return "no such entry: \(n)"
         case .rar(let code):
             return "rar: " + String(cString: szunrar_error_string(code))
+        case .sevenZip(let code): return "7z: SDK error \(code)"
         }
     }
 }
@@ -38,7 +42,7 @@ extension ArchiveReader {
 public enum ArchiveOpener {
     /// Opens whichever container the bytes actually are.
     ///
-    /// `workDirectory` is only used for RAR, which must be unpacked to disk.
+    /// `workDirectory` is used by RAR and 7z, both of which unpack to disk.
     /// It defaults to a sibling of the archive so callers that do not care
     /// still get sane behaviour.
     public static func open(_ url: URL, workDirectory: URL? = nil) throws -> ArchiveReader {
@@ -49,6 +53,10 @@ public enum ArchiveOpener {
             let work = workDirectory ?? url.deletingPathExtension()
                 .appendingPathExtension("unpacked")
             return try RarReader(url: url, workDirectory: work)
+        case .sevenZip:
+            let work = workDirectory ?? url.deletingPathExtension()
+                .appendingPathExtension("unpacked")
+            return try SevenZipReader(url: url, workDirectory: work)
         case .unknown:
             throw ArchiveError.notAnArchive
         }
