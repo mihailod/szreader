@@ -181,8 +181,16 @@ struct ReaderView: View {
 /// One page, pinch- and double-tap-zoomable.
 private struct PageView: View {
     let image: CGImage?
+
     @State private var zoom: CGFloat = 1
-    @State private var committed: CGFloat = 1
+    @State private var committedZoom: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var committedOffset: CGSize = .zero
+
+    private var imageSize: CGSize {
+        guard let image else { return .zero }
+        return CGSize(width: image.width, height: image.height)
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -192,23 +200,73 @@ private struct PageView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .scaleEffect(zoom)
+                        .offset(offset)
                         .frame(width: geo.size.width, height: geo.size.height)
-                        .gesture(
-                            MagnificationGesture()
-                                .onChanged { zoom = min(max(committed * $0, 1), 4) }
-                                .onEnded { _ in committed = zoom }
-                        )
-                        .onTapGesture(count: 2) {
-                            withAnimation(.spring(duration: 0.25)) {
-                                zoom = zoom > 1 ? 1 : 2.5
-                                committed = zoom
-                            }
-                        }
+                        // High priority, so the pan starts tracking the moment
+                        // the finger moves. As an ordinary gesture it lost the
+                        // arbitration with the paging TabView underneath and
+                        // only resolved on release — which is why the page sat
+                        // still and then jumped.
+                        //
+                        // Still only while zoomed in: at zoom 1 the drag must
+                        // reach the TabView, or a swipe would pan a page with
+                        // nowhere to go instead of turning it.
+                        .highPriorityGesture(pan(in: geo.size),
+                                             including: zoom > 1 ? .all : .subviews)
+                        .simultaneousGesture(magnify(in: geo.size))
+                        .onTapGesture(count: 2) { toggleZoom(in: geo.size) }
                 } else {
                     ProgressView().tint(.white)
                         .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
         }
+    }
+
+    private func magnify(in box: CGSize) -> some Gesture {
+        MagnificationGesture()
+            .onChanged { value in
+                zoom = min(max(committedZoom * value, 1), 4)
+                // Re-clamped as it shrinks, so zooming out walks the page back
+                // to centre rather than leaving it stranded off-screen.
+                offset = ZoomPan.clamp(committedOffset, image: imageSize, box: box, zoom: zoom)
+            }
+            .onEnded { _ in
+                committedZoom = zoom
+                committedOffset = offset
+                if zoom == 1 { resetPan() }
+            }
+    }
+
+    private func pan(in box: CGSize) -> some Gesture {
+        // Zero minimum distance: waiting for the default 10pt threshold before
+        // the first update is felt as the page lagging the finger.
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let moved = CGSize(width: committedOffset.width + value.translation.width,
+                                   height: committedOffset.height + value.translation.height)
+                offset = ZoomPan.clamp(moved, image: imageSize, box: box, zoom: zoom)
+            }
+            .onEnded { _ in committedOffset = offset }
+    }
+
+    private func toggleZoom(in box: CGSize) {
+        withAnimation(.spring(duration: 0.25)) {
+            if zoom > 1 {
+                zoom = 1
+                committedZoom = 1
+                resetPan()
+            } else {
+                zoom = 2.5
+                committedZoom = 2.5
+                offset = ZoomPan.clamp(offset, image: imageSize, box: box, zoom: zoom)
+                committedOffset = offset
+            }
+        }
+    }
+
+    private func resetPan() {
+        offset = .zero
+        committedOffset = .zero
     }
 }
