@@ -1,6 +1,11 @@
 import Foundation
 
 /// A library row as it comes back from search.
+/// Where an issue stands with the reader.
+public enum ReadState: String, Sendable, CaseIterable {
+    case unread, reading, read
+}
+
 public struct StoredIssue: Equatable, Sendable {
     public let id: Int
     public let code: String?
@@ -15,6 +20,19 @@ public struct StoredIssue: Equatable, Sendable {
     public let publisher: String?
     /// Whether the reader has marked it read.
     public let isRead: Bool
+    /// Furthest page reached, zero-based. Nil until the reader moves off the
+    /// cover.
+    public let lastPage: Int?
+
+    /// Where this issue stands. Deliberately exclusive: an issue is exactly
+    /// one of these, so the three filters partition the library rather than
+    /// overlapping.
+    public var readState: ReadState {
+        if isRead { return .read }
+        // The second page, not the first: opening a comic to look at the cover
+        // is not reading it.
+        return (lastPage ?? 0) >= 1 ? .reading : .unread
+    }
     public let style: LabelStyle
     public let mirrorCount: Int
     public let coverURL: String?
@@ -150,6 +168,7 @@ public final class Store: @unchecked Sendable {
         try? db.execute("ALTER TABLE issue ADD COLUMN edition TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN publisher TEXT")
         try? db.execute("ALTER TABLE issue ADD COLUMN read_at REAL")
+        try? db.execute("ALTER TABLE issue ADD COLUMN last_page INTEGER")
 
         // Heal libraries damaged by the identity bug: naming an issue used to
         // rewrite `title_folded`, which is part of the natural key, so the next
@@ -348,7 +367,7 @@ public final class Store: @unchecked Sendable {
                        editions: Set<String> = [],
                        publishers: Set<String> = [],
                        heroes: Set<String> = [],
-                       readState: ReadFilter = .any) throws -> [StoredIssue] {
+                       states: Set<ReadState> = []) throws -> [StoredIssue] {
         let tokens = Fold.fold(text).split(separator: " ").filter { !$0.isEmpty }
         guard !tokens.isEmpty else { return [] }
         // Folding leaves only letters, digits and spaces, so no FTS5
@@ -358,14 +377,15 @@ public final class Store: @unchecked Sendable {
         var out: [StoredIssue] = []
         let terms = Self.filterClauses(downloadedOnly: downloadedOnly, editions: editions,
                                        publishers: publishers, heroes: heroes,
-                                       readState: readState)
+                                       states: states)
         let filter = terms.sql.isEmpty ? "" : "AND " + terms.sql.joined(separator: " AND ")
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
                    (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
                    i.hero, i.edition, i.publisher,
-                   i.read_at IS NOT NULL
+                   i.read_at IS NOT NULL,
+                   i.last_page
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
@@ -383,6 +403,7 @@ public final class Store: @unchecked Sendable {
                 hero: row.string(9), edition: row.string(10),
                 publisher: row.string(11),
                 isRead: (row.int(12) ?? 0) == 1,
+                lastPage: row.int(13),
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
@@ -418,8 +439,26 @@ public final class Store: @unchecked Sendable {
     /// A timestamp rather than a flag: it costs nothing now and leaves "what
     /// did I read recently" answerable later.
     public func setRead(_ read: Bool, issueID: Int) throws {
-        try db.run("UPDATE issue SET read_at = ? WHERE id = ?",
+        // Marking read clears the position. Otherwise unmarking would drop the
+        // issue straight back into "Reading", and there would be no way out of
+        // that state at all.
+        try db.run("UPDATE issue SET read_at = ?, last_page = NULL WHERE id = ?",
                    [read ? .double(Date().timeIntervalSince1970) : .null, .int(Int64(issueID))])
+    }
+
+    /// Remembers how far the reader got, so the comic reopens where it left off.
+    ///
+    /// Only ever moves forward: flicking back to check something earlier is not
+    /// losing your place.
+    public func setLastPage(_ page: Int, issueID: Int) throws {
+        try db.run("""
+            UPDATE issue SET last_page = MAX(IFNULL(last_page, 0), ?) WHERE id = ?
+            """, [.int(Int64(page)), .int(Int64(issueID))])
+    }
+
+    public func lastPage(forIssue issueID: Int) throws -> Int {
+        (try? db.scalarInt("SELECT IFNULL(last_page, 0) FROM issue WHERE id = ?",
+                           [.int(Int64(issueID))])) ?? 0
     }
 
     /// Every hero present in the library, for the filter menu.
@@ -456,12 +495,9 @@ public final class Store: @unchecked Sendable {
     /// Series are OR'd against each other and AND'd with Downloaded: picking
     /// two series means "either of these", not "both at once", which nothing
     /// could satisfy.
-    /// Which read states to show. Both switches on — or both off — means all.
-    public enum ReadFilter: Sendable { case any, read, unread }
-
     static func filterClauses(downloadedOnly: Bool, editions: Set<String>,
                               publishers: Set<String>, heroes: Set<String>,
-                              readState: ReadFilter) -> (sql: [String], args: [SQLValue]) {
+                              states: Set<ReadState>) -> (sql: [String], args: [SQLValue]) {
         var sql: [String] = []
         var args: [SQLValue] = []
         if downloadedOnly {
@@ -483,10 +519,17 @@ public final class Store: @unchecked Sendable {
             sql.append("i.hero IN (\(slots))")
             args += heroes.sorted().map { SQLValue.text($0) }
         }
-        switch readState {
-        case .any:    break
-        case .read:   sql.append("i.read_at IS NOT NULL")
-        case .unread: sql.append("i.read_at IS NULL")
+        // Selecting all three is the same as selecting none: both mean the
+        // whole library, so neither adds a term.
+        if !states.isEmpty, states.count < ReadState.allCases.count {
+            let terms = states.sorted { $0.rawValue < $1.rawValue }.map { state -> String in
+                switch state {
+                case .read:    return "i.read_at IS NOT NULL"
+                case .reading: return "(i.read_at IS NULL AND IFNULL(i.last_page, 0) >= 1)"
+                case .unread:  return "(i.read_at IS NULL AND IFNULL(i.last_page, 0) < 1)"
+                }
+            }
+            sql.append("(" + terms.joined(separator: " OR ") + ")")
         }
         return (sql, args)
     }
@@ -495,20 +538,21 @@ public final class Store: @unchecked Sendable {
                        editions: Set<String> = [],
                        publishers: Set<String> = [],
                        heroes: Set<String> = [],
-                       readState: ReadFilter = .any) throws -> [StoredIssue] {
+                       states: Set<ReadState> = []) throws -> [StoredIssue] {
         var out: [StoredIssue] = []
         // Applied in SQL rather than to the results, so a filter cannot be
         // defeated by a cap the caller happens to pass.
         let terms = Self.filterClauses(downloadedOnly: downloadedOnly, editions: editions,
                                        publishers: publishers, heroes: heroes,
-                                       readState: readState)
+                                       states: states)
         let filter = terms.sql.isEmpty ? "" : "WHERE " + terms.sql.joined(separator: " AND ")
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
                    (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
                    i.hero, i.edition, i.publisher,
-                   i.read_at IS NOT NULL
+                   i.read_at IS NOT NULL,
+                   i.last_page
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
             """, terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
@@ -517,6 +561,7 @@ public final class Store: @unchecked Sendable {
                 hero: row.string(9), edition: row.string(10),
                 publisher: row.string(11),
                 isRead: (row.int(12) ?? 0) == 1,
+                lastPage: row.int(13),
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),

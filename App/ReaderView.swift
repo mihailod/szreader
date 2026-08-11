@@ -11,6 +11,10 @@ import SZKit
 struct ReaderView: View {
     let document: ComicDocument
     let title: String
+    /// Where to open. Zero-based; the reader was left here last time.
+    var startPage: Int = 0
+    /// Called as the reader moves, so the place is kept.
+    var onPageChanged: (Int) -> Void = { _ in }
     /// Called once when the last page is reached.
     var onFinished: () -> Void = {}
 
@@ -45,11 +49,16 @@ struct ReaderView: View {
         }
         .statusBarHidden(!chromeVisible)
         .onAppear {
-            load(around: 0)
+            // Resume where reading stopped, clamped in case the archive has
+            // been re-downloaded with a different page count.
+            index = min(max(startPage, 0), max(document.pageCount - 1, 0))
+            scrubTarget = Double(index)
+            load(around: index)
             // A one-page comic is finished the moment it opens.
             if document.pageCount <= 1 { markFinished() }
         }
         .onChange(of: index) { page in
+            onPageChanged(page)
             if page >= document.pageCount - 1 { markFinished() }
         }
     }

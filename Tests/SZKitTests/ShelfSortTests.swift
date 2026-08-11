@@ -7,7 +7,7 @@ final class ShelfSortTests: XCTestCase {
     private func issue(_ id: Int, edition: String? = nil, number: Int? = nil,
                        title: String? = nil, hero: String? = nil) -> StoredIssue {
         StoredIssue(id: id, code: "C\(id)", number: number, title: title, series: nil,
-                    hero: hero, edition: edition, publisher: nil, isRead: false, style: .labeledBlock,
+                    hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, style: .labeledBlock,
                     mirrorCount: 1, coverURL: nil, isDownloaded: false)
     }
 
@@ -411,20 +411,20 @@ final class ReadStateTests: XCTestCase {
     func testIssuesStartUnread() throws {
         let (store, rows) = try populated()
         XCTAssertTrue(rows.allSatisfy { !$0.isRead })
-        XCTAssertEqual(try store.recent(limit: nil, readState: .unread).count, 3)
-        XCTAssertTrue(try store.recent(limit: nil, readState: .read).isEmpty)
+        XCTAssertEqual(try store.recent(limit: nil, states: [.unread]).count, 3)
+        XCTAssertTrue(try store.recent(limit: nil, states: [.read]).isEmpty)
     }
 
     func testMarkingReadAndBack() throws {
         let (store, rows) = try populated()
         try store.setRead(true, issueID: rows[0].id)
 
-        XCTAssertEqual(try store.recent(limit: nil, readState: .read).map(\.id), [rows[0].id])
-        XCTAssertEqual(try store.recent(limit: nil, readState: .unread).count, 2)
+        XCTAssertEqual(try store.recent(limit: nil, states: [.read]).map(\.id), [rows[0].id])
+        XCTAssertEqual(try store.recent(limit: nil, states: [.unread]).count, 2)
         XCTAssertTrue(try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id }).isRead)
 
         try store.setRead(false, issueID: rows[0].id)
-        XCTAssertTrue(try store.recent(limit: nil, readState: .read).isEmpty)
+        XCTAssertTrue(try store.recent(limit: nil, states: [.read]).isEmpty)
         XCTAssertFalse(try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id }).isRead)
     }
 
@@ -432,7 +432,7 @@ final class ReadStateTests: XCTestCase {
     func testAnyMeansEverything() throws {
         let (store, rows) = try populated()
         try store.setRead(true, issueID: rows[0].id)
-        XCTAssertEqual(try store.recent(limit: nil, readState: .any).count, 3)
+        XCTAssertEqual(try store.recent(limit: nil, states: []).count, 3)
     }
 
     /// Read state narrows whatever the other filters left.
@@ -444,16 +444,106 @@ final class ReadStateTests: XCTestCase {
         // Downloaded and read describe different issues here, so together they
         // match nothing.
         XCTAssertTrue(try store.recent(limit: nil, downloadedOnly: true,
-                                       readState: .read).isEmpty)
+                                       states: [.read]).isEmpty)
         XCTAssertEqual(try store.recent(limit: nil, downloadedOnly: true,
-                                        readState: .unread).count, 1)
+                                        states: [.unread]).count, 1)
     }
 
     /// Search honours it too, not only browsing.
     func testSearchRespectsReadState() throws {
         let (store, rows) = try populated()
         try store.setRead(true, issueID: rows[0].id)
-        XCTAssertEqual(try store.search("prvi", limit: nil, readState: .read).count, 1)
-        XCTAssertTrue(try store.search("prvi", limit: nil, readState: .unread).isEmpty)
+        XCTAssertEqual(try store.search("prvi", limit: nil, states: [.read]).count, 1)
+        XCTAssertTrue(try store.search("prvi", limit: nil, states: [.unread]).isEmpty)
+    }
+}
+
+/// Remembering where reading stopped.
+final class ReadingProgressTests: XCTestCase {
+
+    private func populated() throws -> (Store, [StoredIssue]) {
+        let store = try Store()
+        try store.ingest(html: """
+            <div>001-Prvi</div><div>http://www.mediafire.com/?FAKE001</div>
+            <div>002-Drugi</div><div>http://www.mediafire.com/?FAKE002</div>
+            """)
+        return (store, try store.recent(limit: nil))
+    }
+
+    /// Opening a comic to look at the cover is not reading it.
+    func testFirstPageDoesNotCountAsReading() throws {
+        let (store, rows) = try populated()
+        try store.setLastPage(0, issueID: rows[0].id)
+        let issue = try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id })
+        XCTAssertEqual(issue.readState, .unread)
+        XCTAssertTrue(try store.recent(limit: nil, states: [.reading]).isEmpty)
+    }
+
+    /// The second page does.
+    func testSecondPageStartsReading() throws {
+        let (store, rows) = try populated()
+        try store.setLastPage(1, issueID: rows[0].id)
+        let issue = try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id })
+        XCTAssertEqual(issue.readState, .reading)
+        XCTAssertEqual(try store.recent(limit: nil, states: [.reading]).map(\.id), [rows[0].id])
+        XCTAssertEqual(try store.recent(limit: nil, states: [.unread]).map(\.id), [rows[1].id])
+    }
+
+    func testPlaceIsRemembered() throws {
+        let (store, rows) = try populated()
+        try store.setLastPage(17, issueID: rows[0].id)
+        XCTAssertEqual(try store.lastPage(forIssue: rows[0].id), 17)
+    }
+
+    /// Flicking back to check something earlier must not lose the place.
+    func testPlaceOnlyMovesForward() throws {
+        let (store, rows) = try populated()
+        try store.setLastPage(17, issueID: rows[0].id)
+        try store.setLastPage(3, issueID: rows[0].id)
+        XCTAssertEqual(try store.lastPage(forIssue: rows[0].id), 17)
+    }
+
+    /// Finishing clears the place — otherwise unmarking read would drop the
+    /// issue straight back into Reading, with no way out of that state.
+    func testMarkingReadClearsThePlace() throws {
+        let (store, rows) = try populated()
+        try store.setLastPage(9, issueID: rows[0].id)
+        try store.setRead(true, issueID: rows[0].id)
+        XCTAssertEqual(try store.lastPage(forIssue: rows[0].id), 0)
+
+        try store.setRead(false, issueID: rows[0].id)
+        let issue = try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id })
+        XCTAssertEqual(issue.readState, .unread, "unmarking left it stuck in Reading")
+    }
+
+    /// The three states partition the library — every issue is in exactly one.
+    func testStatesArePartition() throws {
+        let (store, rows) = try populated()
+        try store.setLastPage(4, issueID: rows[0].id)
+        try store.setRead(true, issueID: rows[1].id)
+
+        let unread = try store.recent(limit: nil, states: [.unread]).count
+        let reading = try store.recent(limit: nil, states: [.reading]).count
+        let read = try store.recent(limit: nil, states: [.read]).count
+        XCTAssertEqual(unread + reading + read, store.issueCount)
+        XCTAssertEqual([unread, reading, read], [0, 1, 1])
+    }
+
+    /// Selecting every state is the same as selecting none.
+    func testAllStatesMeansEverything() throws {
+        let (store, rows) = try populated()
+        try store.setLastPage(4, issueID: rows[0].id)
+        XCTAssertEqual(try store.recent(limit: nil, states: Set(ReadState.allCases)).count,
+                       store.issueCount)
+        XCTAssertEqual(try store.recent(limit: nil, states: []).count, store.issueCount)
+    }
+
+    /// Two of the three, additively.
+    func testStatesAreAdditive() throws {
+        let (store, rows) = try populated()
+        try store.setLastPage(4, issueID: rows[0].id)
+        try store.setRead(true, issueID: rows[1].id)
+        XCTAssertEqual(try store.recent(limit: nil, states: [.reading, .read]).count, 2)
+        XCTAssertTrue(try store.recent(limit: nil, states: [.unread]).isEmpty)
     }
 }

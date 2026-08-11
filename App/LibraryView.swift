@@ -47,9 +47,17 @@ struct LibraryView: View {
             }
             .alert(item: $pending) { action in confirmation(for: action) }
             .fullScreenCover(item: $model.reading) { open in
-                ReaderView(document: open.document, title: open.title) {
-                    model.markRead(issueID: open.id)
-                }
+                ReaderView(document: open.document, title: open.title,
+                           startPage: open.startPage,
+                           onPageChanged: { page in
+                               model.rememberPlace(issueID: open.id, page: page)
+                           },
+                           onFinished: { model.markRead(issueID: open.id) })
+                    // The place is saved on every page turn but the shelf is
+                    // deliberately not rebuilt for each one. Closing the reader
+                    // is when it needs to catch up — otherwise the badge for a
+                    // comic you just started only appears on next launch.
+                    .onDisappear { model.search(model.query) }
             }
             // On its own view deliberately: SwiftUI honours only one `.alert`
             // per view, and the confirmation alert above already claims this
@@ -136,6 +144,9 @@ struct LibraryView: View {
 
                 Toggle(isOn: $model.showUnread) {
                     Label("Unread", systemImage: "circle")
+                }
+                Toggle(isOn: $model.showReading) {
+                    Label("Reading", systemImage: "book")
                 }
                 Toggle(isOn: $model.showRead) {
                     Label("Read", systemImage: "checkmark.circle")
@@ -480,6 +491,44 @@ struct LibraryView: View {
     ///
     /// The grey version is a separately cached image, not a live filter: the
     /// filter re-ran on the GPU for every visible cell on every render.
+    private static let readGreen = Color(red: 0.24, green: 0.63, blue: 0.29)
+    private static let readingYellow = Color(red: 0.95, green: 0.75, blue: 0.10)
+
+    /// A tick for finished, an ellipsis for part-way.
+    ///
+    /// Colour alone was not enough: a tick says "done" whatever colour it is,
+    /// so a yellow one on a comic you are halfway through reads as a
+    /// contradiction. Three dots say "still going" on their own.
+    @ViewBuilder
+    private func badge(for state: ReadState) -> some View {
+        switch state {
+        case .read:
+            Image(systemName: "checkmark.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(.white, Self.readGreen)
+        case .reading:
+            // Drawn rather than `ellipsis.circle.fill`: at a quarter of a
+            // thumbnail that symbol's dots shrink to specks, and these need to
+            // read across a shelf.
+            GeometryReader { geo in
+                let d = min(geo.size.width, geo.size.height)
+                ZStack {
+                    Circle().fill(Self.readingYellow)
+                    HStack(spacing: d * 0.09) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            Circle().fill(.white).frame(width: d * 0.19, height: d * 0.19)
+                        }
+                    }
+                }
+                .frame(width: d, height: d)
+            }
+            .aspectRatio(1, contentMode: .fit)
+        case .unread:
+            EmptyView()
+        }
+    }
+
     private func cover(_ issue: StoredIssue) -> some View {
         CoverImage(url: issue.coverURL, number: issue.number,
                    grayscale: !issue.isDownloaded)
@@ -498,14 +547,11 @@ struct LibraryView: View {
             // Sized against the cover rather than fixed, so it reads the same
             // on a grid thumbnail and on a list row.
             .overlay(alignment: .bottomTrailing) {
-                if issue.isRead {
+                if issue.readState != .unread {
                     GeometryReader { geo in
                         let side = min(geo.size.width, geo.size.height) * 0.25
-                        Image(systemName: "checkmark.circle.fill")
-                            .resizable()
-                            .scaledToFit()
+                        badge(for: issue.readState)
                             .frame(width: side, height: side)
-                            .foregroundStyle(.white, Color(red: 0.24, green: 0.63, blue: 0.29))
                             // Sits over the corner, so it reads as a stamp on
                             // the cover rather than part of the artwork.
                             .position(x: geo.size.width - side * 0.45,
@@ -521,7 +567,7 @@ struct LibraryView: View {
     private var filtering: Bool {
         model.downloadedOnly || !model.selectedSeries.isEmpty
             || !model.selectedPublishers.isEmpty || !model.selectedHeroes.isEmpty
-            || model.readFilter != .any
+            || !model.readStates.isEmpty
     }
 
     /// Three distinct empty cases, because "nothing here" for three different

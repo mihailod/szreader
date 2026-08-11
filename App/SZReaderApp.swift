@@ -84,17 +84,18 @@ final class AppModel: ObservableObject {
         set { publisherFilterRaw = newValue.sorted().joined(separator: "\n") }
     }
 
-    /// Read-state switches. Both on, or both off, means show everything —
-    /// asking for read *and* unread is the same as not asking.
-    @AppStorage("showRead") var showRead = false { didSet { search(query) } }
+    /// Read-state switches. All on, or all off, means show everything —
+    /// asking for every state is the same as not asking.
     @AppStorage("showUnread") var showUnread = false { didSet { search(query) } }
+    @AppStorage("showReading") var showReading = false { didSet { search(query) } }
+    @AppStorage("showRead") var showRead = false { didSet { search(query) } }
 
-    var readFilter: Store.ReadFilter {
-        switch (showRead, showUnread) {
-        case (true, false): return .read
-        case (false, true): return .unread
-        default:            return .any
-        }
+    var readStates: Set<ReadState> {
+        var states: Set<ReadState> = []
+        if showUnread { states.insert(.unread) }
+        if showReading { states.insert(.reading) }
+        if showRead { states.insert(.read) }
+        return states
     }
 
     /// Heroes the reader has narrowed to. Empty means every hero.
@@ -206,12 +207,12 @@ final class AppModel: ObservableObject {
                                    editions: selectedSeries,
                                    publishers: selectedPublishers,
                                    heroes: selectedHeroes,
-                                   readState: readFilter)
+                                   states: readStates)
                 : try store.search(text, limit: nil, downloadedOnly: downloadedOnly,
                                    editions: selectedSeries,
                                    publishers: selectedPublishers,
                                    heroes: selectedHeroes,
-                                   readState: readFilter)
+                                   states: readStates)
             // Applied on top of the query, so the default costs nothing and
             // leaves insertion order when browsing and relevance when
             // searching — each view's own answer to what it was asked.
@@ -286,6 +287,8 @@ final class AppModel: ObservableObject {
         let id: Int
         let document: ComicDocument
         let title: String
+        /// Where the reader stopped last time.
+        let startPage: Int
     }
 
     enum ImportFailure: Error, CustomStringConvertible {
@@ -320,9 +323,11 @@ final class AppModel: ObservableObject {
         Task { [weak self] in
             do {
                 let document = try library.document(forIssue: issue.id)
+                let resumeAt = (try? self?.store?.lastPage(forIssue: issue.id)) ?? 0 ?? 0
                 await MainActor.run {
                     self?.opening = nil
-                    self?.reading = OpenComic(id: issue.id, document: document, title: name)
+                    self?.reading = OpenComic(id: issue.id, document: document, title: name,
+                                              startPage: resumeAt)
                 }
             } catch {
                 await MainActor.run {
@@ -346,6 +351,15 @@ final class AppModel: ObservableObject {
         var chosen = selectedPublishers
         if chosen.contains(publisher) { chosen.remove(publisher) } else { chosen.insert(publisher) }
         selectedPublishers = chosen
+    }
+
+    /// Records how far the reader got.
+    ///
+    /// Not routed through `refresh`: this fires on every page turn, and
+    /// rebuilding the shelf underneath the reader for each one would be a
+    /// great deal of work nobody can see.
+    func rememberPlace(issueID: Int, page: Int) {
+        try? store?.setLastPage(page, issueID: issueID)
     }
 
     /// Marks by id, for the reader — which knows what it has open but not the
@@ -377,6 +391,7 @@ final class AppModel: ObservableObject {
     func clearSeriesFilter() {
         showRead = false
         showUnread = false
+        showReading = false
         selectedHeroes = []
         selectedSeries = []
         selectedPublishers = []
