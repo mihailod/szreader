@@ -180,6 +180,11 @@ extension Store {
         return out
     }
 
+    public func recordFilename(_ filename: String, forMirrorAt url: String) throws {
+        try db.run("UPDATE mirror SET filename = ? WHERE url = ?",
+                   [.text(filename), .text(url)])
+    }
+
     public func recordSize(_ size: Int64, forMirrorAt url: String) throws {
         try db.run("UPDATE mirror SET size = ? WHERE url = ?", [.int(size), .text(url)])
     }

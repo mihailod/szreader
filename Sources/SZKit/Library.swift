@@ -202,8 +202,20 @@ public final class Library {
         // dead mirror, so this must abort rather than be collected as one.
         try checkSpace(forIssue: issueID)
 
+        let mirrors = try store.liveMirrors(forIssue: issueID)
+
+        // Two links under one issue are usually alternatives, but sometimes
+        // they are halves of a split archive. Deciding needs their names, so
+        // this asks the hosts before downloading anything — one small request
+        // per mirror, and only when there is more than one to compare.
+        if mirrors.count > 1,
+           let parts = MultiPartArchive.parts(try await namedMirrors(mirrors)) {
+            return try await fetchParts(parts, issueID: issueID, into: directory,
+                                        progress: progress)
+        }
+
         var failures: [String] = []
-        for mirror in try store.liveMirrors(forIssue: issueID) {
+        for mirror in mirrors {
             guard let url = URL(string: mirror.url) else { continue }
             do {
                 let outcome = try await attempt(mirror: mirror, url: url,
@@ -224,8 +236,89 @@ public final class Library {
         throw DownloadError.allMirrorsFailed(failures)
     }
 
+    /// Each mirror paired with the filename its host reports.
+    ///
+    /// Uses what a previous probe recorded and asks only for the rest, so a
+    /// library whose titles have already been resolved pays nothing here.
+    private func namedMirrors(_ mirrors: [MirrorLink])
+        async throws -> [(source: MirrorLink, filename: String)] {
+
+        var named: [(MirrorLink, String)] = []
+        for mirror in mirrors {
+            if let known = try? store.filename(forMirrorAt: mirror.url) {
+                named.append((mirror, known))
+                continue
+            }
+            guard let url = URL(string: mirror.url),
+                  let meta = try? await registry.probe(url, via: transport),
+                  let filename = meta.filename else { continue }
+            try? store.recordFilename(filename, forMirrorAt: mirror.url)
+            named.append((mirror, filename))
+        }
+        return named.map { (source: $0.0, filename: $0.1) }
+    }
+
+    /// Downloads every volume of a split archive, then hands back the first.
+    ///
+    /// All of them land in one directory under the names their host gave them,
+    /// because that is the only way unrar will join them. The download is
+    /// recorded against volume one, which is the file the reader opens.
+    private func fetchParts(_ parts: [(source: MirrorLink, filename: String, part: Int)],
+                            issueID: Int, into directory: URL,
+                            progress: (@Sendable (DownloadProgress) -> Void)?)
+        async throws -> DownloadOutcome {
+
+        var failures: [String] = []
+        var total: Int64 = 0
+        var first: URL?
+
+        for (index, piece) in parts.enumerated() {
+            guard let url = URL(string: piece.source.url) else { continue }
+            do {
+                // One bar across the whole set: reported as a fraction of all
+                // the volumes, so it climbs once instead of restarting per
+                // piece.
+                let slice: @Sendable (DownloadProgress) -> Void = { p in
+                    guard p.expected > 0 else { return }
+                    let done = (Double(index) + Double(p.received) / Double(p.expected))
+                        / Double(parts.count)
+                    progress?(DownloadProgress(received: Int64(done * 1_000_000),
+                                               expected: 1_000_000))
+                }
+                let outcome = try await attempt(mirror: piece.source, url: url,
+                                                issueID: issueID, into: directory,
+                                                filename: piece.filename,
+                                                sniff: piece.part == 1,
+                                                progress: slice)
+                total += outcome.bytes
+                if piece.part == 1 { first = outcome.path }
+            } catch {
+                failures.append("\(piece.source.host) part \(piece.part): "
+                                + "\(Self.reason(error))")
+            }
+        }
+
+        // A split archive is all or nothing: a missing volume is not a comic
+        // you can read some of.
+        guard failures.isEmpty, let firstVolume = first else {
+            throw DownloadError.allMirrorsFailed(
+                failures.isEmpty ? ["split archive has no first volume"] : failures)
+        }
+        let kind = ArchiveKind.sniff(firstVolume)
+        guard kind != .unknown else {
+            throw DownloadError.notAnArchive("first volume is neither zip nor rar")
+        }
+        let outcome = DownloadOutcome(issueID: issueID, path: firstVolume, kind: kind,
+                                      bytes: total, mirrorURL: parts[0].source.url)
+        try store.recordDownload(issueID: issueID, mirrorURL: parts[0].source.url,
+                                 path: firstVolume, bytes: total)
+        return outcome
+    }
+
     private func attempt(mirror: MirrorLink, url: URL, issueID: Int,
                          into directory: URL,
+                         filename explicitName: String? = nil,
+                         sniff: Bool = true,
                          progress: (@Sendable (DownloadProgress) -> Void)?)
         async throws -> DownloadOutcome {
 
@@ -233,7 +326,7 @@ public final class Library {
         // caching them would trade a cheap request for a confusing failure.
         let link = try await registry.directLink(url, via: transport)
 
-        let name = (try? store.filename(forMirrorAt: mirror.url)) ?? nil
+        let name = explicitName ?? ((try? store.filename(forMirrorAt: mirror.url)) ?? nil)
         let filename = name ?? "\(issueID).bin"
         let finalURL = directory.appendingPathComponent(filename)
         let rawURL = directory.appendingPathComponent(filename + ".part")
@@ -256,8 +349,11 @@ public final class Library {
 
         // Sniffing is both the extension check (a .cbr is often a zip) and the
         // proof that a Mega decrypt produced real data rather than noise.
+        //
+        // Skipped for volumes after the first: a later piece of a split
+        // archive is a fragment, not something that has to stand on its own.
         let kind = ArchiveKind.sniff(finalURL)
-        guard kind != .unknown else {
+        guard !sniff || kind != .unknown else {
             try? FileManager.default.removeItem(at: finalURL)
             throw DownloadError.notAnArchive(
                 "magic bytes match neither zip nor rar (bad mirror, or wrong decryption)")
