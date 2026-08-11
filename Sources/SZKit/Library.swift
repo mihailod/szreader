@@ -149,6 +149,20 @@ public final class Library {
         }
     }
 
+    /// Unpacks a freshly downloaded comic so the first open is instant.
+    ///
+    /// Opening a comic means unwrapping any outer archive and extracting the
+    /// pages, and for a RAR that is most of a minute of work on a large scan.
+    /// Doing it at download time hides it inside a wait the reader has already
+    /// accepted, instead of charging it to the first tap on the cover — where
+    /// the same seconds are the difference between "opening" and "broken".
+    ///
+    /// The document is discarded: what matters is the unpacked directory it
+    /// leaves behind, which every later open reuses.
+    public func prepareForReading(issueID: Int) throws {
+        _ = try document(forIssue: issueID)
+    }
+
     /// Opens a downloaded comic for reading.
     ///
     /// Unpacking a solid RAR is slow enough to notice, so callers should do

@@ -361,6 +361,14 @@ final class AppModel: ObservableObject {
         selectedPublishers = chosen
     }
 
+    /// How much of the progress bar the transfer owns; the rest is unpacking.
+    ///
+    /// Unpacking is a fraction of the time on a fast connection and most of it
+    /// on a slow archive, so any split is a guess. This one keeps the bar
+    /// moving for the part that can be measured and leaves a visible remainder
+    /// for the part that cannot.
+    private static let transferShare = 0.9
+
     /// Records how far the reader got.
     ///
     /// Not routed through `refresh`: this fires on every page turn, and
@@ -496,7 +504,9 @@ final class AppModel: ObservableObject {
             // expected is -1 when the server sends no length; with no total
             // there is no fraction to show.
             guard p.expected > 0 else { return }
-            continuation.yield(Double(p.received) / Double(p.expected))
+            // Scaled to leave room for unpacking. The two are one wait as far
+            // as the reader is concerned, so they share one bar.
+            continuation.yield(Double(p.received) / Double(p.expected) * Self.transferShare)
         }
 
         Task { @MainActor [weak self] in
@@ -507,6 +517,18 @@ final class AppModel: ObservableObject {
             defer { continuation.finish() }
             do {
                 let outcome = try await library.fetch(issueID: issueID, progress: report)
+
+                // Unpack now, inside the wait the reader has already accepted.
+                // No byte count to report — extraction is all-or-nothing — so
+                // the bar holds near the end rather than pretending to know.
+                if let self {
+                    self.progress[issueID] = Self.transferShare
+                    self.status = "unpacking “\(name)”…"
+                }
+                try await Task.detached(priority: .userInitiated) {
+                    try library.prepareForReading(issueID: issueID)
+                }.value
+
                 guard let self else { return }
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil

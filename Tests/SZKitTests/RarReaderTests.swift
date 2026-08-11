@@ -219,3 +219,79 @@ final class RarUnpackCacheTests: XCTestCase {
         XCTAssertFalse(try reader.entries().contains { $0.contains(".szunpacked") })
     }
 }
+
+/// Unpacking at download time, so the first open is not the one that pays.
+final class PrepareForReadingTests: XCTestCase {
+
+    private var root: URL!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    }
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+
+    /// Downloads a RAR through the normal path, then checks it arrived unpacked.
+    func testDownloadLeavesTheComicUnpacked() async throws {
+        let rar = try XCTUnwrap(Data(base64Encoded: rarFixtureBase64,
+                                     options: .ignoreUnknownCharacters))
+        let store = try Store()
+        try store.ingest(html:
+            "<div>013-Nasilje</div><div>http://www.mediafire.com/?FAKE013</div>")
+        let issue = try XCTUnwrap(try store.recent().first)
+
+        let library = Library(store: store, paths: LibraryPaths(root: root),
+                              transport: StubTransport { _ in
+                                  HTTPResponse(status: 200, headers: ["location":
+                                      "https://download.mediafire.com/x/c.cbr"])
+                              },
+                              downloader: StubDownloader(bodies: ["www.mediafire.com": rar,
+                                                                  "download.mediafire.com": rar]),
+                              registry: HostRegistry(hosts: [PassThroughHost()]))
+        _ = try await library.fetch(issueID: issue.id)
+        // The fixture holds .txt files, so opening it rightly reports no
+        // readable pages. Extraction still runs first, and that is what is
+        // being checked: the unpacking happened at download time.
+        _ = try? library.prepareForReading(issueID: issue.id)
+
+        // The marker is only written after a successful extraction, so its
+        // presence means the work was done before any reading began.
+        let unpacked = FileManager.default
+            .enumerator(at: root, includingPropertiesForKeys: nil)?
+            .compactMap { $0 as? URL }
+            .contains { $0.lastPathComponent == ".szunpacked" } ?? false
+        XCTAssertTrue(unpacked, "the comic was left packed for the first open to deal with")
+    }
+
+    /// Priming twice must be harmless — a re-download runs it again.
+    func testPreparingTwiceIsFine() async throws {
+        let zip = Data([0x50, 0x4B, 0x03, 0x04] + Array(repeating: UInt8(0x41), count: 200))
+        let store = try Store()
+        try store.ingest(html:
+            "<div>014-Drugi</div><div>http://www.mediafire.com/?FAKE014</div>")
+        let issue = try XCTUnwrap(try store.recent().first)
+        let library = Library(store: store, paths: LibraryPaths(root: root),
+                              transport: StubTransport { _ in HTTPResponse(status: 200) },
+                              downloader: StubDownloader(bodies: ["www.mediafire.com": zip]),
+                              registry: HostRegistry(hosts: [PassThroughHost()]))
+        _ = try? await library.fetch(issueID: issue.id)
+        // Not a real archive, so this throws — the point is that it throws the
+        // same way both times rather than leaving anything half-made.
+        let first = (try? library.prepareForReading(issueID: issue.id)) != nil
+        let second = (try? library.prepareForReading(issueID: issue.id)) != nil
+        XCTAssertEqual(first, second)
+    }
+}
+
+/// Resolves without touching the network.
+private struct PassThroughHost: FileHost {
+    let name = "test"
+    func canHandle(_ url: URL) -> Bool { true }
+    func probe(_ url: URL, via transport: Transport) async throws -> FileMeta {
+        FileMeta(filename: "c.cbr")
+    }
+    func directLink(_ url: URL, via transport: Transport) async throws -> DirectLink {
+        DirectLink(url: URL(string: "https://www.mediafire.com/c.cbr")!)
+    }
+}
