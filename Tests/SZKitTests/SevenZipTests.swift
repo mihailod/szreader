@@ -264,21 +264,29 @@ final class MultiArchiveComicTests: XCTestCase {
         XCTAssertEqual(thirdOpen.pageCount, 9)
     }
 
-    /// A comic already unpacked by the build that nested volume directories
-    /// must correct itself rather than stay double-length.
-    func testStaleNestedVolumeDirectoryIsCleared() throws {
+    /// A comic unpacked by the layout that gave volume one the whole
+    /// directory must correct itself, and reclaim the space that layout left
+    /// behind.
+    func testComicUnpackedByTheOldLayoutIsCorrected() throws {
         let first = try makeHalf(named: "old_1_deo.7z", pages: 1...4)
         _ = try makeHalf(named: "old_2_deo.7z", pages: 5...9)
         let work = root.appendingPathComponent("w9")
+        let fm = FileManager.default
 
-        // What the previous build left behind: volume two's pages unpacked
-        // into a subdirectory of volume one's.
+        // What that layout left: volume one loose in the root, volume two in
+        // a subdirectory of it.
+        let loose = work.appendingPathComponent("pages", isDirectory: true)
+        try fm.createDirectory(at: loose, withIntermediateDirectories: true)
+        for i in 1...4 { try writePNG(loose.appendingPathComponent("p00\(i).png")) }
+        fm.createFile(atPath: work.appendingPathComponent(".szunpacked").path, contents: nil)
         let nested = work.appendingPathComponent("volume-2/pages", isDirectory: true)
-        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try fm.createDirectory(at: nested, withIntermediateDirectories: true)
         for i in 5...9 { try writePNG(nested.appendingPathComponent("p00\(i).png")) }
 
         let document = try ComicDocument(fileURL: first, workDirectory: work)
-        XCTAssertEqual(document.pageCount, 9, "stale nested pages were counted")
+        XCTAssertEqual(document.pageCount, 9, "stale pages were counted")
+        XCTAssertFalse(fm.fileExists(atPath: loose.path),
+                       "the old copy of every page was left on disk")
     }
 
     /// Unpacked directories sit beside the archives and share their names;

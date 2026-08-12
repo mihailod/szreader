@@ -66,4 +66,46 @@ final class ZoomPanTests: XCTestCase {
         XCTAssertEqual(ZoomPan.clamp(CGSize(width: 10, height: 10),
                                      image: page, box: .zero, zoom: 3), .zero)
     }
+
+    // MARK: - Filling the width in landscape
+
+    private static let page = CGSize(width: 1988, height: 3056)   // a real scan
+    private static let landscape = CGSize(width: 1194, height: 834)
+
+    func testLandscapeWidensThePageToTheScreen() {
+        let zoom = ZoomPan.widthFillZoom(image: Self.page, box: Self.landscape)
+        XCTAssertGreaterThan(zoom, 1)
+        let fitted = ZoomPan.fittedSize(image: Self.page, box: Self.landscape)
+        XCTAssertEqual(fitted.width * zoom, Self.landscape.width, accuracy: 0.5)
+    }
+
+    /// Widening the page is only worth it if what runs off the screen can be
+    /// reached again.
+    func testTheWidenedPageCanBePannedToItsEnds() {
+        let zoom = ZoomPan.widthFillZoom(image: Self.page, box: Self.landscape)
+        let limit = ZoomPan.maxOffset(image: Self.page, box: Self.landscape, zoom: zoom)
+        XCTAssertGreaterThan(limit.height, 0, "the overflow could not be panned to")
+        XCTAssertEqual(limit.width, 0, accuracy: 0.5, "it should not pan sideways")
+    }
+
+    /// A page shaped wider than the box already meets both sides; widening
+    /// it further would only crop it.
+    func testPageWiderThanTheBoxIsLeftAlone() {
+        let panorama = CGSize(width: 4000, height: 1000)
+        XCTAssertEqual(ZoomPan.widthFillZoom(image: panorama, box: Self.landscape), 1,
+                       accuracy: 0.001)
+    }
+
+    /// A double-page spread is still narrower than a landscape screen, so it
+    /// is widened like any other page.
+    func testWideSpreadStillFillsTheWidth() {
+        let spread = CGSize(width: 3976, height: 3056)
+        let zoom = ZoomPan.widthFillZoom(image: spread, box: Self.landscape)
+        let fitted = ZoomPan.fittedSize(image: spread, box: Self.landscape)
+        XCTAssertEqual(fitted.width * zoom, Self.landscape.width, accuracy: 0.5)
+    }
+
+    func testNoImageIsNotZoomed() {
+        XCTAssertEqual(ZoomPan.widthFillZoom(image: .zero, box: Self.landscape), 1)
+    }
 }

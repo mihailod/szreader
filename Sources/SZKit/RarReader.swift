@@ -33,9 +33,6 @@ public struct RarReader: ArchiveReader {
         }
     }
 
-    /// Written once extraction has finished, so a directory left behind by an
-    /// interrupted unpack is not mistaken for a complete one.
-    private static let doneMarker = ".szunpacked"
 
     /// Unpacks `url` beneath `workDirectory` and indexes the result.
     ///
@@ -47,7 +44,7 @@ public struct RarReader: ArchiveReader {
         let fm = FileManager.default
         try fm.createDirectory(at: workDirectory, withIntermediateDirectories: true)
 
-        let marker = workDirectory.appendingPathComponent(Self.doneMarker)
+        let marker = workDirectory.appendingPathComponent(UnpackMarker.name)
         if !fm.fileExists(atPath: marker.path) {
             let code = szunrar_extract_all(url.path, workDirectory.path)
             guard code == SZUNRAR_OK else { throw ArchiveError.rar(code) }
@@ -55,7 +52,7 @@ public struct RarReader: ArchiveReader {
         }
 
         self.root = workDirectory
-        self.names = Self.walk(workDirectory).filter { $0 != Self.doneMarker }
+        self.names = Self.walk(workDirectory).filter { $0 != UnpackMarker.name }
 
         // unrar accepts a bare RAR signature with no headers as an "empty
         // archive" and reports success, so a truncated download would otherwise

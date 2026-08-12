@@ -7,7 +7,7 @@ final class ShelfSortTests: XCTestCase {
     private func issue(_ id: Int, edition: String? = nil, number: Int? = nil,
                        title: String? = nil, hero: String? = nil) -> StoredIssue {
         StoredIssue(id: id, code: "C\(id)", number: number, title: title, series: nil,
-                    hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, downloadFailed: false, style: .labeledBlock,
+                    hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, started: false, downloadFailed: false, style: .labeledBlock,
                     mirrorCount: 1, coverURL: nil, isDownloaded: false)
     }
 
@@ -495,12 +495,65 @@ final class ReadingProgressTests: XCTestCase {
         XCTAssertEqual(try store.lastPage(forIssue: rows[0].id), 17)
     }
 
-    /// Flicking back to check something earlier must not lose the place.
-    func testPlaceOnlyMovesForward() throws {
+    /// The place is where reading stopped, which is not always the furthest
+    /// page reached: scrubbing back and closing has to reopen where you left
+    /// off, not at the far end of the comic.
+    func testPlaceFollowsTheReaderBackwards() throws {
         let (store, rows) = try populated()
         try store.setLastPage(17, issueID: rows[0].id)
         try store.setLastPage(3, issueID: rows[0].id)
-        XCTAssertEqual(try store.lastPage(forIssue: rows[0].id), 17)
+        XCTAssertEqual(try store.lastPage(forIssue: rows[0].id), 3)
+    }
+
+    /// Having started a comic is not undone by moving around inside it.
+    /// Scrubbing back to the cover changes where you resume, and nothing else.
+    func testGoingBackToTheFirstPageStaysReading() throws {
+        let (store, rows) = try populated()
+        try store.setLastPage(30, issueID: rows[0].id)
+        try store.setLastPage(0, issueID: rows[0].id)
+
+        let issue = try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id })
+        XCTAssertEqual(issue.readState, .reading, "going back to the cover cleared Reading")
+        XCTAssertEqual(try store.lastPage(forIssue: rows[0].id), 0, "the place did not follow")
+        XCTAssertEqual(try store.recent(limit: nil, states: [.reading]).map(\.id), [rows[0].id])
+    }
+
+    /// Finishing, then unmarking, is still the only way out of Reading.
+    func testFinishingAndUnmarkingIsTheWayOut() throws {
+        let (store, rows) = try populated()
+        try store.setLastPage(30, issueID: rows[0].id)
+        try store.setRead(true, issueID: rows[0].id)
+        try store.setRead(false, issueID: rows[0].id)
+
+        let issue = try XCTUnwrap(store.recent(limit: nil).first { $0.id == rows[0].id })
+        XCTAssertEqual(issue.readState, .unread)
+        XCTAssertTrue(try store.recent(limit: nil, states: [.reading]).isEmpty)
+    }
+
+    /// A library written before there was a column for this must not lose its
+    /// Reading badges the first time this build opens it.
+    func testOlderLibraryKeepsItsReadingBadges() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        let id: Int
+        do {
+            let store = try Store(path: path)
+            try store.ingest(html: """
+                <div>001-Prvi</div><div>http://www.mediafire.com/?FAKE001</div>
+                """)
+            id = try XCTUnwrap(store.recent(limit: nil).first).id
+            try store.setLastPage(12, issueID: id)
+            // What such a library looks like: a place recorded, and nothing
+            // saying the comic was started.
+            try store.db.run("UPDATE issue SET started_at = NULL WHERE id = ?",
+                             [.int(Int64(id))])
+        }
+
+        let reopened = try Store(path: path)
+        let issue = try XCTUnwrap(reopened.recent(limit: nil).first { $0.id == id })
+        XCTAssertEqual(issue.readState, .reading, "the migration lost a Reading badge")
     }
 
     /// Finishing clears the place — otherwise unmarking read would drop the

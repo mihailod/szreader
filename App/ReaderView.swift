@@ -35,6 +35,12 @@ struct ReaderView: View {
     /// Fired once per sitting: turning back a page and forward again is not
     /// finishing it a second time.
     @State private var finished = false
+    /// Landscape, tracked from the geometry so the chrome knows which
+    /// scrubber to put up. The reader itself branches on the geometry
+    /// directly; this is only for the parts drawn outside it.
+    @State private var landscape = false
+    /// A page one of the vertical scrubbers has asked to jump to.
+    @State private var seek: Int?
 
     private var pageCount: Int { document?.pageCount ?? 0 }
 
@@ -44,16 +50,27 @@ struct ReaderView: View {
 
             if document == nil { opening }
 
-            TabView(selection: $index) {
-                ForEach(0..<max(pageCount, 1), id: \.self) { page in
-                    PageView(image: cache[page])
-                        .tag(page)
-                        .onAppear { load(around: page) }
+            // Landscape is not portrait with more room to the sides — it is
+            // how you read a comic on a screen too small to show a whole page
+            // at a legible size. So the page is widened to the screen and
+            // read down, and the two modes page differently.
+            GeometryReader { geo in
+                Group {
+                    if geo.size.width > geo.size.height {
+                        // Only once there is a comic to scroll. Built before
+                        // that, the strip captures a page count of zero and a
+                        // resume position of nowhere, and goes on believing
+                        // both after the pages arrive.
+                        if pageCount > 0 { landscapeReader }
+                    } else {
+                        portraitPager
+                            .onTapGesture { withAnimation { chromeVisible.toggle() } }
+                    }
                 }
+                .onAppear { landscape = geo.size.width > geo.size.height }
+                .onChange(of: geo.size) { size in landscape = size.width > size.height }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
-            .onTapGesture { withAnimation { chromeVisible.toggle() } }
 
             if chromeVisible { chrome }
         }
@@ -69,6 +86,35 @@ struct ReaderView: View {
             model.rememberPlace(issueID: comicID, page: page)
             if page >= pageCount - 1 { markFinished() }
         }
+    }
+
+    /// Portrait: whole pages, turned by swiping sideways.
+    private var portraitPager: some View {
+        TabView(selection: $index) {
+            ForEach(0..<max(pageCount, 1), id: \.self) { page in
+                PageView(image: cache[page])
+                    .tag(page)
+                    .onAppear { load(around: page) }
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+    }
+
+    /// Landscape: the comic as one continuously scrolling strip.
+    private var landscapeReader: some View {
+        ContinuousPages(
+            pageCount: pageCount,
+            image: { cache[$0] },
+            loadAround: { load(around: $0, keeping: index) },
+            currentPage: $index,
+            seek: $seek,
+            // Where the reader is *now*, not where they were when the reader
+            // was opened. The strip is rebuilt from scratch on every
+            // rotation, and handing it the opening page would scroll back
+            // there and then report it — writing the old page over the
+            // reader's actual progress every time the iPad turned.
+            openAt: min(max(index, 0), max(pageCount - 1, 0)),
+            onTap: { withAnimation { chromeVisible.toggle() } })
     }
 
     /// Settles on the resumed page and starts decoding around it.
@@ -97,6 +143,32 @@ struct ReaderView: View {
     }
 
     private var chrome: some View {
+        ZStack {
+            // Landscape scrolls, so its position control runs the same way the
+            // comic does — and there are two, because which edge is reachable
+            // depends on which hand is holding the iPad.
+            if landscape && pageCount > 1 { sideScrubbers }
+            portraitChrome
+        }
+        .foregroundStyle(.primary)
+        .transition(.opacity)
+    }
+
+    private var sideScrubbers: some View {
+        HStack {
+            VerticalScrubber(pageCount: pageCount, page: index,
+                             edge: .leading) { seek = $0 }
+            Spacer()
+            VerticalScrubber(pageCount: pageCount, page: index,
+                             edge: .trailing) { seek = $0 }
+        }
+        // Clear of the title bar above and the home indicator below.
+        .padding(.top, 78)
+        .padding(.bottom, 28)
+        .padding(.horizontal, 4)
+    }
+
+    private var portraitChrome: some View {
         VStack {
             HStack {
                 Button { dismiss() } label: {
@@ -113,11 +185,10 @@ struct ReaderView: View {
 
             Spacer()
 
-            // A single page is not worth a scrubber.
-            if pageCount > 1 { scrubber }
+            // A single page is not worth a scrubber, and in landscape the
+            // scrubbers are down the sides instead.
+            if pageCount > 1 && !landscape { scrubber }
         }
-        .foregroundStyle(.primary)
-        .transition(.opacity)
     }
 
     /// Drag to any page.
@@ -187,7 +258,14 @@ struct ReaderView: View {
 
     /// Decode the current page plus a small window either side, so a back-flip
     /// is as smooth as a forward one.
-    private func load(around page: Int) {
+    /// `keeping` is the page the cache is trimmed around, which is not always
+    /// the page being decoded. In portrait one page asks at a time and the two
+    /// are the same. The landscape strip realises several slots at once —
+    /// including ones at the top, before it has scrolled to where the reader
+    /// left off — and if each trimmed the cache around itself they would throw
+    /// away each other's work as fast as it arrived, which left the strip
+    /// showing nothing but a spinner.
+    private func load(around page: Int, keeping anchor: Int? = nil) {
         guard let document else { return }
         let wanted = [page] + document.prefetchWindow(around: page, radius: 2)
         let scale = UIScreen.main.scale
@@ -201,7 +279,8 @@ struct ReaderView: View {
         }
         // Keep the cache bounded by count, not bytes — each page is expensive.
         if cache.count > 7 {
-            for key in cache.keys where abs(key - page) > 3 { cache.removeValue(forKey: key) }
+            let keep = anchor ?? page
+            for key in cache.keys where abs(key - keep) > 3 { cache.removeValue(forKey: key) }
         }
     }
 }

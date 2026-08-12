@@ -10,9 +10,6 @@ public final class SevenZipReader: ArchiveReader {
     private let root: URL
     private let names: [String]
 
-    /// Written once extraction has finished, so a directory left behind by an
-    /// interrupted unpack is not mistaken for a complete one.
-    private static let doneMarker = ".szunpacked"
 
     /// Unpacks `url` beneath `workDirectory` and indexes the result.
     ///
@@ -23,7 +20,7 @@ public final class SevenZipReader: ArchiveReader {
         let fm = FileManager.default
         try fm.createDirectory(at: workDirectory, withIntermediateDirectories: true)
 
-        let marker = workDirectory.appendingPathComponent(Self.doneMarker)
+        let marker = workDirectory.appendingPathComponent(UnpackMarker.name)
         if !fm.fileExists(atPath: marker.path) {
             let code = sz7z_extract_all(url.path, workDirectory.path)
             guard code == SZ7Z_OK else { throw ArchiveError.sevenZip(code) }
@@ -31,7 +28,7 @@ public final class SevenZipReader: ArchiveReader {
         }
 
         self.root = workDirectory
-        self.names = Self.walk(workDirectory).filter { $0 != Self.doneMarker }
+        self.names = Self.walk(workDirectory).filter { $0 != UnpackMarker.name }
 
         // An archive the SDK opens but finds nothing in is a truncated
         // download, not a comic with no pages.

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0AAA7ACFD7935BADE0E1AC10 /* ImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 640135922A53F0FDE2BFEDE9 /* ImportView.swift */; };
 		13A8C6AB3E55AC67FEC8D747 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0919F3692489FEBE9A67D8D /* LibraryView.swift */; };
+		1BAD08BEBBFB9D7731135C47 /* LandscapeReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */; };
 		4110343204827F1B5F4F7945 /* SZKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3399FEF9FB0275D5FBB6A832 /* SZKit */; };
 		479F9C38B6D874A03A3CF29F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3F41C3389BD9E0C5FE60156A /* Assets.xcassets */; };
 		4DA39CCBA66CCAC30888EB87 /* BrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DA4EDA742DCFD028234085B /* BrowserView.swift */; };
@@ -20,6 +21,7 @@
 /* Begin PBXFileReference section */
 		0DA4EDA742DCFD028234085B /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
 		10A12CF237924287D34868EA /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
+		34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeReader.swift; sourceTree = "<group>"; };
 		3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverStore.swift; sourceTree = "<group>"; };
 		3F41C3389BD9E0C5FE60156A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		640135922A53F0FDE2BFEDE9 /* ImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportView.swift; sourceTree = "<group>"; };
@@ -57,6 +59,7 @@
 				0DA4EDA742DCFD028234085B /* BrowserView.swift */,
 				3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */,
 				640135922A53F0FDE2BFEDE9 /* ImportView.swift */,
+				34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */,
 				B0919F3692489FEBE9A67D8D /* LibraryView.swift */,
 				10A12CF237924287D34868EA /* ReaderView.swift */,
 				C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */,
@@ -159,6 +162,7 @@
 				4DA39CCBA66CCAC30888EB87 /* BrowserView.swift in Sources */,
 				95E0C572BF4994B77DDB41B0 /* CoverStore.swift in Sources */,
 				0AAA7ACFD7935BADE0E1AC10 /* ImportView.swift in Sources */,
+				1BAD08BEBBFB9D7731135C47 /* LandscapeReader.swift in Sources */,
 				13A8C6AB3E55AC67FEC8D747 /* LibraryView.swift in Sources */,
 				A0542A495542645E1D9C357D /* ReaderView.swift in Sources */,
 				94082F888333404B61A3C818 /* SZReaderApp.swift in Sources */,

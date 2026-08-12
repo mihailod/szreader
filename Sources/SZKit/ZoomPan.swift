@@ -14,6 +14,22 @@ public enum ZoomPan {
         return CGSize(width: image.width * scale, height: image.height * scale)
     }
 
+    /// The zoom at which the page meets both sides of the box.
+    ///
+    /// The reader applies this in landscape only, where fitting a comic page
+    /// by its height leaves it stranded in wide margins. Widening it to the
+    /// screen runs it off the top and bottom, which is what panning is for.
+    ///
+    /// Not applied in portrait, though it would be greater than one there
+    /// too: a scan is a little narrower than an iPad, so filling the width
+    /// would crop the top and bottom of a page that currently fits whole.
+    /// Never below one, so a page already wider than the box is not shrunk.
+    public static func widthFillZoom(image: CGSize, box: CGSize) -> CGFloat {
+        let fitted = fittedSize(image: image, box: box)
+        guard fitted.width > 0 else { return 1 }
+        return max(box.width / fitted.width, 1)
+    }
+
     /// How far the page may be dragged from centre before its edge would come
     /// inside the screen. Zero on an axis with no overflow, which is what stops
     /// a page sliding away from under the reader.

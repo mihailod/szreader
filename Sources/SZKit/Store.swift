@@ -23,6 +23,9 @@ public struct StoredIssue: Equatable, Sendable {
     /// Furthest page reached, zero-based. Nil until the reader moves off the
     /// cover.
     public let lastPage: Int?
+    /// Whether reading ever got past the cover. Sticky: only finishing the
+    /// comic and then unmarking it clears this.
+    public let started: Bool
     /// Whether the last download attempt failed. Some links really are dead,
     /// and a shelf that looks identical before and after trying is a shelf you
     /// try again from tomorrow.
@@ -33,9 +36,10 @@ public struct StoredIssue: Equatable, Sendable {
     /// overlapping.
     public var readState: ReadState {
         if isRead { return .read }
-        // The second page, not the first: opening a comic to look at the cover
-        // is not reading it.
-        return (lastPage ?? 0) >= 1 ? .reading : .unread
+        // Not derived from `lastPage`: that is where the reader stopped, and
+        // it moves backwards as freely as forwards now. Scrubbing back to the
+        // cover would have read as never having started.
+        return started ? .reading : .unread
     }
     public let style: LabelStyle
     public let mirrorCount: Int
@@ -174,6 +178,15 @@ public final class Store: @unchecked Sendable {
         try? db.execute("ALTER TABLE issue ADD COLUMN read_at REAL")
         try? db.execute("ALTER TABLE issue ADD COLUMN last_page INTEGER")
         try? db.execute("ALTER TABLE issue ADD COLUMN download_failed_at REAL")
+        try? db.execute("ALTER TABLE issue ADD COLUMN started_at REAL")
+
+        // Libraries written before there was a column for it: anything with a
+        // place recorded past the cover was being read, and would otherwise
+        // drop out of Reading the moment this build opened it.
+        try? db.execute("""
+            UPDATE issue SET started_at = strftime('%s', 'now')
+            WHERE started_at IS NULL AND IFNULL(last_page, 0) >= 1
+            """)
 
         // Heal libraries damaged by the identity bug: naming an issue used to
         // rewrite `title_folded`, which is part of the natural key, so the next
@@ -391,7 +404,8 @@ public final class Store: @unchecked Sendable {
                    i.hero, i.edition, i.publisher,
                    i.read_at IS NOT NULL,
                    i.last_page,
-                   i.download_failed_at IS NOT NULL
+                   i.download_failed_at IS NOT NULL,
+                   i.started_at IS NOT NULL
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
@@ -410,6 +424,7 @@ public final class Store: @unchecked Sendable {
                 publisher: row.string(11),
                 isRead: (row.int(12) ?? 0) == 1,
                 lastPage: row.int(13),
+                started: (row.int(15) ?? 0) == 1,
                 downloadFailed: (row.int(14) ?? 0) == 1,
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
@@ -456,21 +471,36 @@ public final class Store: @unchecked Sendable {
     /// A timestamp rather than a flag: it costs nothing now and leaves "what
     /// did I read recently" answerable later.
     public func setRead(_ read: Bool, issueID: Int) throws {
-        // Marking read clears the position. Otherwise unmarking would drop the
-        // issue straight back into "Reading", and there would be no way out of
-        // that state at all.
-        try db.run("UPDATE issue SET read_at = ?, last_page = NULL WHERE id = ?",
-                   [read ? .double(Date().timeIntervalSince1970) : .null, .int(Int64(issueID))])
+        // Marking read clears both the position and the fact of having
+        // started. Otherwise unmarking would drop the issue straight back into
+        // "Reading", and there would be no way out of that state at all —
+        // finishing and then unmarking is the only exit.
+        try db.run("""
+            UPDATE issue SET read_at = ?, last_page = NULL, started_at = NULL
+            WHERE id = ?
+            """, [read ? .double(Date().timeIntervalSince1970) : .null,
+                  .int(Int64(issueID))])
     }
 
-    /// Remembers how far the reader got, so the comic reopens where it left off.
+    /// Where the reader stopped, so the comic reopens there.
     ///
-    /// Only ever moves forward: flicking back to check something earlier is not
-    /// losing your place.
+    /// Assigned, not advanced. This used to keep the furthest page ever
+    /// reached, so that flicking back to check something earlier could not
+    /// lose your place — but it also meant every way of moving backwards was
+    /// discarded. Scrubbing back twenty pages and closing reopened the comic
+    /// at the far end, and since a scrub is usually a jump back, scrubbing
+    /// looked like it did not count at all.
     public func setLastPage(_ page: Int, issueID: Int) throws {
+        // Reaching a second page starts the comic, and nothing about moving
+        // around inside it afterwards un-starts it. Scrubbing back to the
+        // cover changes where you resume, not whether you have begun.
         try db.run("""
-            UPDATE issue SET last_page = MAX(IFNULL(last_page, 0), ?) WHERE id = ?
-            """, [.int(Int64(page)), .int(Int64(issueID))])
+            UPDATE issue SET last_page = ?,
+                             started_at = CASE
+                                 WHEN ? >= 1 AND started_at IS NULL
+                                 THEN strftime('%s', 'now') ELSE started_at END
+            WHERE id = ?
+            """, [.int(Int64(page)), .int(Int64(page)), .int(Int64(issueID))])
     }
 
     public func lastPage(forIssue issueID: Int) throws -> Int {
@@ -542,8 +572,8 @@ public final class Store: @unchecked Sendable {
             let terms = states.sorted { $0.rawValue < $1.rawValue }.map { state -> String in
                 switch state {
                 case .read:    return "i.read_at IS NOT NULL"
-                case .reading: return "(i.read_at IS NULL AND IFNULL(i.last_page, 0) >= 1)"
-                case .unread:  return "(i.read_at IS NULL AND IFNULL(i.last_page, 0) < 1)"
+                case .reading: return "(i.read_at IS NULL AND i.started_at IS NOT NULL)"
+                case .unread:  return "(i.read_at IS NULL AND i.started_at IS NULL)"
                 }
             }
             sql.append("(" + terms.joined(separator: " OR ") + ")")
@@ -570,7 +600,8 @@ public final class Store: @unchecked Sendable {
                    i.hero, i.edition, i.publisher,
                    i.read_at IS NOT NULL,
                    i.last_page,
-                   i.download_failed_at IS NOT NULL
+                   i.download_failed_at IS NOT NULL,
+                   i.started_at IS NOT NULL
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
             """, terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
@@ -580,6 +611,7 @@ public final class Store: @unchecked Sendable {
                 publisher: row.string(11),
                 isRead: (row.int(12) ?? 0) == 1,
                 lastPage: row.int(13),
+                started: (row.int(15) ?? 0) == 1,
                 downloadFailed: (row.int(14) ?? 0) == 1,
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,

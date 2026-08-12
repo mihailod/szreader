@@ -118,8 +118,23 @@ public final class ComicDocument {
     public convenience init(fileURL: URL, workDirectory: URL? = nil) throws {
         let work = workDirectory
             ?? fileURL.deletingPathExtension().appendingPathExtension("unpacked")
-        Self.discardNestedVolumes(in: work)
-        var current = try ArchiveOpener.open(fileURL, workDirectory: work)
+        // Every archive of a multi-volume comic gets a directory of its own.
+        // The reader indexes a work directory by walking it, so two archives
+        // sharing one — or worse, one nested inside the other's — means each
+        // sees the other's pages as its own.
+        //
+        // A single-archive comic keeps the whole directory, as before: giving
+        // it a subdirectory would re-unpack every comic already on disk to no
+        // purpose.
+        let companions = Self.companionFiles(of: fileURL)
+        var current: ArchiveReader
+        if companions.isEmpty {
+            current = try ArchiveOpener.open(fileURL, workDirectory: work)
+        } else {
+            current = try ArchiveOpener.open(
+                fileURL, workDirectory: work.appendingPathComponent("volume-1"))
+            Self.discardLooseUnpack(in: work, of: current)
+        }
 
         for depth in 0..<2 {
             let entries = try current.entries()
@@ -138,7 +153,7 @@ public final class ComicDocument {
             current = try ArchiveOpener.open(
                 unwrapped, workDirectory: work.appendingPathComponent("nested-\(depth)-work"))
         }
-        try self.init(volumes: [current] + Self.companions(of: fileURL, beside: work))
+        try self.init(volumes: [current] + Self.open(companions, beside: work))
     }
 
     /// Later pieces that turn out to be whole archives of their own.
@@ -149,51 +164,72 @@ public final class ComicDocument {
     /// pages volume one did not have is the rest of the comic. A piece that
     /// opens with the pages volume one already had is dropped upstream, in
     /// `init(volumes:)`.
-    /// Clears volume directories left inside `work` by the build that nested
-    /// them, so a comic unpacked by that build is not read as double-length
-    /// for ever. Cheap and silent when there are none, which is the normal
-    /// case.
-    private static func discardNestedVolumes(in work: URL) {
+    /// Clears an unpacked tree sitting in the root of `work`, left by the
+    /// layout that gave volume one the whole directory.
+    ///
+    /// Only files the archive is known to contain are removed, so the
+    /// downloaded archives themselves are never at risk. Without this a comic
+    /// already on disk keeps a second copy of every page for good: nothing
+    /// reads them, and nothing else would ever delete them.
+    private static func discardLooseUnpack(in work: URL, of reader: ArchiveReader) {
         let fm = FileManager.default
-        let stale = (try? fm.contentsOfDirectory(at: work, includingPropertiesForKeys: nil)) ?? []
-        for url in stale where url.lastPathComponent.hasPrefix("volume-") {
-            try? fm.removeItem(at: url)
+        let marker = work.appendingPathComponent(UnpackMarker.name)
+        guard fm.fileExists(atPath: marker.path) else { return }
+
+        for entry in (try? reader.entries()) ?? [] {
+            try? fm.removeItem(at: work.appendingPathComponent(entry))
+        }
+        try? fm.removeItem(at: marker)
+
+        // The folders those pages sat in, now that they hold nothing.
+        let left = (try? fm.contentsOfDirectory(at: work, includingPropertiesForKeys: nil)) ?? []
+        for url in left where !url.lastPathComponent.hasPrefix("volume-") {
+            if (try? fm.contentsOfDirectory(atPath: url.path))?.isEmpty == true {
+                try? fm.removeItem(at: url)
+            }
         }
     }
 
-    private static func companions(of first: URL, beside work: URL) -> [ArchiveReader] {
+    /// Files that might be later pieces of the same comic, in volume order.
+    ///
+    /// Decided on names alone, because this has to be known before volume one
+    /// is opened — whether they really are pieces is settled afterwards, by
+    /// opening them.
+    private static func companionFiles(of first: URL) -> [(url: URL, part: Int)] {
         guard let firstPart = MultiPartArchive.partNumber(in: first.lastPathComponent),
               firstPart == 1 else { return [] }
 
-        let directory = first.deletingLastPathComponent()
         let stem = MultiPartArchive.stem(of: first.lastPathComponent)
         let siblings = (try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: [.isRegularFileKey])) ?? []
+            at: first.deletingLastPathComponent(),
+            includingPropertiesForKeys: [.isRegularFileKey])) ?? []
 
-        let ordered = siblings.compactMap { url -> (URL, Int)? in
-            let name = url.lastPathComponent
-            // Unpacked directories carry the same names as the archives they
-            // came from; only a file can be a second archive.
+        return siblings.compactMap { url -> (URL, Int)? in
+            // Unpacked directories carry the names of the archives they came
+            // from; only a file can be a second archive.
             guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?
-                .isRegularFile == true else { return nil }
-            guard MultiPartArchive.stem(of: name) == stem,
-                  let part = MultiPartArchive.partNumber(in: name), part > 1
+                    .isRegularFile == true,
+                  MultiPartArchive.stem(of: url.lastPathComponent) == stem,
+                  let part = MultiPartArchive.partNumber(in: url.lastPathComponent),
+                  part > 1
             else { return nil }
             return (url, part)
         }.sorted { $0.1 < $1.1 }
+    }
 
-        return ordered.compactMap { url, part in
-            // A sibling of volume one's work directory, never a child of it.
-            // Nested, the second half's pages land *inside* the first half's
-            // unpacked tree — harmless on the first open, because volume one
-            // has already been indexed by then, but on every open after that
-            // volume one walks the directory afresh, finds the second half
-            // sitting in it, and reports the whole comic. Volume two then
-            // adds its pages again under their own paths, so the comic grows
-            // by half every time it is opened.
-            let sibling = work.deletingLastPathComponent()
-                .appendingPathComponent(work.lastPathComponent + "-volume-\(part)")
-            guard let reader = try? ArchiveOpener.open(url, workDirectory: sibling),
+    /// Those of them that turn out to be whole archives of their own.
+    ///
+    /// Opened rather than judged by name, because the names of the two
+    /// conventions are indistinguishable. A piece that will not open is a RAR
+    /// fragment, already folded into volume one. A piece that opens with
+    /// pages volume one did not have is the rest of the comic. A piece that
+    /// opens with the pages volume one already had is dropped upstream, in
+    /// `init(volumes:)`.
+    private static func open(_ companions: [(url: URL, part: Int)],
+                             beside work: URL) -> [ArchiveReader] {
+        companions.compactMap { url, part in
+            let own = work.appendingPathComponent("volume-\(part)")
+            guard let reader = try? ArchiveOpener.open(url, workDirectory: own),
                   let names = try? reader.pageNames(), !names.isEmpty
             else { return nil }
             return reader
