@@ -298,3 +298,114 @@ final class TitleCaseTests: XCTestCase {
         XCTAssertEqual(try reopened.search("dijamantska", limit: 10).count, 1)
     }
 }
+
+/// Artwork taken from a downloaded comic's own first page, for issues the
+/// forum gave no cover image.
+final class PageCoverTests: XCTestCase {
+
+    private var root: URL!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    }
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+
+    func testReferenceRoundTrips() {
+        XCTAssertEqual(Library.coverReference(issueID: 306), "szpage:306")
+        XCTAssertEqual(Library.coverIssueID(reference: "szpage:306"), 306)
+    }
+
+    /// A remote cover must not be mistaken for a page-derived one — that is
+    /// the check standing between an http cover and being looked for on disk.
+    func testRemoteCoversAreNotTreatedAsPageCovers() {
+        XCTAssertNil(Library.coverIssueID(reference: "https://stripovi.com/x.jpg"))
+        XCTAssertNil(Library.coverIssueID(reference: "http://i.imgur.com/wW7QGs8.jpg"))
+    }
+
+    /// The cover lives beside the downloads, not inside the issue's folder:
+    /// removing the download deletes that folder, and the artwork should
+    /// survive it.
+    func testCoverOutlivesRemovingTheDownload() throws {
+        let paths = LibraryPaths(root: root)
+        let cover = paths.coverFile(forIssue: 306)
+        try Data("jpeg".utf8).write(to: cover)
+
+        // What removing a download does: the issue's own directory goes.
+        try? FileManager.default.removeItem(at: paths.directory(forIssue: 306))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cover.path),
+                      "the cover went with the download")
+    }
+
+    /// Reading a cover back has to survive a nil-vs-missing mix-up: the store
+    /// getter is optional and so is the column, and treating "no row" as "has
+    /// a cover" would silently skip capturing one.
+    func testStoreRoundTripsTheReference() throws {
+        let store = try Store()
+        try store.ingest(html: """
+            <div>MM_LMS_083</div>
+            <div>http://www.mediafire.com/download.php?maab0r1u1ye1eat</div>
+            """)
+        let id = try XCTUnwrap(store.recent(limit: nil).first).id
+
+        XCTAssertNil(((try? store.coverURL(forIssue: id)) ?? nil),
+                     "this issue has no cover and must read as having none")
+
+        try store.setCoverURL(Library.coverReference(issueID: id), issueID: id)
+        XCTAssertEqual(try store.coverURL(forIssue: id), "szpage:\(id)")
+        XCTAssertEqual(try XCTUnwrap(store.recent(limit: nil).first).coverURL, "szpage:\(id)")
+    }
+}
+
+/// The forum's "picture missing" graphic is not artwork.
+final class MissingPictureTests: XCTestCase {
+
+    private static let placeholder = "https://www.stripzona.com/port/images/picturemissing.png"
+
+    func testPlaceholderIsNotAPlausibleCover() {
+        XCTAssertFalse(Catalog.isPlausibleCover(Self.placeholder))
+        XCTAssertFalse(Catalog.isPlausibleCover(
+            "http://www.stripzona.com/port/images/picturemissing.png"))
+        // A real cover from the same host must still pass.
+        XCTAssertTrue(Catalog.isPlausibleCover(
+            "https://www.stripzona.com/port/images/thumbs/strider/Dzudas/Dzudas_01.jpg"))
+    }
+
+    /// What a live import actually sees: the page's own script has already
+    /// swapped a dead image for the placeholder, so it arrives as a real src.
+    func testIssueWithOnlyThePlaceholderGetsNoCover() throws {
+        let store = try Store()
+        try store.ingest(html: """
+            <title>Timothy Tatcher - SUPER STRIP - Timothy Tatcher - Stripzona</title>
+            <div><img class='bbc_img' src="\(Self.placeholder)"></div>
+            <div>002-Hollywood protiv mene</div>
+            <div>http://www.mediafire.com/?FAKE002</div>
+            """)
+        let issue = try XCTUnwrap(store.recent(limit: nil).first)
+        XCTAssertNil(issue.coverURL, "the placeholder was taken as artwork")
+    }
+
+    /// A library that already stored it heals on open, rather than keeping a
+    /// missing-picture graphic until the page is imported again.
+    func testStoredPlaceholderIsClearedOnOpen() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        let id: Int
+        do {
+            let store = try Store(path: path)
+            try store.ingest(html: """
+                <div>001-Prvi</div><div>http://www.mediafire.com/?FAKE001</div>
+                """)
+            id = try XCTUnwrap(store.recent(limit: nil).first).id
+            try store.setCoverURL(Self.placeholder, issueID: id)
+            XCTAssertNotNil(try store.coverURL(forIssue: id))
+        }
+
+        let reopened = try Store(path: path)
+        XCTAssertNil(try reopened.coverURL(forIssue: id),
+                     "the stored placeholder survived")
+    }
+}

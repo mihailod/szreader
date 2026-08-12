@@ -156,6 +156,60 @@ final class LabelStyleTests: XCTestCase {
         XCTAssertEqual(recs.first?.label?.number, 31)
     }
 
+    /// A reprint topic naming the story's own number between the collection
+    /// number and the title: "01 (SS 173) Johnny Logan 001 - Crni tigrovi".
+    /// Neither label pattern matched this, so the whole page attributed
+    /// nothing and imported nothing.
+    func testHeroAndStoryNumberBeforeTheTitle() {
+        let recs = Catalog.links(in: """
+            <div>01 (SS 173) Johnny Logan 001 - Crni tigrovi (02.01.1980.) \
+            - http://www.mediafire.com/?FAKEKEY001</div>
+            """)
+        XCTAssertEqual(recs.first?.label?.number, 1, "the collection number is the issue number")
+        XCTAssertEqual(recs.first?.label?.title, "Crni tigrovi")
+    }
+
+    /// The inserted run has to end in digits. Drop that requirement and this
+    /// line parses as issue 5 titled "nastavak", silently losing the first
+    /// half of the title. Declining to label it is the safe answer — an
+    /// unlabelled link is visibly missing, a truncated title is not.
+    func testNameWithoutAStoryNumberIsNotConsumed() {
+        let recs = Catalog.links(in:
+            "<div>05 (drzeko) Neki naslov - nastavak - http://www.mediafire.com/?FAKEKEY005</div>")
+        XCTAssertEqual(recs.count, 1, "the link itself should still be found")
+        XCTAssertNil(recs.first?.label?.title, "half the title was taken as the whole")
+    }
+
+    /// A reprint topic numbers its own issues 1…21 while the covers are named
+    /// for the original series, so every cover is filed under a number no
+    /// issue claims and position hands out the wrong art. The label says
+    /// which is which.
+    func testCoverMatchedByTheNumberInTheLabel() {
+        let covers = Catalog.covers(in: """
+            <div><img src="https://www.stripovi.com/naslovnice/AlanFord/TN/TN_JL_SS_173.jpg"></div>
+            <div><img src="https://www.stripovi.com/naslovnice/AlanFord/TN/TN_JL_SS_179.jpg"></div>
+            <div>01 (SS 173) Johnny Logan 001 - Crni tigrovi - http://www.mediafire.com/?FAKE001</div>
+            <div>02 (SS 179) Johnny Logan 031 - Namještaljka - http://www.mediafire.com/?FAKE002</div>
+            """)
+        XCTAssertEqual(covers[1], "https://www.stripovi.com/naslovnice/AlanFord/TN/TN_JL_SS_173.jpg")
+        XCTAssertEqual(covers[2], "https://www.stripovi.com/naslovnice/AlanFord/TN/TN_JL_SS_179.jpg")
+    }
+
+    /// A compound reference names no single cover, and taking its leading
+    /// number would pick one at random.
+    ///
+    /// A second label sits between the cover and the compound one so that
+    /// position cannot supply an answer of its own — what is left is whether
+    /// the cross-reference rule reaches for 89, which it must not.
+    func testCompoundCrossReferenceIsIgnored() {
+        let covers = Catalog.covers(in: """
+            <div><img src="https://www.stripovi.com/naslovnice/AlanFord/TN/TN_AF_SSB_89.jpg"></div>
+            <div>050 - Neki drugi - http://www.mediafire.com/?FAKE050</div>
+            <div>001 (SSB 089/001) - Grupa TNT - http://www.mediafire.com/?FAKE001</div>
+            """)
+        XCTAssertNil(covers[1], "issue 1 took the cover named for SSB 89")
+    }
+
     func testInlinePrevLine() {
         let recs = Catalog.links(in: """
             <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>

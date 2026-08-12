@@ -20,7 +20,16 @@ public enum LabelStyle: String, Sendable {
 enum Labels {
 
     // "013-Title" / "ZS 0418 - ZAGOR - Title" / "001 (SSB 089/001) - Title"
-    static let num = Rx(#"^(?:[A-ZČĆŠŽĐ]{2,5}\s+)?(\d{1,4})\s*(?:\([^)]*\))?\s*[-–.]\s*(.+?)\s*$"#)
+    //
+    // The optional run before the separator is a hero name and the story's
+    // own number, which some reprint topics carry between the collection
+    // number and the title: "01 (SS 173) Johnny Logan 001 - Crni tigrovi".
+    // It has to end in digits — a bare name there would swallow the first
+    // half of any title written "05 (drzeko) Neki naslov - nastavak".
+    static let num = Rx(
+        #"^(?:[A-ZČĆŠŽĐ]{2,5}\s+)?(\d{1,4})\s*(?:\([^)]*\))?"#
+        + #"(?:\s*[A-Za-zČĆŠŽĐčćšžđ][A-Za-zČĆŠŽĐčćšžđ\s]{1,30}?\s+\d{1,4})?"#
+        + #"\s*[-–.]\s*(.+?)\s*$"#)
 
     // "MN_LMS_511". TN_* are cover thumbnails hotlinked from stripovi.com, not labels.
     static let code = Rx(#"^(?!TN_)([A-ZČĆŠŽĐ][A-Z0-9ČĆŠŽĐ_]*_(\d{1,5}))$"#)

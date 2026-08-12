@@ -25,6 +25,17 @@ public struct LibraryPaths: Sendable {
     public func directory(forIssue id: Int) -> URL {
         root.appendingPathComponent("\(id)", isDirectory: true)
     }
+
+    /// Artwork taken from a comic's own first page.
+    ///
+    /// Beside the downloads rather than inside the issue's folder: removing a
+    /// download deletes that folder, and a cover the reader has been looking
+    /// at should not disappear with it.
+    public func coverFile(forIssue id: Int) -> URL {
+        let covers = root.appendingPathComponent("covers", isDirectory: true)
+        try? FileManager.default.createDirectory(at: covers, withIntermediateDirectories: true)
+        return covers.appendingPathComponent("\(id).jpg")
+    }
 }
 
 public struct DownloadOutcome: Equatable, Sendable {
@@ -161,6 +172,39 @@ public final class Library {
     /// leaves behind, which every later open reuses.
     public func prepareForReading(issueID: Int) throws {
         _ = try document(forIssue: issueID)
+    }
+
+    /// Saves the comic's first page as its artwork, and returns the reference
+    /// to record against the issue.
+    ///
+    /// For issues the forum gave no cover image — the shelf shows them as a
+    /// grey rectangle with an issue number, which is no help at all in
+    /// finding one. Once the comic is on the device its own first page is
+    /// almost always the cover, and is certainly better than a number.
+    ///
+    /// The reference is a scheme rather than a path. An absolute path is what
+    /// broke downloads when the container was renamed, and this file is found
+    /// from the library root the same way the archives are.
+    public func captureCover(issueID: Int, maxPixelSize: Int = 600) throws -> String {
+        let document = try document(forIssue: issueID)
+        guard let page = try document.page(0, maxPixelSize: maxPixelSize) else {
+            throw DownloadError.notAnArchive("first page could not be decoded")
+        }
+        let file = paths.coverFile(forIssue: issueID)
+        guard PageRenderer.writeJPEG(page, to: file) else {
+            throw DownloadError.notAnArchive("cover could not be written")
+        }
+        return Self.coverReference(issueID: issueID)
+    }
+
+    /// How a page-derived cover is written down. Resolved back to a file by
+    /// whoever loads covers.
+    public static func coverReference(issueID: Int) -> String { "szpage:\(issueID)" }
+
+    /// The issue id in a reference, if that is what this is.
+    public static func coverIssueID(reference: String) -> Int? {
+        guard reference.hasPrefix("szpage:") else { return nil }
+        return Int(reference.dropFirst("szpage:".count))
     }
 
     /// Opens a downloaded comic for reading.

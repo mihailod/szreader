@@ -170,8 +170,12 @@ final class AppModel: ObservableObject {
             // an IP blocked.
             let transport = ThrottledTransport(URLSessionTransport(), minInterval: 1.5)
             self.transport = transport
+            let paths = try LibraryPaths.standard()
+            // Covers taken from a comic's own first page live under the
+            // library, so whoever loads covers needs to know where that is.
+            CoverStore.libraryPaths = paths
             library = Library(store: store,
-                              paths: try LibraryPaths.standard(),
+                              paths: paths,
                               transport: transport,
                               downloader: URLSessionDownloader())
 
@@ -537,6 +541,20 @@ final class AppModel: ObservableObject {
                 self.progress[issueID] = nil
                 // A success clears any earlier failure mark.
                 try? self.store?.setDownloadFailed(false, issueID: issueID)
+
+                // An issue the forum gave no cover for shows on the shelf as
+                // a grey rectangle with its number in it. Now that the comic
+                // is here, its own first page is a better answer than the
+                // number — and nothing else is ever going to provide one.
+                //
+                // Before the refresh below, so the row redraws with it.
+                if let store = self.store,
+                   ((try? store.coverURL(forIssue: issueID)) ?? nil) == nil {
+                    let captured = try? await Task.detached(priority: .utility) {
+                        try library.captureCover(issueID: issueID)
+                    }.value
+                    if let captured { try? store.setCoverURL(captured, issueID: issueID) }
+                }
                 let mb = Double(outcome.bytes) / 1_048_576
                 // refresh() re-runs the search, so the row rebuilds with
                 // isDownloaded true and the cover turns colour at once.

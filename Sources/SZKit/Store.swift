@@ -180,6 +180,15 @@ public final class Store: @unchecked Sendable {
         try? db.execute("ALTER TABLE issue ADD COLUMN download_failed_at REAL")
         try? db.execute("ALTER TABLE issue ADD COLUMN started_at REAL")
 
+        // Libraries that already took the forum's "picture missing" graphic
+        // as artwork. Clearing it puts those issues back to having no cover,
+        // which is the truth and lets the first page stand in once the comic
+        // is downloaded.
+        try? db.execute("""
+            UPDATE issue SET cover_url = NULL
+            WHERE cover_url LIKE '%picturemissing%'
+            """)
+
         // Libraries written before there was a column for it: anything with a
         // place recorded past the cover was being read, and would otherwise
         // drop out of Reading the moment this build opened it.
@@ -501,6 +510,21 @@ public final class Store: @unchecked Sendable {
                                  THEN strftime('%s', 'now') ELSE started_at END
             WHERE id = ?
             """, [.int(Int64(page)), .int(Int64(page)), .int(Int64(issueID))])
+    }
+
+    /// The artwork reference recorded for an issue, if any.
+    public func coverURL(forIssue issueID: Int) throws -> String? {
+        var out: String?
+        try db.query("SELECT cover_url FROM issue WHERE id = ?",
+                     [.int(Int64(issueID))]) { row in out = row.string(0) }
+        return out
+    }
+
+    /// Records artwork for an issue. Used for covers taken from a downloaded
+    /// comic's own first page, which the forum page did not provide.
+    public func setCoverURL(_ url: String, issueID: Int) throws {
+        try db.run("UPDATE issue SET cover_url = ? WHERE id = ?",
+                   [.text(url), .int(Int64(issueID))])
     }
 
     public func lastPage(forIssue issueID: Int) throws -> Int {

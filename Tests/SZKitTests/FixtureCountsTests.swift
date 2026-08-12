@@ -18,6 +18,11 @@ final class FixtureCountsTests: XCTestCase {
 
     /// (filename fragment, total links, attributed) — measured by survey.py.
     ///
+    /// Johnny Logan came later than the spike and is measured here rather than
+    /// by it. Its one unattributed link is a second, "fixed" scan of issue 1
+    /// posted on its own line with no label of its own — an extra mirror, not
+    /// a missing comic.
+    ///
     /// Two entries have moved past the spike, and deliberately: the spike could
     /// not read labels that put the number after a dashed name ("Alef - SF
     /// magazin 01"), so it left most of Alef unattributed. Both pages were
@@ -29,6 +34,7 @@ final class FixtureCountsTests: XCTestCase {
         ("Alef",             51,   50),
         ("Asteriks",         20,   20),
         ("Dzudas",           33,   33),
+        ("Johnny Logan",     22,   21),
         ("Kapetan Miki",     67,   67),
         // Both Kit Teler pages and Martin Mystere were re-saved on 10 Aug 2026
         // with more of their content unlocked, so these are larger than the
@@ -80,8 +86,8 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 1192)
-        XCTAssertEqual(attributed, 1186)
+        XCTAssertEqual(total, 1214)
+        XCTAssertEqual(attributed, 1207)
     }
 
     /// Entity decoding is not optional: IPB writes `http&#58;//...`, and

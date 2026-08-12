@@ -20,6 +20,18 @@ public enum PageRenderer {
         return (w, h)
     }
 
+    /// Writes a JPEG, for the one image this app keeps rather than decodes:
+    /// a cover taken from a comic's own first page.
+    @discardableResult
+    public static func writeJPEG(_ image: CGImage, to url: URL, quality: Double = 0.8) -> Bool {
+        guard let destination = CGImageDestinationCreateWithURL(
+            url as CFURL, "public.jpeg" as CFString, 1, nil) else { return false }
+        CGImageDestinationAddImage(destination, image, [
+            kCGImageDestinationLossyCompressionQuality: quality,
+        ] as CFDictionary)
+        return CGImageDestinationFinalize(destination)
+    }
+
     /// Decodes at most `maxPixelSize` on the long edge, preserving aspect.
     ///
     /// Pass the screen's long edge in *pixels* (points x scale). Anything more

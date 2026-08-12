@@ -140,6 +140,17 @@ public struct PageContext: Equatable, Sendable {
             candidate = String(candidate.dropFirst(hero.count))
                 .trimmingCharacters(in: .whitespaces)
         }
+        // Some topics qualify the run with commas: "Johnny Logan, Vjesnik,
+        // 1980-1984" leaves ", Vjesnik, 1980-1984" once the hero is off the
+        // front. The edition is the first part that is a name rather than a
+        // span of years, and no edition in the corpus has a comma in it.
+        candidate = candidate.trimmingCharacters(in: CharacterSet(charactersIn: " ,-–"))
+        if candidate.contains(",") {
+            let named = candidate.split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .first { $0.contains(where: \.isLetter) }
+            candidate = named ?? candidate
+        }
         return candidate.isEmpty ? nil : candidate
     }
 
@@ -249,7 +260,9 @@ extension Catalog {
     ///
     ///  1. the stripovi.com filename, whose trailing number names the issue
     ///     outright — exact, so it always wins;
-    ///  2. failing that, the position of the images in the post.
+    ///  2. a second number the label itself gives, when the filenames are
+    ///     numbered by that instead;
+    ///  3. failing both, the position of the images in the post.
     ///
     /// Tier 2 exists for StripZona's own scanlations. Those are not catalogued
     /// on stripovi.com, so the art is attached to the post itself and its
@@ -259,6 +272,9 @@ extension Catalog {
         var out = numberedCovers(in: html)
         for (number, url) in numberedCovers(in: html, pattern: numberedImage)
         where out[number] == nil {
+            out[number] = url
+        }
+        for (number, url) in crossReferencedCovers(in: html, byNumber: out) where out[number] == nil {
             out[number] = url
         }
         for (number, url) in positionalCovers(in: html) where out[number] == nil {
@@ -298,6 +314,14 @@ extension Catalog {
         // to be issue 68 — and on a page that has an issue 68, silently take
         // its cover.
         "/uploads/av-", "sharelinks",
+        // The forum's own "picture missing" graphic. Every bbc_img carries it
+        // in an onerror handler, and an onload handler swaps it in for dead
+        // photobucket images — which updates the src attribute, so a page
+        // imported from the live DOM has it as a real src where the saved
+        // copy still shows the original link. Taking it as artwork is worse
+        // than having none: it looks deliberate, and it blocks the fallback
+        // that would otherwise use the comic's own first page.
+        "picturemissing",
     ]
 
     /// Covers are photographs; furniture is overwhelmingly GIF.
@@ -307,6 +331,34 @@ extension Catalog {
         let lower = url.lowercased()
         guard coverExtensions.contains(where: { lower.contains($0) }) else { return false }
         return !furniture.contains(where: lower.contains)
+    }
+
+    /// A label that gives the issue's number in another series as well as its
+    /// own: "01 (SS 173) Johnny Logan 001 - Crni tigrovi".
+    ///
+    /// The letters are required, and no slash is allowed inside the brackets,
+    /// so this reads "(SS 173)" but not "(SSB 089/001)" — a compound
+    /// reference names no single cover and its leading number would pick one
+    /// at random.
+    private static let crossReference = Rx(
+        #"^\s*(\d{1,4})\s*\(\s*[A-ZČĆŠŽĐ]{2,5}\s+(\d{1,5})\s*\)"#)
+
+    /// Tier 1b: covers filed under that other number.
+    ///
+    /// A reprint topic numbers its issues 1…21 while the covers are named for
+    /// the original series — TN_JL_SS_173.jpg for issue 1 — so tier 1 files
+    /// all of them under numbers no issue claims, and position then hands out
+    /// the wrong art: every group's last cover went to its first issue.
+    private static func crossReferencedCovers(in html: String,
+                                              byNumber: [Int: String]) -> [Int: String] {
+        var out: [Int: String] = [:]
+        for line in HTMLText.plainLines(html) {
+            guard let groups = crossReference.firstGroups(line),
+                  let issue = Int(groups[1]), let other = Int(groups[2]),
+                  issue != other, let url = byNumber[other] else { continue }
+            if out[issue] == nil { out[issue] = url }
+        }
+        return out
     }
 
     /// Tier 2: match images to issues by position.

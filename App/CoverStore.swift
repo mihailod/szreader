@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import SZKit
 import UIKit
 
 /// Decoded cover art, cached in memory and on disk.
@@ -19,6 +20,11 @@ import UIKit
 final class CoverStore: @unchecked Sendable {
 
     static let shared = CoverStore()
+
+    /// Where page-derived covers live. Set once the library is open, because
+    /// the path depends on the app container and must not be remembered
+    /// across launches.
+    nonisolated(unsafe) static var libraryPaths: LibraryPaths?
 
     private let memory = NSCache<NSString, UIImage>()
     private let directory: URL
@@ -80,6 +86,18 @@ final class CoverStore: @unchecked Sendable {
     // MARK: - Loading
 
     private func fetchAndDecode(_ url: String) async -> UIImage? {
+        // A cover taken from the comic's own first page: already on disk in
+        // the library, and nothing to fetch or cache a second time.
+        if let issueID = Library.coverIssueID(reference: url) {
+            guard let root = Self.libraryPaths,
+                  let data = try? Data(contentsOf: root.coverFile(forIssue: issueID)),
+                  let page = UIImage(data: data) else { return nil }
+            let decoded = page.preparingForDisplay() ?? page
+            store(decoded, url: url, grayscale: false)
+            if let gray = desaturate(decoded) { store(gray, url: url, grayscale: true) }
+            return decoded
+        }
+
         let file = directory.appendingPathComponent(digest(url))
 
         var data = try? Data(contentsOf: file)
