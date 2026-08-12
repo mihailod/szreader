@@ -38,9 +38,87 @@ extension ArchiveReader {
     }
 }
 
+/// Pages that have already been unpacked, read straight off the disk.
+///
+/// The archive they came out of is deleted once they exist, so this is how an
+/// unpacked comic is opened from then on. It is also what the RAR and 7z
+/// readers become after their one extraction — both index a directory and
+/// serve files out of it — with no archive left to fall back on.
+public struct UnpackedReader: ArchiveReader {
+    private let root: URL
+    private let names: [String]
+
+    public init(root: URL) {
+        self.root = root
+        self.names = Self.walk(root).filter { $0 != UnpackMarker.name }
+    }
+
+    private static func walk(_ root: URL) -> [String] {
+        let fm = FileManager.default
+        guard let e = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey])
+        else { return [] }
+        var out: [String] = []
+        let prefix = root.standardizedFileURL.path
+        for case let url as URL in e {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?
+                    .isRegularFile == true else { continue }
+            var path = url.standardizedFileURL.path
+            if path.hasPrefix(prefix) { path.removeFirst(prefix.count) }
+            out.append(path.hasPrefix("/") ? String(path.dropFirst()) : path)
+        }
+        return out
+    }
+
+    public func entries() throws -> [String] { names }
+
+    public func data(for entry: String) throws -> Data {
+        guard names.contains(entry) else { throw ArchiveError.entryNotFound(entry) }
+        return try Data(contentsOf: root.appendingPathComponent(entry))
+    }
+}
+
 /// Opens whichever container the bytes actually are.
 public enum ArchiveOpener {
-    /// Opens whichever container the bytes actually are.
+    /// Pages that have already been unpacked, read straight off the disk.
+///
+/// The archive they came out of is deleted once they exist, so this is how an
+/// unpacked comic is opened from then on. It is also what the RAR and 7z
+/// readers become after their one extraction — both index a directory and
+/// serve files out of it — with no archive left to fall back on.
+public struct UnpackedReader: ArchiveReader {
+    private let root: URL
+    private let names: [String]
+
+    public init(root: URL) {
+        self.root = root
+        self.names = Self.walk(root).filter { $0 != UnpackMarker.name }
+    }
+
+    private static func walk(_ root: URL) -> [String] {
+        let fm = FileManager.default
+        guard let e = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey])
+        else { return [] }
+        var out: [String] = []
+        let prefix = root.standardizedFileURL.path
+        for case let url as URL in e {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?
+                    .isRegularFile == true else { continue }
+            var path = url.standardizedFileURL.path
+            if path.hasPrefix(prefix) { path.removeFirst(prefix.count) }
+            out.append(path.hasPrefix("/") ? String(path.dropFirst()) : path)
+        }
+        return out
+    }
+
+    public func entries() throws -> [String] { names }
+
+    public func data(for entry: String) throws -> Data {
+        guard names.contains(entry) else { throw ArchiveError.entryNotFound(entry) }
+        return try Data(contentsOf: root.appendingPathComponent(entry))
+    }
+}
+
+/// Opens whichever container the bytes actually are.
     ///
     /// `workDirectory` is used by RAR and 7z, both of which unpack to disk.
     /// It defaults to a sibling of the archive so callers that do not care

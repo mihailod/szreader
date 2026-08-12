@@ -96,32 +96,51 @@ public enum Catalog {
             urls = Array(NSOrderedSet(array: urls)) as? [String] ?? urls
 
             if !urls.isEmpty {
+                // One label for the whole line, taken from the text in front
+                // of the *first* link.
+                //
+                // A line often carries several links for one issue: "01. Bob
+                // Moran: <a> [181 MB] + <b> [143 MB]". Reading the text before
+                // each link in turn made the second one's label "Bob Moran:
+                // http://…[181.20 MB] +" — a different title for the same
+                // number, so the issue was imported twice.
+                let before = line.components(separatedBy: urls[0]).first?
+                    .trimmingCharacters(in: trimSet) ?? ""
+
+                let style: LabelStyle?
+                let label: IssueLabel?
+                let stamp: Int?
+                // "MM_LMS_031 - http://..." puts code and URL on one line.
+                // `code` anchors to end-of-line, so without this check the
+                // previous label stays pending and swallows the block.
+                if !before.isEmpty, let g = Labels.code.firstGroups(before) {
+                    instance += 1
+                    let named = g.capture(3).isEmpty ? nil : TitleCleaner.tidyInline(g.capture(3))
+                    style = .labeledInline
+                    label = IssueLabel(code: g[1], number: Int(g[2]), title: named)
+                    stamp = instance
+                } else if !before.isEmpty, let g = Labels.num.firstGroups(before) {
+                    instance += 1
+                    style = .inlineSameLine
+                    label = IssueLabel(number: Int(g[1]), title: TitleCleaner.tidyInline(g[2]))
+                    stamp = instance
+                } else if let p = pendingNum {
+                    style = .inlinePrevLine
+                    label = p.label
+                    stamp = p.instance
+                } else if let p = pendingCode {
+                    style = .labeledBlock
+                    label = p.label
+                    stamp = p.instance
+                } else {
+                    style = nil
+                    label = nil
+                    stamp = nil
+                }
+
+                // Every link on the line is a way of getting the same issue.
                 for u in urls {
-                    let before = line.components(separatedBy: u).first?
-                        .trimmingCharacters(in: trimSet) ?? ""
-                    // "MM_LMS_031 - http://..." puts code and URL on one line.
-                    // `code` anchors to end-of-line, so without this check the
-                    // previous label stays pending and swallows the block.
-                    if !before.isEmpty, let g = Labels.code.firstGroups(before) {
-                        instance += 1
-                        out.append(.init(url: u, style: .labeledInline,
-                                         label: IssueLabel(code: g[1], number: Int(g[2])),
-                                         instance: instance))
-                    } else if !before.isEmpty, let g = Labels.num.firstGroups(before) {
-                        instance += 1
-                        out.append(.init(url: u, style: .inlineSameLine,
-                                         label: IssueLabel(number: Int(g[1]),
-                                                           title: TitleCleaner.tidyInline(g[2])),
-                                         instance: instance))
-                    } else if let p = pendingNum {
-                        out.append(.init(url: u, style: .inlinePrevLine,
-                                         label: p.label, instance: p.instance))
-                    } else if let p = pendingCode {
-                        out.append(.init(url: u, style: .labeledBlock,
-                                         label: p.label, instance: p.instance))
-                    } else {
-                        out.append(.init(url: u, style: nil, label: nil, instance: nil))
-                    }
+                    out.append(.init(url: u, style: style, label: label, instance: stamp))
                 }
                 continue
             }
@@ -132,7 +151,10 @@ public enum Catalog {
             }
             if let g = Labels.code.firstGroups(line) {
                 instance += 1
-                pendingCode = (IssueLabel(code: g[1], number: Int(g[2])), instance)
+                // Some topics write the title beside the code rather than
+                // leaving the issue nameless: "ZS_85 - Komadant Mark".
+                let named = g.capture(3).isEmpty ? nil : TitleCleaner.tidyInline(g.capture(3))
+                pendingCode = (IssueLabel(code: g[1], number: Int(g[2]), title: named), instance)
                 pendingNum = nil
                 continue
             }

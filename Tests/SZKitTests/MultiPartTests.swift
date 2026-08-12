@@ -204,3 +204,39 @@ final class MultiPartDownloadTests: XCTestCase {
         }
     }
 }
+
+/// Gigant 01 and 02, whose two links are halves of one archive.
+///
+/// The filenames were read from the live mirrors. Splitting the issue in two
+/// left each half as a lone mirror of its own comic, and a single mirror is
+/// never examined for parts — so the app downloaded half an archive and could
+/// not open it. The names themselves were always sufficient.
+final class GigantSplitTests: XCTestCase {
+
+    private let names = [
+        "Gigant 01 (rescan)(Mikos & folpi).part1",
+        "Gigant 01 (rescan)(Mikos & folpi).part2",
+    ]
+
+    func testHalvesAreRecognisedAsOneArchive() throws {
+        let parts = try XCTUnwrap(MultiPartArchive.parts(
+            names.map { (source: $0, filename: $0) }))
+        XCTAssertEqual(parts.map(\.part), [1, 2])
+        XCTAssertEqual(parts.first?.filename, names[0])
+    }
+
+    /// No extension, and the credits carry a bracketed group before the part
+    /// marker — neither may stop the stem from matching.
+    func testBothHalvesShareAStem() {
+        XCTAssertEqual(MultiPartArchive.stem(of: names[0]),
+                       MultiPartArchive.stem(of: names[1]))
+        XCTAssertEqual(MultiPartArchive.partNumber(in: names[1]), 2)
+    }
+
+    /// The other Gigant issues are single files and must not look split.
+    func testASingleFileIsNotASplitArchive() {
+        XCTAssertNil(MultiPartArchive.parts([
+            (source: "a", filename: "Gigant 03 (rescan)(Mikos & folpi)"),
+        ]))
+    }
+}

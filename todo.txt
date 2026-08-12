@@ -5,3 +5,10 @@
 - lms veliki blek pics messed up
 
 - add settings (/ help / about) screen
+
+testing:
+- 3rd page of zagor
+- rest of komandant mark
+
+priority:
+- bonelli zs lms

@@ -210,6 +210,51 @@ final class LabelStyleTests: XCTestCase {
         XCTAssertNil(covers[1], "issue 1 took the cover named for SSB 89")
     }
 
+    /// Komandant Mark writes the title beside the code — "ZS_85 - Komadant
+    /// Mark" — with the link on the next line. The code pattern ended at the
+    /// number, so the line matched nothing at all and the whole page
+    /// attributed nothing.
+    func testCodeFollowedByATitle() {
+        let recs = Catalog.links(in: """
+            <div>ZS_85 - Komadant Mark</div>
+            <div>https://mega.nz/#!FAKEID085!FAKEKEY</div>
+            """)
+        XCTAssertEqual(recs.map(\.style), [.labeledBlock])
+        XCTAssertEqual(recs.first?.label?.code, "ZS_85")
+        XCTAssertEqual(recs.first?.label?.number, 85)
+        XCTAssertEqual(recs.first?.label?.title, "Komadant Mark")
+    }
+
+    /// A bare code still labels the block that follows it, with no title.
+    func testBareCodeStillHasNoTitle() {
+        let recs = Catalog.links(in: """
+            <div>MN_LMS_518</div>
+            <div>http://www.mediafire.com/?FAKEKEY518</div>
+            """)
+        XCTAssertEqual(recs.map(\.style), [.labeledBlock])
+        XCTAssertEqual(recs.first?.label?.code, "MN_LMS_518")
+        XCTAssertNil(recs.first?.label?.title)
+    }
+
+    /// Several links for one issue on a single line: "01. Bob Moran: <a>
+    /// [181 MB] + <b> [143 MB]".
+    ///
+    /// The label used to be read from the text in front of each link in turn,
+    /// so the second one's title came out as "Bob Moran: http://…[181.20 MB]
+    /// +" — a different title under the same number, which imported the issue
+    /// a second time.
+    func testSeveralLinksOnOneLineShareItsLabel() {
+        let recs = Catalog.links(in: """
+            <div>01. Bob Moran: http://www.mediafire.com/?FAKEKEY001 [181.20 MB] \
+            + http://www.mediafire.com/?FAKEKEY002 [143.58 MB]</div>
+            """)
+        XCTAssertEqual(recs.count, 2, "both links should be found")
+        XCTAssertEqual(recs.map { $0.label?.number }, [1, 1])
+        XCTAssertEqual(recs.map { $0.label?.title }, ["Bob Moran:", "Bob Moran:"])
+        XCTAssertEqual(recs.map(\.instance), [recs.first?.instance, recs.first?.instance],
+                       "they are one issue, so they belong to one instance")
+    }
+
     func testInlinePrevLine() {
         let recs = Catalog.links(in: """
             <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>

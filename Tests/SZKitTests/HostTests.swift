@@ -210,3 +210,37 @@ final class HostRegistryTests: XCTestCase {
         } catch { XCTFail("wrong error: \(error)") }
     }
 }
+
+/// MediaFire hands filenames back HTML-escaped.
+final class MediaFireEscapingTests: XCTestCase {
+
+    private func probe(redirectingTo location: String) async throws -> String? {
+        let transport = StubTransport { _ in
+            HTTPResponse(status: 302, headers: ["Location": location])
+        }
+        return try await MediaFireHost().probe(
+            URL(string: "http://www.mediafire.com/?abcd1234efgh")!, via: transport).filename
+    }
+
+    /// Real name, from the live mirror of Gigant 01. Left escaped it reaches
+    /// the shelf, because a title recovered from a filename is shown as it is.
+    func testAmpersandIsDecoded() async throws {
+        let name = try await probe(redirectingTo:
+            "http://www.mediafire.com/file/abcd1234efgh/Gigant+01+(rescan)(Mikos+&amp;+folpi).rar")
+        XCTAssertEqual(name, "Gigant 01 (rescan)(Mikos & folpi).rar")
+    }
+
+    /// A title carrying one, which is where it would actually be seen.
+    func testDecodedNameGivesACleanTitle() async throws {
+        let name = try await probe(redirectingTo:
+            "http://www.mediafire.com/file/abcd1234efgh/LMS+517+-+Mister+No+-+Bes+&amp;+osveta.cbr")
+        XCTAssertEqual(TitleCleaner.parse(try XCTUnwrap(name)).title, "Bes & osveta")
+    }
+
+    /// A bare ampersand must survive untouched.
+    func testPlainAmpersandIsLeftAlone() async throws {
+        let name = try await probe(redirectingTo:
+            "http://www.mediafire.com/file/abcd1234efgh/Zagor+-+Otac+&+sin.cbz")
+        XCTAssertEqual(name, "Zagor - Otac & sin.cbz")
+    }
+}

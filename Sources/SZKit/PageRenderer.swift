@@ -127,6 +127,62 @@ public final class ComicDocument {
     /// `.cbz`. Depth is capped: two levels covers every wrapper seen in the
     /// corpus, and refusing to recurse further means a maliciously nested
     /// archive cannot spin the unpacker.
+    /// A comic whose archives are gone, opened from the pages they left.
+    ///
+    /// Volume directories when it spanned several archives, the work
+    /// directory itself when it was one. The unpack marker is what makes this
+    /// trustworthy: without it a directory half-filled by an interrupted
+    /// extraction would read as a short comic.
+    public convenience init(unpackedAt directory: URL) throws {
+        let fm = FileManager.default
+        let names = (try? fm.contentsOfDirectory(atPath: directory.path)) ?? []
+
+        // An outer archive holding one inner archive — a RAR volume set whose
+        // volumes join into a single .cbr, say — is unwrapped into
+        // "nested-<depth>-work", and that is where the pages end up. The
+        // volume directories then hold the inner archive rather than any
+        // pages, so looking there finds a comic with nothing in it.
+        let nested = names
+            .filter { $0.hasPrefix("nested-") && $0.hasSuffix("-work") }
+            .sorted()
+            .last
+            .map { directory.appendingPathComponent($0, isDirectory: true) }
+
+        let volumes = names
+            .filter { $0.hasPrefix("volume-") }
+            .sorted { (Int($0.dropFirst(7)) ?? 0) < (Int($1.dropFirst(7)) ?? 0) }
+            .map { directory.appendingPathComponent($0, isDirectory: true) }
+
+        let roots: [URL]
+        if let nested { roots = [nested] }
+        else if !volumes.isEmpty { roots = volumes }
+        else { roots = [directory] }
+        guard roots.allSatisfy({
+            fm.fileExists(atPath: $0.appendingPathComponent(UnpackMarker.name).path)
+        }) else { throw ArchiveError.corrupt("not unpacked") }
+
+        // The same rule the archive side applies, because this is now the
+        // only side that ever runs: a volume holding nothing the earlier ones
+        // did not already have is a second copy of the comic, and once the
+        // archives are gone nothing else will ever come back to clear it.
+        var readers: [ArchiveReader] = []
+        var seen: Set<String> = []
+        for root in roots {
+            let reader = UnpackedReader(root: root)
+            let names = (try? reader.pageNames()) ?? []
+            guard !names.isEmpty, !names.allSatisfy(seen.contains) else {
+                // Never the work directory itself — that is the comic.
+                if roots.count > 1 { try? fm.removeItem(at: root) }
+                continue
+            }
+            seen.formUnion(names)
+            readers.append(reader)
+        }
+        guard !readers.isEmpty else { throw ArchiveError.corrupt("no readable pages unpacked") }
+
+        try self.init(volumes: readers)
+    }
+
     public convenience init(fileURL: URL, workDirectory: URL? = nil) throws {
         let work = workDirectory
             ?? fileURL.deletingPathExtension().appendingPathExtension("unpacked")
@@ -165,7 +221,8 @@ public final class ComicDocument {
             current = try ArchiveOpener.open(
                 unwrapped, workDirectory: work.appendingPathComponent("nested-\(depth)-work"))
         }
-        try self.init(volumes: [current] + Self.open(companions, beside: work))
+        try self.init(volumes: [current] + Self.open(companions, beside: work,
+                                                     after: (try? current.pageNames()) ?? []))
     }
 
     /// Later pieces that turn out to be whole archives of their own.
@@ -237,15 +294,28 @@ public final class ComicDocument {
     /// pages volume one did not have is the rest of the comic. A piece that
     /// opens with the pages volume one already had is dropped upstream, in
     /// `init(volumes:)`.
-    private static func open(_ companions: [(url: URL, part: Int)],
-                             beside work: URL) -> [ArchiveReader] {
-        companions.compactMap { url, part in
+    private static func open(_ companions: [(url: URL, part: Int)], beside work: URL,
+                             after firstPages: [String]) -> [ArchiveReader] {
+        var seen = Set(firstPages)
+        var readers: [ArchiveReader] = []
+        for (url, part) in companions {
             let own = work.appendingPathComponent("volume-\(part)")
             guard let reader = try? ArchiveOpener.open(url, workDirectory: own),
-                  let names = try? reader.pageNames(), !names.isEmpty
-            else { return nil }
-            return reader
+                  let names = try? reader.pageNames(), !names.isEmpty,
+                  !names.allSatisfy(seen.contains)
+            else {
+                // Nothing new here, or nothing readable. Either way whatever
+                // was unpacked is dead weight and has to go: a RAR volume set
+                // is joined by unrar when the first volume is opened, so
+                // extracting the second leaves a whole second copy of the
+                // comic on disk — for a 325 MB download, 325 MB wasted.
+                try? FileManager.default.removeItem(at: own)
+                continue
+            }
+            seen.formUnion(names)
+            readers.append(reader)
         }
+        return readers
     }
 
     public var pageCount: Int { pages.count }

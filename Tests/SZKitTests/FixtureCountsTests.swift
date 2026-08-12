@@ -34,8 +34,10 @@ final class FixtureCountsTests: XCTestCase {
         ("Alef",             51,   50),
         ("Asteriks",         20,   20),
         ("Dzudas",           33,   33),
+        ("Gigant",           79,   79),
         ("Johnny Logan",     22,   21),
         ("Kapetan Miki",     67,   67),
+        ("Komandant Mark",   37,   37),
         // Both Kit Teler pages and Martin Mystere were re-saved on 10 Aug 2026
         // with more of their content unlocked, so these are larger than the
         // spike measured. The fixtures changed, not the parser — each page was
@@ -50,7 +52,8 @@ final class FixtureCountsTests: XCTestCase {
         ("Orka -",            62,   62),
         ("Orka Specijal",     30,   30),
         ("Zagor - LUNOV",     43,   43),
-        ("Zagor - ZLATNA",   125,  125),
+        ("Zagor - ZLATNA SERIJA - ZS", 125, 125),
+        ("ZLATNA SERIJA - Page 2",      120, 120),
     ]
 
     private func html(matching fragment: String) throws -> String? {
@@ -86,8 +89,41 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 1214)
-        XCTAssertEqual(attributed, 1207)
+        XCTAssertEqual(total, 1450)
+        XCTAssertEqual(attributed, 1443)
+    }
+
+    /// A long run split across forum pages has to read as one series.
+    ///
+    /// The second page is a separate topic page with its own header, so
+    /// nothing but the parse ties it to the first: same hero, same edition,
+    /// and numbering that carries on rather than restarting. If any of those
+    /// drifted, the shelf would show two Zagors, or two issue 561s.
+    func testZlatnaSerijaContinuesAcrossPages() throws {
+        guard let one = try html(matching: "Zagor - ZLATNA SERIJA - ZS"),
+              let two = try html(matching: "ZLATNA SERIJA - Page 2")
+        else { throw XCTSkip("Zagor fixtures not present") }
+
+        let store = try Store()
+        try store.ingest(html: one)
+        let afterFirst = try store.recent(limit: nil).count
+        try store.ingest(html: two)
+        let rows = try store.recent(limit: nil)
+
+        XCTAssertEqual(Set(rows.compactMap(\.edition)), ["ZLATNA SERIJA"],
+                       "the two pages disagree about the edition")
+        XCTAssertEqual(rows.count, 240)
+        XCTAssertGreaterThan(rows.count, afterFirst, "the second page added nothing")
+
+        let numbers = rows.compactMap(\.number).sorted()
+        XCTAssertEqual(numbers.first, 13)
+        XCTAssertEqual(numbers.last, 908)
+        XCTAssertEqual(Set(numbers).count, numbers.count, "an issue number appears twice")
+
+        // Importing the same pages again is not a second copy of the run.
+        try store.ingest(html: one)
+        try store.ingest(html: two)
+        XCTAssertEqual(try store.recent(limit: nil).count, 240, "re-import duplicated the run")
     }
 
     /// Entity decoding is not optional: IPB writes `http&#58;//...`, and

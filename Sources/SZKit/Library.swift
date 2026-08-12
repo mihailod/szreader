@@ -197,6 +197,46 @@ public final class Library {
         return Self.coverReference(issueID: issueID)
     }
 
+    /// Drops what is left over from unwrapping an inner archive.
+    ///
+    /// A RAR volume set whose volumes join into a single .cbr leaves three
+    /// copies of the comic on the device: the .cbr the volumes extracted to,
+    /// the copy written out to be opened, and the pages themselves. Only the
+    /// pages are worth keeping, and they are the only one anything reads.
+    ///
+    /// Guarded by re-reading the comic from the pages alone first, because
+    /// this deletes the last thing that could produce them again.
+    private func discardUnwrapped(forIssue issueID: Int) {
+        let directory = paths.directory(forIssue: issueID)
+        let fm = FileManager.default
+        let contents = (try? fm.contentsOfDirectory(at: directory,
+                                                    includingPropertiesForKeys: nil)) ?? []
+        guard contents.contains(where: {
+            $0.lastPathComponent.hasPrefix("nested-") && $0.lastPathComponent.hasSuffix("-work")
+        }), let pages = try? ComicDocument(unpackedAt: directory),
+              Self.readsBackWhole(pages) else { return }
+
+        // Everything but the pages. Once they are unwrapped, nothing else in
+        // the directory is read: not the archives, not the inner archive they
+        // yielded, not the copy of it made to be opened, and not the marker
+        // left by the extraction that produced them.
+        for url in contents where !(url.lastPathComponent.hasPrefix("nested-")
+                                    && url.lastPathComponent.hasSuffix("-work")) {
+            try? fm.removeItem(at: url)
+        }
+    }
+
+    /// Whether a comic really reads back: both ends decode.
+    ///
+    /// The cheapest check that would have caught a truncated or half-written
+    /// extraction. Pages are decoded tiny, so this costs a few milliseconds
+    /// against a download worth hundreds of megabytes.
+    private static func readsBackWhole(_ document: ComicDocument) -> Bool {
+        guard document.pageCount > 0 else { return false }
+        let ends = Set([0, document.pageCount - 1])
+        return ends.allSatisfy { (try? document.page($0, maxPixelSize: 32)) ?? nil != nil }
+    }
+
     /// How a page-derived cover is written down. Resolved back to a file by
     /// whoever loads covers.
     public static func coverReference(issueID: Int) -> String { "szpage:\(issueID)" }
@@ -212,12 +252,65 @@ public final class Library {
     /// Unpacking a solid RAR is slow enough to notice, so callers should do
     /// this off the main thread.
     public func document(forIssue issueID: Int) throws -> ComicDocument {
+        let directory = paths.directory(forIssue: issueID)
+
+        // Already unpacked: the pages are all there is, because the archive
+        // they came from is deleted as soon as they exist. Comics unpacked by
+        // an earlier build still have theirs, so this is also where those get
+        // their space back.
+        if let unpacked = try? ComicDocument(unpackedAt: directory) {
+            discardArchives(forIssue: issueID, keeping: unpacked)
+            return unpacked
+        }
+
         guard let file = try store.downloadedFile(issueID: issueID),
               FileManager.default.fileExists(atPath: file.path.path) else {
             throw DownloadError.notAnArchive("not downloaded yet")
         }
-        return try ComicDocument(fileURL: file.path,
-                                 workDirectory: paths.directory(forIssue: issueID))
+        let document = try ComicDocument(fileURL: file.path, workDirectory: directory)
+        // The pages are out, so the archive is a second copy of the comic.
+        // Dropped here rather than only after a download, so a comic unpacked
+        // by an earlier build gets its space back the first time it is opened.
+        discardArchives(forIssue: issueID, keeping: document)
+        return document
+    }
+
+    /// Deletes the archives an issue was unpacked from.
+    ///
+    /// Only the archives: the recorded file and any sibling belonging to the
+    /// same split set. Everything else in the directory is pages — for a
+    /// single-archive comic they sit right beside it — and a rule any looser
+    /// than "same stem as the archive" would take them too.
+    ///
+    /// Deleting an archive is the one irreversible thing this app does to a
+    /// download, so it is done only against a comic that has been shown to
+    /// read back — the marker alone says an extraction finished, not that
+    /// what it produced can be decoded.
+    private func discardArchives(forIssue issueID: Int, keeping document: ComicDocument) {
+        // The test is whether the comic survives *without* them — opened from
+        // the directory alone, as every later read will. Checking the document
+        // in hand proves nothing: it was built from the archives, and a zip is
+        // served straight out of the file, so it reads back perfectly right up
+        // until the file is deleted and the comic becomes unopenable.
+        guard let standalone = try? ComicDocument(unpackedAt: paths.directory(forIssue: issueID)),
+              Self.readsBackWhole(standalone),
+              let recorded = try? store.downloadedFile(issueID: issueID)?.path
+        else { return }
+
+        let fm = FileManager.default
+        discardUnwrapped(forIssue: issueID)
+        let stem = MultiPartArchive.stem(of: recorded.lastPathComponent)
+        let siblings = (try? fm.contentsOfDirectory(
+            at: recorded.deletingLastPathComponent(),
+            includingPropertiesForKeys: [.isRegularFileKey])) ?? []
+        for url in siblings {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?
+                    .isRegularFile == true,
+                  url.lastPathComponent == recorded.lastPathComponent
+                    || MultiPartArchive.stem(of: url.lastPathComponent) == stem
+            else { continue }
+            try? fm.removeItem(at: url)
+        }
     }
 
     /// Bytes currently held by downloaded comics.
@@ -234,8 +327,13 @@ public final class Library {
                            progress: (@Sendable (DownloadProgress) -> Void)? = nil)
         async throws -> DownloadOutcome {
 
+        // Already here? The archive is deleted once its pages are out, so the
+        // question is whether the comic can be read, not whether the file it
+        // arrived in still exists. Asking about the file re-downloads every
+        // comic that has been unpacked.
         if let existing = try store.downloadedFile(issueID: issueID),
-           FileManager.default.fileExists(atPath: existing.path.path) {
+           FileManager.default.fileExists(atPath: existing.path.path)
+            || (try? ComicDocument(unpackedAt: paths.directory(forIssue: issueID))) != nil {
             return existing
         }
 

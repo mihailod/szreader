@@ -67,7 +67,8 @@ public struct MediaFireHost: FileHost {
                 HTTPRequest(url: current, maxBodyBytes: 65_536))
             if let g = Self.titleTag.firstGroups(body.text), !g[1].isEmpty,
                !g[1].lowercased().contains("mediafire") {
-                return FileMeta(filename: g[1])
+                // Straight out of an HTML element, so doubly in need of it.
+                return FileMeta(filename: HTMLText.decodeEntities(g[1]))
             }
             return FileMeta(filename: nil)
         }
@@ -109,7 +110,11 @@ public struct MediaFireHost: FileHost {
             // MediaFire encodes spaces as '+' in the path. Undo that BEFORE
             // percent-decoding, so a genuine %2B survives as a literal plus.
             let plussed = String(segment).replacingOccurrences(of: "+", with: " ")
-            let s = plussed.removingPercentEncoding ?? plussed
+            let decoded = plussed.removingPercentEncoding ?? plussed
+            // MediaFire hands the name back HTML-escaped: "Mikos &amp; folpi".
+            // Left alone it reaches the shelf, because a title recovered from
+            // a filename is shown as it is — "Bes &amp; osveta".
+            let s = HTMLText.decodeEntities(decoded)
             if archiveName.matches(s) { return s }
         }
         return nil

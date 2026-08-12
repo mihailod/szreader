@@ -31,8 +31,12 @@ enum Labels {
         + #"(?:\s*[A-Za-zČĆŠŽĐčćšžđ][A-Za-zČĆŠŽĐčćšžđ\s]{1,30}?\s+\d{1,4})?"#
         + #"\s*[-–.]\s*(.+?)\s*$"#)
 
-    // "MN_LMS_511". TN_* are cover thumbnails hotlinked from stripovi.com, not labels.
-    static let code = Rx(#"^(?!TN_)([A-ZČĆŠŽĐ][A-Z0-9ČĆŠŽĐ_]*_(\d{1,5}))$"#)
+    // "MN_LMS_511", and "ZS_85 - Komadant Mark" where the code is followed by
+    // the title. TN_* are cover thumbnails hotlinked from stripovi.com, not
+    // labels. The title is group 3; the code and number keep their positions,
+    // because callers that only want the number index by them.
+    static let code = Rx(
+        #"^(?!TN_)([A-ZČĆŠŽĐ][A-Z0-9ČĆŠŽĐ_]*_(\d{1,5}))(?:\s*[-–]\s*(.+?))?\s*$"#)
 
     // Name before number, optional title, trailing (author) (date) groups.
     private static let letter = "A-Za-zČĆŠŽĐčćšžđ"

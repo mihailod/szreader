@@ -23,6 +23,7 @@ struct Rx {
 
     func matches(_ s: String) -> Bool { firstGroups(s) != nil }
 
+
     /// All matches of group `group` (default: whole match), in order.
     func allMatches(_ s: String, group: Int = 0) -> [String] {
         let ns = s as NSString
@@ -36,5 +37,18 @@ struct Rx {
         let ns = s as NSString
         return re.stringByReplacingMatches(
             in: s, range: NSRange(location: 0, length: ns.length), withTemplate: template)
+    }
+}
+
+extension [String] {
+    /// A capture group that the pattern may not have.
+    ///
+    /// `firstGroups` sizes its result to the pattern, so indexing a group
+    /// directly is only safe while that group exists. A trailing optional one
+    /// — a title after a code, say — is exactly the kind that gets added and
+    /// removed again, and indexing it blind turns a pattern edit into a crash
+    /// rather than a failing test.
+    func capture(_ index: Int) -> String {
+        indices.contains(index) ? self[index] : ""
     }
 }
