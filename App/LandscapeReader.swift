@@ -26,8 +26,6 @@ struct ContinuousPages: View {
     let openAt: Int
     let onTap: () -> Void
 
-    @State private var zoom: CGFloat = 1
-    @State private var committedZoom: CGFloat = 1
     /// The shape of a page, which fixes how tall every slot in the strip is.
     ///
     /// Uniform on purpose. Sizing each slot to its own page would mean
@@ -45,21 +43,25 @@ struct ContinuousPages: View {
 
     var body: some View {
         GeometryReader { geo in
-            let slotW = geo.size.width * zoom
-            let slotH = geo.size.width * aspect * zoom
+            let slotW = geo.size.width
+            let slotH = geo.size.width * aspect
 
             ScrollViewReader { proxy in
-                // Both axes: at zoom 1 the strip is exactly the width of the
-                // screen and only scrolls down, and zooming in makes it wider
-                // than the screen, which is what turns on sideways panning.
-                ScrollView([.vertical, .horizontal], showsIndicators: false) {
+                // One axis. A two-axis scroll view lets the page drift and
+                // rubber-band sideways even when the content is exactly as
+                // wide as the screen, and a comic that wobbles under the
+                // thumb while you read down it is unbearable.
+                //
+                // This is also why there is no zoom here: the page already
+                // fills the width, and a zoom with nowhere to pan sideways
+                // would be worse than none.
+                ScrollView(.vertical, showsIndicators: false) {
                     LazyVStack(spacing: 0) {
                         ForEach(0..<max(pageCount, 1), id: \.self) { page in
                             slot(page, width: slotW, height: slotH)
                         }
                     }
                     .frame(width: slotW)
-                    .onTapGesture(count: 2) { toggleZoom() }
                     .onTapGesture { onTap() }
                 }
                 .onPreferenceChange(CentrePageKey.self) { page in
@@ -74,7 +76,6 @@ struct ContinuousPages: View {
                     seek = nil
                 }
             }
-            .simultaneousGesture(magnify)
         }
     }
 
@@ -146,18 +147,6 @@ struct ContinuousPages: View {
         currentPage = min(max(page, 0), max(pageCount - 1, 0))
     }
 
-    private var magnify: some Gesture {
-        MagnificationGesture()
-            .onChanged { value in zoom = min(max(committedZoom * value, 1), 4) }
-            .onEnded { _ in committedZoom = zoom }
-    }
-
-    private func toggleZoom() {
-        withAnimation(.spring(duration: 0.25)) {
-            zoom = zoom > 1 ? 1 : 2.5
-            committedZoom = zoom
-        }
-    }
 }
 
 /// The page sitting under the middle of the screen, if a slot claims it.
@@ -181,10 +170,15 @@ struct VerticalScrubber: View {
     /// Which side this one is on, so its readout sits inboard of the track
     /// rather than off the edge of the screen.
     let edge: HorizontalEdge
+    /// The side currently being dragged, shared between the pair. Two hands
+    /// on two scrubbers is two answers to one question, so whichever is
+    /// grabbed first owns the gesture and the other gets out of the way.
+    @Binding var activeSide: HorizontalEdge?
     let onSeek: (Int) -> Void
 
-    @State private var dragging = false
     @State private var target = 0
+
+    private var dragging: Bool { activeSide == edge }
 
     private static let trackWidth: CGFloat = 5
     private static let thumb: CGFloat = 26
@@ -215,6 +209,11 @@ struct VerticalScrubber: View {
                 readout
                     .position(x: readoutX(in: geo.size.width), y: y)
             }
+            // Something to read the track against. Without it the white
+            // thumb sits straight on the page, and a comic page is mostly
+            // white — the control all but vanished exactly where it was
+            // needed. The same material as the portrait scrubber's bar.
+            .background(Capsule().fill(.ultraThinMaterial))
             .contentShape(Rectangle())
             .gesture(drag(travel: travel, height: geo.size.height))
         }
@@ -245,13 +244,13 @@ struct VerticalScrubber: View {
     private func drag(travel: CGFloat, height: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                dragging = true
+                activeSide = edge
                 let along = (value.location.y - Self.thumb / 2) / travel
                 target = min(max(Int((along * CGFloat(max(pageCount - 1, 1))).rounded()), 0),
                              max(pageCount - 1, 0))
             }
             .onEnded { _ in
-                dragging = false
+                activeSide = nil
                 // Seeking on release, not while dragging: following the drag
                 // would decode every page it crossed, and on a 200-page comic
                 // that is hundreds of decodes for one gesture. The readout is

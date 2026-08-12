@@ -1,12 +1,3 @@
-- landscape only: the scrubbers are white on white so barely visible against white comic -- make it gray background like in portrait (not sure why you changed to white)
-
-- landscape only: both left and right scrubber are movable if you use 2 hands -- that is nonsensical. the moment i start scrubbing with one, the other should disappear and only reappear once the 1st scrub is complete.
-
-- landscape only: do not let the image move/wobble left/right. it should be completely fixed horizontally. only allow up/down scroll.
-
------------------
-
-
 - LMS ken parker has redirects to LMS
 - fibra ken parker 1st 32 are on the libelus page, needs a join
 

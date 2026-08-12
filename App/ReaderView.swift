@@ -41,6 +41,8 @@ struct ReaderView: View {
     @State private var landscape = false
     /// A page one of the vertical scrubbers has asked to jump to.
     @State private var seek: Int?
+    /// Which of the two vertical scrubbers is being dragged, if either.
+    @State private var scrubbingSide: HorizontalEdge?
 
     private var pageCount: Int { document?.pageCount ?? 0 }
 
@@ -156,12 +158,22 @@ struct ReaderView: View {
 
     private var sideScrubbers: some View {
         HStack {
-            VerticalScrubber(pageCount: pageCount, page: index,
-                             edge: .leading) { seek = $0 }
+            // Only the one in use, once one is in use: two thumbs dragging
+            // two scrubbers is two answers to "which page", and the loser
+            // would snap back under the reader's finger.
+            if scrubbingSide != .trailing {
+                VerticalScrubber(pageCount: pageCount, page: index,
+                                 edge: .leading,
+                                 activeSide: $scrubbingSide) { seek = $0 }
+            }
             Spacer()
-            VerticalScrubber(pageCount: pageCount, page: index,
-                             edge: .trailing) { seek = $0 }
+            if scrubbingSide != .leading {
+                VerticalScrubber(pageCount: pageCount, page: index,
+                                 edge: .trailing,
+                                 activeSide: $scrubbingSide) { seek = $0 }
+            }
         }
+        .animation(.easeOut(duration: 0.15), value: scrubbingSide)
         // Clear of the title bar above and the home indicator below.
         .padding(.top, 78)
         .padding(.bottom, 28)
