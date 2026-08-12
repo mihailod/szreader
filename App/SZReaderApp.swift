@@ -453,16 +453,19 @@ final class AppModel: ObservableObject {
             while remaining > 0 {
                 // Small batches: at 1.5s a probe this refreshes the shelf every
                 // few seconds rather than every half minute.
+                // Stop only when there is nothing left to ask. Batches that
+                // yield no titles still make progress, because every mirror
+                // they touch is marked as asked and drops out of the queue.
+                //
+                // This used to stop the moment a batch produced no titles,
+                // which was the only defence against re-probing the same
+                // mirrors for ever. The older pages carry long runs of links
+                // with no filename behind them, so five duds in a row ended
+                // the run and left every issue after them showing its code.
                 guard let batch = try? await store.backfillTitles(via: transport, limit: 5),
-                      batch.probed > 0 else { break }
+                      batch.attempted > 0 else { break }
                 named += batch.titled
-                // Stop when a batch makes no dent. A probe that yields no
-                // filename leaves the mirror unresolved, so looping on the
-                // count alone would re-probe the same rows for ever and hammer
-                // the host.
-                let now = store.untitledIssueCount
-                guard now < remaining else { break }
-                remaining = now
+                remaining = store.untitledIssueCount
 
                 // Bound once per pass: if the model has gone, so has the shelf
                 // this was updating.

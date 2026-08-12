@@ -4,5 +4,3 @@
 - lms veliki blek pics messed up
 
 - add settings (/ help / about) screen
-
-- not all marti misterija titles resolved. many did not, some examples: mm_lms_083 - mm_lms_086,  089 , 090, 092, 95, 96 ...66-78.. then there is a buggy name resolved to "papaya jeremija i bora81 SF i SZ" instead of santa klaus for number 79

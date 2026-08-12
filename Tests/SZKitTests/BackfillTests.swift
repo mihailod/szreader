@@ -129,6 +129,67 @@ final class BackfillTests: XCTestCase {
         _ = try await store.backfillTitles(via: stub, limit: 1)
         XCTAssertEqual(MediaFireHost.key(from: stub.requests[0].url), "untitled00000000")
     }
+
+    // MARK: - Links that yield nothing
+
+    /// A mirror that answers with no filename, or does not answer at all, has
+    /// still been asked. Leaving it in the queue meant it came back on every
+    /// batch, which is what forced the caller to give up early.
+    func testALinkThatYieldsNothingIsNotAskedTwice() async throws {
+        let store = try Store()
+        try store.ingest(html: """
+            <div>MM_LMS_083</div>
+            <div>http://www.mediafire.com/download.php?maab0r1u1ye1eat</div>
+            """)
+
+        let first = try await store.backfillTitles(via: transport([:]))
+        XCTAssertEqual(first.attempted, 1)
+        XCTAssertEqual(first.titled, 0)
+
+        XCTAssertTrue(try store.pendingProbes(limit: 10).isEmpty,
+                      "a mirror that gave nothing back is still queued")
+        let second = try await store.backfillTitles(via: transport([:]))
+        XCTAssertEqual(second.attempted, 0, "it was asked a second time")
+    }
+
+    /// The real shape of the Martin Mystere page: a long run of links with no
+    /// filename behind them, and resolvable ones after. Working in batches,
+    /// the run of duds must not strand what follows.
+    func testARunOfDeadLinksDoesNotStrandTheIssuesBehindThem() async throws {
+        let store = try Store()
+        var html = ""
+        for n in 83...90 {
+            html += "<div>MM_LMS_0\(n)</div><div>http://www.mediafire.com/download.php?dead0000000\(n)</div>"
+        }
+        html += """
+            <div>MM_LMS_096</div>
+            <div>http://www.mediafire.com/download.php?goodkey00000096</div>
+            """
+        try store.ingest(html: html)
+
+        // Only the last link resolves; the eight before it are dead.
+        let stub = transport(["goodkey00000096": "096_Holokaust_papaya_markoboss_SF__LMS096_.cbr"])
+
+        // Batches of five, the way the app runs it, stopping only when there
+        // is nothing left to ask.
+        var batches = 0
+        while true {
+            let batch = try await store.backfillTitles(via: stub, limit: 5)
+            guard batch.attempted > 0 else { break }
+            batches += 1
+            // Break, not just assert: without the fix the queue never drains
+            // and the test would spin here instead of reporting.
+            if batches >= 20 {
+                XCTFail("the queue is not draining — mirrors are being re-probed")
+                break
+            }
+        }
+
+        XCTAssertGreaterThan(batches, 1, "the whole queue fitted in one batch — test is not testing")
+        let hit = try XCTUnwrap(try store.search("holokaust").first)
+        XCTAssertEqual(hit.title, "Holokaust")
+        XCTAssertEqual(hit.code, "MM_LMS_096")
+    }
 }
 
 /// Scoping the backfill to what the user actually sees.

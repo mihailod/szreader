@@ -15,10 +15,32 @@ public struct ParsedFilename: Equatable, Sendable {
 public enum TitleCleaner {
 
     private static let archiveExt = Rx(#"\.(cbr|cbz|rar|zip|7z|pdf)$"#, [.caseInsensitive])
-    private static let trailingTag = Rx(#"\s*[\(\[][^)\]]{1,40}[\)\]]\s*$"#)
+    private static let trailingTag = Rx(#"[\s_]*[\(\[][^)\]]{1,40}[\)\]][\s_]*$"#)
     private static let separator = Rx(#"\s+[-–]\s+"#)
     private static let editionNum = Rx(#"^\s*([A-Za-zČĆŠŽĐčćšžđ]{1,6})?\s*-?\s*(\d{1,5})\s*$"#)
     private static let bareAlpha = Rx(#"^[A-Za-zČĆŠŽĐčćšžđ]{1,6}$"#)
+    private static let digits = Rx(#"^\d{1,5}$"#)
+
+    /// Handles and tags the scanners append to their filenames.
+    ///
+    /// A list rather than a rule because there is no shape to them: they are
+    /// people's names sitting in the same underscore-separated run as the
+    /// title, so nothing but recognition separates
+    /// "033_Rusilacki_um_papaya_borke_72_LMS_" into a title and its credits.
+    /// Trailing digits are ignored when matching, so "borke72", "bora81" and
+    /// "dampyr5" are the same handles as "borke", "bora" and "dampyr".
+    private static let creditWords: Set<String> = [
+        "papaya", "borke", "markoboss", "enwil", "delfin", "dampyr", "drzeko",
+        "folpi", "scanturion", "jeremija", "bora", "phantom", "zikateror",
+        "quebrasco", "dejko", "unregistred", "rescan", "scan", "sf", "sz", "lms",
+    ]
+
+    /// Whether a token is one of those handles.
+    private static func isCredit(_ token: String) -> Bool {
+        let word = Fold.fold(token).trimmingCharacters(
+            in: CharacterSet(charactersIn: "0123456789"))
+        return !word.isEmpty && creditWords.contains(word)
+    }
 
     public static func parse(_ filename: String) -> ParsedFilename {
         var name = filename.removingPercentEncoding ?? filename
@@ -39,7 +61,7 @@ public enum TitleCleaner {
             // No " - " separators; underscores may be doing that job instead.
             parts = split(name.replacingOccurrences(of: "_", with: " "))
         }
-        guard parts.count >= 2 else { return ParsedFilename(title: nil, edition: nil, number: nil) }
+        guard parts.count >= 2 else { return underscored(name) }
 
         var edition: String?
         var number: Int?
@@ -61,7 +83,12 @@ public enum TitleCleaner {
             }
             kept.append(part)
         }
-        guard var title = kept.last?.trimmingCharacters(in: .whitespaces), !title.isEmpty else {
+        // A segment that opens with a scanner's handle is theirs, not the
+        // comic's. "079 - Sveti Klaus - papaya jeremija i bora81 SF i SZ"
+        // otherwise reads the credits as the title, because they are last.
+        let named = kept.filter { !isCredit($0.split(separator: " ").first.map(String.init) ?? "") }
+        guard var title = (named.last ?? kept.last)?.trimmingCharacters(in: .whitespaces),
+              !title.isEmpty else {
             return ParsedFilename(title: nil, edition: edition, number: number)
         }
         // Scanner credits are also appended with underscores rather than parens:
@@ -69,6 +96,32 @@ public enum TitleCleaner {
         if let cut = title.firstIndex(of: "_") {
             title = String(title[..<cut]).trimmingCharacters(in: .whitespaces)
         }
+        return ParsedFilename(title: title.isEmpty ? nil : title,
+                              edition: edition, number: number)
+    }
+
+    /// A filename separated only by underscores, with no " - " anywhere:
+    /// "Marti_Misterija_LMS_034_Misterija_i_Anabel_Li".
+    ///
+    /// The issue number is the landmark. What precedes it is the series and
+    /// the edition code in some order, what follows is the title, and what
+    /// follows *that* is the scanners — so the title is the run between the
+    /// number and the first handle. Segmented names cannot be read this way:
+    /// there the hero sits between the number and the title, which is why
+    /// they keep their own path.
+    private static func underscored(_ name: String) -> ParsedFilename {
+        let tokens = name.split(whereSeparator: { $0 == "_" || $0 == " " }).map(String.init)
+        guard let numberAt = tokens.firstIndex(where: { digits.matches($0) }) else {
+            return ParsedFilename(title: nil, edition: nil, number: nil)
+        }
+        let number = Int(tokens[numberAt])
+        // The token before the number, when it is a short code, is the edition.
+        let edition = numberAt > 0 && bareAlpha.matches(tokens[numberAt - 1])
+            ? tokens[numberAt - 1].uppercased() : nil
+
+        let rest = tokens[tokens.index(after: numberAt)...]
+        let words = Array(rest.prefix(while: { !isCredit($0) }))
+        let title = words.joined(separator: " ").trimmingCharacters(in: .whitespaces)
         return ParsedFilename(title: title.isEmpty ? nil : title,
                               edition: edition, number: number)
     }

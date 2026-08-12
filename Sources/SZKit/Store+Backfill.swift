@@ -7,6 +7,12 @@ extension Store {
         public var titled = 0
         public var failed = 0
         public var mismatched = 0
+
+        /// Mirrors this batch asked about at all. Zero means there is nothing
+        /// left to ask, which is the only reason to stop — a batch that
+        /// produced no titles has still made progress, because those mirrors
+        /// will not be asked again.
+        public var attempted: Int { probed + failed }
     }
 
     struct PendingProbe {
@@ -26,7 +32,7 @@ extension Store {
     public var untitledMirrorCount: Int {
         (try? db.scalarInt("""
             SELECT COUNT(*) FROM mirror m JOIN issue i ON i.id = m.issue_id
-            WHERE m.filename IS NULL AND i.title IS NULL
+            WHERE m.filename IS NULL AND m.probed_at IS NULL AND i.title IS NULL
             """)) ?? 0
     }
 
@@ -37,7 +43,7 @@ extension Store {
         try db.query("""
             SELECT m.id, m.issue_id, m.url, i.number, i.title IS NOT NULL
             FROM mirror m JOIN issue i ON i.id = m.issue_id
-            WHERE m.filename IS NULL
+            WHERE m.filename IS NULL AND m.probed_at IS NULL
             ORDER BY (i.title IS NULL) DESC, m.ordinal ASC
             LIMIT ?
             """, [.int(Int64(limit))]) { row in
@@ -61,12 +67,17 @@ extension Store {
                                limit: Int = 50) async throws -> BackfillResult {
         var result = BackfillResult()
         for pending in try pendingProbes(limit: limit) {
-            guard let url = URL(string: pending.url) else { result.failed += 1; continue }
+            guard let url = URL(string: pending.url) else {
+                result.failed += 1
+                try markProbed(mirrorID: pending.mirrorID)
+                continue
+            }
             let meta: FileMeta
             do {
                 meta = try await registry.probe(url, via: transport)
             } catch {
                 result.failed += 1
+                try markProbed(mirrorID: pending.mirrorID)
                 continue
             }
             result.probed += 1
@@ -118,8 +129,23 @@ extension Store {
     }
 
     func recordProbe(mirrorID: Int, meta: FileMeta) throws {
-        try db.run("UPDATE mirror SET filename = ?, size = ? WHERE id = ?",
-                   [SQLValue(meta.filename), SQLValue(meta.size), .int(Int64(mirrorID))])
+        try db.run("""
+            UPDATE mirror SET filename = ?, size = ?, probed_at = strftime('%s', 'now')
+            WHERE id = ?
+            """, [SQLValue(meta.filename), SQLValue(meta.size), .int(Int64(mirrorID))])
+    }
+
+    /// Records that a mirror was asked and gave nothing back.
+    ///
+    /// A probe can answer without a filename, and a dead link cannot answer at
+    /// all. Neither fills `filename`, so without a mark of its own the mirror
+    /// stays in the pending set and is asked again on the next batch, for
+    /// ever. That is what forced the caller to give up as soon as a batch
+    /// stopped producing titles — and a run of five nameless links, which the
+    /// older forum pages are full of, then stranded every issue behind them.
+    func markProbed(mirrorID: Int) throws {
+        try db.run("UPDATE mirror SET probed_at = strftime('%s', 'now') WHERE id = ?",
+                   [.int(Int64(mirrorID))])
     }
 
     /// Updates the title and keeps the FTS index in step.
@@ -163,7 +189,7 @@ extension Store {
     public var untitledIssueCount: Int {
         (try? db.scalarInt("""
             SELECT COUNT(DISTINCT i.id) FROM issue i JOIN mirror m ON m.issue_id = i.id
-            WHERE m.filename IS NULL AND i.title IS NULL
+            WHERE m.filename IS NULL AND m.probed_at IS NULL AND i.title IS NULL
             """)) ?? 0
     }
 

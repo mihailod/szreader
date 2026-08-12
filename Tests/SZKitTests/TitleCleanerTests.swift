@@ -63,10 +63,60 @@ final class TitleCleanerTests: XCTestCase {
               title: "UFO", edition: "LMS", number: 807)
     }
 
+    // MARK: - Martin Mystere LMS, whose filenames are underscored throughout
+
+    /// No " - " anywhere: series, edition, number and title all run together
+    /// on underscores. These came back with no title at all, so the shelf
+    /// showed the raw code "MM_LMS_034".
+    func testUnderscoresThroughout() {
+        check("Marti_Misterija_LMS_034_Misterija_i_Anabel_Li.cbr",
+              title: "Misterija i Anabel Li", edition: "LMS", number: 34)
+    }
+
+    /// Same, with the scanners' handles trailing the title.
+    func testUnderscoresThroughoutWithCredits() {
+        check("033_Rusilacki_um_papaya_borke_72_LMS_.cbr",
+              title: "Rusilacki um", edition: nil, number: 33)
+        check("096_Holokaust_papaya_markoboss_SF__LMS096_.cbr",
+              title: "Holokaust", edition: nil, number: 96)
+    }
+
+    /// The credits can be a segment of their own, and being last is exactly
+    /// where the title is normally found — this reported the scanners' names
+    /// as the title of issue 79.
+    func testCreditsAsTheirOwnSegmentAreNotTheTitle() {
+        check("079 - Sveti Klaus - papaya jeremija i bora81 SF i SZ.cbr",
+              title: "Sveti Klaus", edition: nil, number: 79)
+    }
+
+    /// A trailing tag with an underscore after it survived the stripper,
+    /// which glued "(rescan)" onto the title.
+    func testTrailingTagFollowedByUnderscore() {
+        check("Marti_Misterija_LMS_64_-_Agarti_(rescan)_(papaya-dampyr5).rar",
+              title: "Agarti", edition: nil, number: nil)
+        check("Marti_Misterija_-_LMS_VB_065_-_Dugo_bekstvo__(rescan)_(papaya-delfin-SF-SZ).cbr",
+              title: "Dugo bekstvo", edition: nil, number: nil)
+    }
+
+    /// The segmented form still reads its title from the last segment.
+    func testSegmentedFormIsUnchanged() {
+        check("LMS_MM_061_-_Martin_Mystere_-_Operacija_Dorijan_Grej.cbr",
+              title: "Operacija Dorijan Grej", edition: nil, number: nil)
+    }
+
+    /// A filename that is only a code carries no title, underscores or not.
+    func testCodeOnlyFilenameYieldsNothing() {
+        check("MMDN71.rar", title: nil, edition: nil, number: nil)
+    }
+
     func testJunkIsRejected() {
         check("LMS521.cbr", title: nil, edition: nil, number: nil)
         check("scan.rar", title: nil, edition: nil, number: nil)
-        check("LMS 518.cbr", title: nil, edition: nil, number: nil)
+        // The title is the junk here, and it is still rejected. The code is
+        // not junk: this really is LMS 518, and reading it feeds the
+        // label-vs-file cross-check. It used to come back empty only because
+        // the parser gave up on names with nothing to split on.
+        check("LMS 518.cbr", title: nil, edition: "LMS", number: 518)
     }
 
     /// Search must work without diacritics, and punctuation must not split
