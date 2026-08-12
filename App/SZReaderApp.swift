@@ -428,18 +428,25 @@ final class AppModel: ObservableObject {
     /// Runs in batches and reports as it goes, because probing is throttled and
     /// a large import takes minutes. Results are permanent, so an interrupted
     /// run simply resumes next launch.
+    /// Fills in what the forum page did not give: names for issues that
+    /// arrived with only a code, and covers the catalogue has but the page
+    /// did not link.
+    ///
+    /// The two are independent. Titles used to gate the whole run, so a page
+    /// that names every issue — most of them do — returned before the covers
+    /// were even looked at, and the artwork simply never arrived.
     func resolveTitles() {
         guard let store, let transport, !resolving else { return }
         // Fixed denominator: the work in front of us when the run started, so
         // the readout counts up instead of chasing a moving target.
         let total = store.untitledIssueCount
-        guard total > 0 else { return }
+        guard total > 0 || store.coverlessIssueCount > 0 else { return }
 
         resolving = true
         // Posted before the first probe, not after it. A batch is five probes
         // at 1.5s apiece, so waiting for one to finish left the shelf silent
         // for the better part of ten seconds while work was already underway.
-        status = "Resolving names: 0/\(total)"
+        if total > 0 { status = "Resolving names: 0/\(total)" }
 
         // Isolated to the main actor for its whole life, rather than a
         // free-floating task that reaches back for `self` through nested
@@ -478,11 +485,36 @@ final class AppModel: ObservableObject {
                 self.search(self.query)
             }
             guard let self else { return }
+            let covers = await self.resolveCovers(store: store, transport: transport)
             self.resolving = false
-            self.refresh(note: named > 0
-                         ? "named \(named) issue\(named == 1 ? "" : "s")"
-                         : "")
+
+            var note = named > 0 ? "named \(named) issue\(named == 1 ? "" : "s")" : ""
+            if covers > 0 {
+                note += note.isEmpty ? "" : ", "
+                note += "found \(covers) cover\(covers == 1 ? "" : "s")"
+            }
+            self.refresh(note: note)
         }
+    }
+
+    /// Asks the catalogue for covers the forum page did not link.
+    ///
+    /// Runs after the names, on the same throttled transport, because it is
+    /// the same bargain: a request per issue against a host that rate-limits,
+    /// in exchange for a shelf that shows artwork instead of a number.
+    private func resolveCovers(store: Store, transport: Transport) async -> Int {
+        var found = 0
+        let total = store.coverlessIssueCount
+        guard total > 0 else { return 0 }
+
+        while true {
+            guard let batch = try? await store.backfillCovers(via: transport, limit: 5),
+                  batch.asked > 0 else { break }
+            found += batch.found
+            status = "Looking for covers: \(total - store.coverlessIssueCount)/\(total)"
+            search(query)
+        }
+        return found
     }
 
     /// Fetches the archive: resolve a mirror, download, decrypt if needed,

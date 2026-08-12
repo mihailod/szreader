@@ -255,6 +255,48 @@ final class LabelStyleTests: XCTestCase {
                        "they are one issue, so they belong to one instance")
     }
 
+    /// Strips of three or six covers, posted to illustrate a group of issues.
+    ///
+    /// Position hands one of these to whichever issue happens to sit next to
+    /// it, which on a catalogued page is always wrong — the real covers are
+    /// named after their issues. It put a six-up strip on two Veliki Blek
+    /// issues and gave issue 188 the cover belonging to 197.
+    func testGroupArtworkIsNotUsedOnACataloguedPage() {
+        var page = "<title>Veliki Blek - LUNOV MAGNUS STRIP - Veliki Blek - Stripzona</title>"
+        // A catalogued page: covers named after their issues.
+        for n in 128...134 {
+            page += "<div><img src=\"https://www.stripovi.com/naslovnice/VelikiBlek/TN/TN_VB_LMS_\(n).jpg\"></div>"
+            page += "<div>LMS \(n) - Naslov \(n) - http://www.mediafire.com/?FAKEKEY\(n)</div>"
+        }
+        // A strip illustrating the group, sitting beside an issue that has no
+        // catalogued cover of its own.
+        page += "<div><img src=\"https://i.imgur.com/jGPdAZ2.jpg\"></div>"
+        page += "<div>LMS 140 - Zov bubnjeva - http://www.mediafire.com/?FAKEKEY140</div>"
+
+        let covers = Catalog.covers(in: page)
+        XCTAssertEqual(covers[128],
+                       "https://www.stripovi.com/naslovnice/VelikiBlek/TN/TN_VB_LMS_128.jpg")
+        XCTAssertNil(covers[140], "the group strip was taken as issue 140's cover")
+    }
+
+    /// A page with no catalogued covers has nothing but position to go on,
+    /// and one stray catalogued link must not take that away.
+    func testPositionStillWorksWithoutACatalogue() {
+        var page = "<title>Dzudas - STRIPZONA SCANLATION - Dzudas - Stripzona</title>"
+        page += "<div><img src=\"https://www.stripovi.com/naslovnice/X/TN/TN_ZG_ZS_99.jpg\"></div>"
+        for n in 1...3 {
+            page += "<div><img src=\"https://i.imgur.com/cover\(n)0000.jpg\"></div>"
+            page += "<div>00\(n)-Naslov \(n)</div><div>http://www.mediafire.com/?FAKEKEY00\(n)</div>"
+        }
+        let covers = Catalog.covers(in: page)
+        // The stray gives issue 99 a cover of its own; what matters is that
+        // the three issues that only position can reach still have theirs.
+        for n in 1...3 {
+            XCTAssertNotNil(covers[n],
+                            "position was switched off by one stray catalogued cover")
+        }
+    }
+
     func testInlinePrevLine() {
         let recs = Catalog.links(in: """
             <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>

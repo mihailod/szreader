@@ -277,11 +277,31 @@ extension Catalog {
         for (number, url) in crossReferencedCovers(in: html, byNumber: out) where out[number] == nil {
             out[number] = url
         }
+        // Tier 3 only where there is no catalogue to go on.
+        //
+        // Position is a guess, and on a page whose covers are named after
+        // their issues there is nothing left for it to guess at correctly:
+        // what it finds are the strips of three or six covers posted to
+        // illustrate a group of issues, which it then hands to whichever
+        // issue happens to sit next to them. On Veliki Blek that put a
+        // six-up strip on two issues and issue 197's cover on issue 188.
+        //
+        // The threshold rather than "any at all": one stray catalogued cover
+        // on a scanlation page must not switch off the only tier that page
+        // has.
+        guard out.count < Self.catalogued else { return out }
         for (number, url) in positionalCovers(in: html) where out[number] == nil {
             out[number] = url
         }
         return out
     }
+
+    /// How many covers named after their issues make a page a catalogued one.
+    ///
+    /// Every page in the corpus is emphatically one or the other — hundreds
+    /// of catalogued covers, or none at all — so this only has to fall
+    /// between "a stray link" and "a catalogue".
+    static let catalogued = 5
 
     /// Tier 1: the number is in the filename.
     ///

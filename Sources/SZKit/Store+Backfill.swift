@@ -221,3 +221,124 @@ extension Store {
         return out
     }
 }
+
+// MARK: - Covers the catalogue has but the page did not link
+
+extension Store {
+
+    public struct CoverBackfillResult: Equatable, Sendable {
+        public var asked = 0
+        public var found = 0
+    }
+
+    struct PendingCover {
+        let issueID: Int
+        let number: Int
+        let sibling: String
+        let siblingNumber: Int
+    }
+
+    /// Issues with no artwork, paired with a catalogued cover from the same
+    /// edition to read the naming from.
+    ///
+    /// Matched on the topic an issue came from, and then only when every
+    /// catalogued neighbour agrees on where the covers live.
+    ///
+    /// The catalogue files covers by series — Veliki Blek's under
+    /// `naslovnice/VelikiBlek`, Mister No's under `naslovnice/MisterNo` —
+    /// while one edition carries several series: LUNOV MAGNUS STRIP alone
+    /// runs Kit Teler, Martin Mystere, Mister No and Zagor. Offered a
+    /// neighbour from the wrong one, the guessed number very likely exists
+    /// there too, and the result is a plausible-looking wrong cover.
+    ///
+    /// The topic is the identity rather than hero and edition: a page with no
+    /// breadcrumb leaves the hero unknown, and two unrelated series then look
+    /// alike under one edition. Issues from one topic are one series by
+    /// construction. The directory check backs it up — neighbours pointing at
+    /// two different places are no evidence at all, so nothing is guessed.
+    func pendingCovers(limit: Int) throws -> [PendingCover] {
+        var ids: [(id: Int, number: Int)] = []
+        try db.query("""
+            SELECT i.id, i.number FROM issue i
+            WHERE i.cover_url IS NULL
+              AND i.cover_asked_at IS NULL
+              AND i.number IS NOT NULL
+              AND i.context IS NOT NULL
+            LIMIT ?
+            """, [.int(Int64(limit))]) { row in
+            if let id = row.int(0), let number = row.int(1) { ids.append((id, number)) }
+        }
+
+        var out: [PendingCover] = []
+        for (id, number) in ids {
+            var siblings: [(url: String, number: Int)] = []
+            try db.query("""
+                SELECT s.cover_url, s.number
+                FROM issue i
+                JOIN issue s ON s.context IS i.context
+                            AND s.cover_url IS NOT NULL
+                            AND s.number IS NOT NULL
+                            AND s.id <> i.id
+                WHERE i.id = ?
+                """, [.int(Int64(id))]) { row in
+                if let url = row.string(0), let n = row.int(1) { siblings.append((url, n)) }
+            }
+
+            let directories = Set(siblings.map { sibling -> String in
+                let url = sibling.url
+                return String(url[..<(url.lastIndex(of: "/") ?? url.endIndex)])
+            })
+            guard directories.count == 1, let pick = siblings.first else { continue }
+            out.append(PendingCover(issueID: id, number: number,
+                                    sibling: pick.url, siblingNumber: pick.number))
+        }
+        return out
+    }
+
+    /// Asks the catalogue for covers the page left out.
+    ///
+    /// A guess is recorded only when an image comes back: a number the
+    /// catalogue does not have redirects to an HTML page rather than 404ing,
+    /// and a cover URL that resolves to nothing would sit on the shelf for
+    /// good, showing an empty frame and keeping the comic's own first page
+    /// from ever standing in for it.
+    @discardableResult
+    public func backfillCovers(via transport: Transport,
+                               limit: Int = 20) async throws -> CoverBackfillResult {
+        var result = CoverBackfillResult()
+        for pending in try pendingCovers(limit: limit) {
+            guard let guess = CoverGuess.url(likeSibling: pending.sibling,
+                                             number: pending.siblingNumber,
+                                             wanted: pending.number),
+                  let url = URL(string: guess) else {
+                try markCoverAsked(issueID: pending.issueID)
+                continue
+            }
+            result.asked += 1
+            let response = try? await transport.send(HTTPRequest(url: url))
+            if let response,
+               CoverGuess.isImage(status: response.status,
+                                  contentType: response.headers["Content-Type"]
+                                            ?? response.headers["content-type"],
+                                  body: response.body) {
+                try setCoverURL(guess, issueID: pending.issueID)
+                result.found += 1
+            }
+            try markCoverAsked(issueID: pending.issueID)
+        }
+        return result
+    }
+
+    func markCoverAsked(issueID: Int) throws {
+        try db.run("UPDATE issue SET cover_asked_at = strftime('%s', 'now') WHERE id = ?",
+                   [.int(Int64(issueID))])
+    }
+
+    /// Issues that could still gain a cover from the catalogue.
+    public var coverlessIssueCount: Int {
+        (try? db.scalarInt("""
+            SELECT COUNT(*) FROM issue
+            WHERE cover_url IS NULL AND cover_asked_at IS NULL AND number IS NOT NULL
+            """)) ?? 0
+    }
+}

@@ -179,6 +179,9 @@ public final class Store: @unchecked Sendable {
         try? db.execute("ALTER TABLE issue ADD COLUMN last_page INTEGER")
         try? db.execute("ALTER TABLE issue ADD COLUMN download_failed_at REAL")
         try? db.execute("ALTER TABLE issue ADD COLUMN started_at REAL")
+        // When the catalogue was last asked for a cover this page did not
+        // link. Without it a miss is asked again on every pass.
+        try? db.execute("ALTER TABLE issue ADD COLUMN cover_asked_at REAL")
 
         // Libraries that already took the forum's "picture missing" graphic
         // as artwork. Clearing it puts those issues back to having no cover,

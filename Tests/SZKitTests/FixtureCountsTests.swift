@@ -51,6 +51,7 @@ final class FixtureCountsTests: XCTestCase {
         ("Mister No",        268,  268),
         ("Orka -",            62,   62),
         ("Orka Specijal",     30,   30),
+        ("Veliki Blek",      107,  107),
         ("Zagor - LUNOV",     43,   43),
         ("Zagor - ZLATNA SERIJA - ZS", 125, 125),
         ("ZLATNA SERIJA - Page 2",      120, 120),
@@ -89,8 +90,8 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 1450)
-        XCTAssertEqual(attributed, 1443)
+        XCTAssertEqual(total, 1557)
+        XCTAssertEqual(attributed, 1550)
     }
 
     /// A long run split across forum pages has to read as one series.

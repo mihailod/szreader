@@ -2,8 +2,6 @@
 
 - fibra ken parker 1st 32 are on the libelus page, needs a join
 
-- lms veliki blek pics messed up
-
 - add settings (/ help / about) screen
 
 testing:
