@@ -969,6 +969,7 @@ struct IssueDetail: View {
     let mirrors: [MirrorLink]
     @Binding var pending: PendingAction?
     @Environment(\.dismiss) private var dismiss
+    @State private var showingCover = false
 
     /// The row as it stands now, not as it was when the sheet opened.
     ///
@@ -994,18 +995,37 @@ struct IssueDetail: View {
                             .foregroundStyle(.secondary)
                         }
                     } else {
-                        Button {
-                            if current.isDownloaded {
-                                beginRemoveDownload(current, model: model, pending: &pending)
-                            } else {
-                                beginDownload(current, model: model, pending: &pending)
+                        // Two of equal width rather than one wide one. Both
+                        // are bordered: in a `List` row the plain style makes
+                        // the whole row one tap target, so side-by-side plain
+                        // buttons would fire whichever they liked.
+                        HStack(spacing: 12) {
+                            Button {
+                                if current.isDownloaded {
+                                    beginRemoveDownload(current, model: model, pending: &pending)
+                                } else {
+                                    beginDownload(current, model: model, pending: &pending)
+                                }
+                            } label: {
+                                Label(current.isDownloaded ? "Remove Download" : "Download",
+                                      systemImage: current.isDownloaded
+                                      ? "trash" : "arrow.down.circle")
+                                .frame(maxWidth: .infinity)
                             }
-                        } label: {
-                            Label(current.isDownloaded ? "Remove Download" : "Download",
-                                  systemImage: current.isDownloaded
-                                  ? "trash" : "arrow.down.circle")
+                            .tint(current.isDownloaded ? .red : .green)
+
+                            Button {
+                                showingCover = true
+                            } label: {
+                                Label("Show Cover", systemImage: "photo")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            // Nothing to open until there is artwork. A
+                            // downloaded issue always has some, because its
+                            // own first page is right there.
+                            .disabled(current.coverURL == nil && !current.isDownloaded)
                         }
-                        .tint(current.isDownloaded ? .red : .green)
+                        .buttonStyle(.bordered)
                     }
                 }
 
@@ -1039,6 +1059,13 @@ struct IssueDetail: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { dismiss() } } }
+        }
+        .fullScreenCover(isPresented: $showingCover) {
+            CoverViewer(url: current.coverURL,
+                        title: current.title ?? current.code ?? "Issue",
+                        fullPage: current.isDownloaded
+                        ? { [id = current.id] in await model.firstPage(forIssue: id) }
+                        : nil)
         }
     }
 }

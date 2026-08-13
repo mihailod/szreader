@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0AAA7ACFD7935BADE0E1AC10 /* ImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 640135922A53F0FDE2BFEDE9 /* ImportView.swift */; };
+		0C1E38893CAB2B217CA9D632 /* CoverViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6ECA8838FF66470193A9021 /* CoverViewer.swift */; };
 		13A8C6AB3E55AC67FEC8D747 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0919F3692489FEBE9A67D8D /* LibraryView.swift */; };
 		1BAD08BEBBFB9D7731135C47 /* LandscapeReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */; };
 		4110343204827F1B5F4F7945 /* SZKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3399FEF9FB0275D5FBB6A832 /* SZKit */; };
@@ -33,6 +34,7 @@
 		B0919F3692489FEBE9A67D8D /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SZReaderApp.swift; sourceTree = "<group>"; };
 		CCF6729017ACD258D0298D8F /* szreader */ = {isa = PBXFileReference; lastKnownFileType = folder; name = szreader; path = .; sourceTree = SOURCE_ROOT; };
+		F6ECA8838FF66470193A9021 /* CoverViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverViewer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,6 +65,7 @@
 				3F41C3389BD9E0C5FE60156A /* Assets.xcassets */,
 				0DA4EDA742DCFD028234085B /* BrowserView.swift */,
 				3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */,
+				F6ECA8838FF66470193A9021 /* CoverViewer.swift */,
 				640135922A53F0FDE2BFEDE9 /* ImportView.swift */,
 				34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */,
 				B0919F3692489FEBE9A67D8D /* LibraryView.swift */,
@@ -168,6 +171,7 @@
 				C60D7220DE77EEC3D2B69C65 /* AppInfo.swift in Sources */,
 				4DA39CCBA66CCAC30888EB87 /* BrowserView.swift in Sources */,
 				95E0C572BF4994B77DDB41B0 /* CoverStore.swift in Sources */,
+				0C1E38893CAB2B217CA9D632 /* CoverViewer.swift in Sources */,
 				0AAA7ACFD7935BADE0E1AC10 /* ImportView.swift in Sources */,
 				1BAD08BEBBFB9D7731135C47 /* LandscapeReader.swift in Sources */,
 				13A8C6AB3E55AC67FEC8D747 /* LibraryView.swift in Sources */,

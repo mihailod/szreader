@@ -325,6 +325,25 @@ final class AppModel: ObservableObject {
     ///
     /// Unpacking happens off the main thread: a solid RAR of 80 MB takes long
     /// enough that doing it inline freezes the shelf mid-tap.
+    /// The comic's own first page, decoded at screen resolution.
+    ///
+    /// What the cover viewer shows for anything on disk. The stored cover is
+    /// a 600px capture made for a shelf thumbnail, and the catalogued ones
+    /// are 150×200 thumbnails from stripovi.com — either blown up to fill an
+    /// iPad is a poor thing to look at. The pages themselves are already
+    /// here, at the size the reader draws them.
+    func firstPage(forIssue issueID: Int) async -> UIImage? {
+        guard let library else { return nil }
+        let scale = UIScreen.main.scale
+        let maxPixel = Int(max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * scale)
+        // Off the main actor: this opens the archive and decodes a full page.
+        return await Task.detached(priority: .userInitiated) {
+            guard let document = try? library.document(forIssue: issueID),
+                  let page = try? document.page(0, maxPixelSize: maxPixel) else { return nil }
+            return UIImage(cgImage: page)
+        }.value
+    }
+
     func read(_ issue: StoredIssue) {
         guard let library, issue.isDownloaded, reading == nil else { return }
         let name = issue.readerTitle

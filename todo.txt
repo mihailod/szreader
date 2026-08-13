@@ -2,6 +2,8 @@
 
 - fibra ken parker 1st 32 are on the libelus page, needs a join
 
+- add setting for unloaded: gray or cloud symbol
+
 testing:
 - 3rd page of zagor
 - rest of komandant mark
