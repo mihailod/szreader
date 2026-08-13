@@ -417,8 +417,9 @@ final class ReaderTitleTests: XCTestCase {
     func testFallsBackToTheCode() {
         XCTAssertEqual(issue(edition: nil, hero: nil, title: nil, number: nil).readerTitle,
                        "MN_LMS_511")
+        // "Issue", never "Comic": the shelf holds magazines too.
         XCTAssertEqual(issue(edition: nil, hero: nil, title: nil,
-                             number: nil, code: nil).readerTitle, "Comic")
+                             number: nil, code: nil).readerTitle, "Issue")
     }
 }
 

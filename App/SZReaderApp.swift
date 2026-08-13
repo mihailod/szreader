@@ -660,6 +660,63 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// How many of the comics currently on the shelf are downloaded.
+    var visibleDownloadedCount: Int { results.filter(\.isDownloaded).count }
+
+    /// Whether any downloaded comic on the shelf belongs to a set, so the
+    /// warning can say that removing it reaches issues that are not shown.
+    var visibleDownloadsTouchASet: Bool {
+        results.contains { $0.isDownloaded && set(for: $0) != nil }
+    }
+
+    /// Removes the downloads for everything currently on the shelf.
+    ///
+    /// The middle ground the library was missing. One at a time is tedious
+    /// across a run of two hundred, and everything at once is far too broad —
+    /// but the shelf is already a selection the reader has made, with a
+    /// search, a series filter or "downloaded only", so acting on exactly
+    /// what is shown needs no separate selection mode to build first.
+    ///
+    /// One refresh at the end rather than one per issue: `refresh` re-runs
+    /// the query and rebuilds the shelf, which on a few hundred rows is the
+    /// whole cost of the operation.
+    func removeVisibleDownloads() {
+        guard let store else { return }
+        do {
+            var removed = 0
+            for issue in results where issue.isDownloaded {
+                // A set shares one directory, so removing any member removes
+                // every issue in it — including any the shelf is not showing.
+                if let library, try library.removeSegmentDownload(issueID: issue.id) {
+                    removed += 1
+                    continue
+                }
+                removeFromDisk(try store.deleteDownload(issueID: issue.id))
+                removed += 1
+            }
+            refresh(note: "removed \(removed) download\(removed == 1 ? "" : "s")")
+        } catch {
+            status = "remove failed: \(error)"
+        }
+    }
+
+    /// Deletes everything currently on the shelf, downloads and all.
+    func deleteVisible() {
+        guard let store else { return }
+        do {
+            // Snapshotted before the first delete: `results` is republished by
+            // anything that touches the library, and a loop over a collection
+            // being rebuilt underneath it would miss rows.
+            let doomed = results
+            for issue in doomed {
+                removeFromDisk(try store.delete(issueID: issue.id))
+            }
+            refresh(note: "deleted \(doomed.count) issue\(doomed.count == 1 ? "" : "s")")
+        } catch {
+            status = "delete failed: \(error)"
+        }
+    }
+
     func deleteEverything() {
         guard let store else { return }
         do {

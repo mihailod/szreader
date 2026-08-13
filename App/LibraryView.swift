@@ -37,6 +37,10 @@ enum PendingAction: Identifiable {
     case remove(StoredIssue)
     case removeAllDownloads(Int)
     case deleteAll(Int)
+    /// Everything the shelf is currently showing. The count travels with the
+    /// case so the warning can say how much is about to go.
+    case removeVisibleDownloads(count: Int, touchesASet: Bool)
+    case deleteVisible(Int)
     /// Issues published as one download: taking or discarding any of them
     /// does the same to all of them, so both are asked about first.
     case downloadSet(StoredIssue, String)
@@ -50,6 +54,8 @@ enum PendingAction: Identifiable {
         case .remove(let i): return "rm-\(i.id)"
         case .removeAllDownloads: return "all-downloads"
         case .deleteAll: return "all"
+        case .removeVisibleDownloads: return "visible-downloads"
+        case .deleteVisible: return "visible"
         }
     }
 }
@@ -289,6 +295,17 @@ struct LibraryView: View {
         } label: { Label("Remove Download", systemImage: "trash") }
             .disabled(!issue.isDownloaded)
 
+        // Between one and all of them, and wearing the shelf's own filter mark
+        // so "visible" reads as "whatever the filters and the search left".
+        Button {
+            pending = .removeVisibleDownloads(count: model.visibleDownloadedCount,
+                                              touchesASet: model.visibleDownloadsTouchASet)
+        } label: {
+            Label("Remove All Visible Downloads",
+                  systemImage: "line.3.horizontal.decrease.circle")
+        }
+        .disabled(model.visibleDownloadedCount == 0)
+
         Button {
             pending = .removeAllDownloads(model.downloadedCount)
         } label: { Label("Remove All Downloads", systemImage: "arrow.down.circle.dotted") }
@@ -306,6 +323,11 @@ struct LibraryView: View {
         Button(role: .destructive) {
             pending = .remove(issue)
         } label: { Label("Delete", systemImage: "xmark.bin") }
+
+        Button(role: .destructive) {
+            pending = .deleteVisible(model.results.count)
+        } label: { Label("Delete All Visible Issues", systemImage: "xmark.bin.circle") }
+            .disabled(model.results.isEmpty)
 
         Button(role: .destructive) {
             pending = .deleteAll(model.issueCount)
@@ -345,20 +367,82 @@ struct LibraryView: View {
         case .removeAllDownloads(let count):
             return Alert(
                 title: Text("Are you sure?"),
-                message: Text("Remove \(count) downloaded comic\(count == 1 ? "" : "s") "
+                message: Text("Remove \(count) downloaded issue\(count == 1 ? "" : "s") "
                               + "from this device. The library keeps every title, "
                               + "so nothing needs importing again."),
                 primaryButton: .destructive(Text("Yes")) { model.removeAllDownloads() },
                 secondaryButton: .cancel(Text("No")))
+        case let .removeVisibleDownloads(count, touchesASet):
+            return Alert(
+                title: Text(Self.removeVisibleTitle(count)),
+                message: Text(Self.removeVisibleMessage(count, touchesASet: touchesASet)),
+                primaryButton: .destructive(Text("Yes")) { model.removeVisibleDownloads() },
+                secondaryButton: .cancel(Text("No")))
+        case .deleteVisible(let count):
+            return Alert(
+                title: Text(Self.deleteVisibleTitle(count)),
+                message: Text(Self.deleteVisibleMessage(count, wholeLibrary: count == model.issueCount)),
+                primaryButton: .destructive(Text("Yes")) { model.deleteVisible() },
+                secondaryButton: .cancel(Text("No")))
         case .deleteAll(let count):
             return Alert(
                 title: Text("Are you sure?"),
-                message: Text("Delete all \(count) issues and every downloaded "
-                              + "comic, resetting the app to empty. This cannot "
+                message: Text("Delete all \(count) issues and every download, "
+                              + "resetting the app to empty. This cannot "
                               + "be undone."),
                 primaryButton: .destructive(Text("Yes")) { model.deleteEverything() },
                 secondaryButton: .cancel(Text("No")))
         }
+    }
+
+    // The wording for the two bulk actions, built as plain strings rather than
+    // inline in the `Alert`: as one concatenated `Text` the type checker gave
+    // up on the expression entirely.
+    //
+    // Static so they can be checked without standing up a view.
+
+    static func removeVisibleTitle(_ count: Int) -> String {
+        "Remove \(count) download\(count == 1 ? "" : "s")?"
+    }
+
+    static func removeVisibleMessage(_ count: Int, touchesASet: Bool) -> String {
+        // Says what is being counted, because it is not the shelf. Most of
+        // what is shown is usually not downloaded — 572 issues on screen and
+        // one of them on disk — and "the issue shown" read as though the
+        // shelf held a single row.
+        let subject = count == 1
+            ? "One downloaded issue is currently shown."
+            : "\(count) downloaded issues are currently shown."
+        // The set caveat only when one is actually involved: warning about
+        // something that cannot happen here teaches a reader to stop reading
+        // these at all.
+        let sets: String
+        switch (touchesASet, count) {
+        case (false, _): sets = ""
+        case (true, 1):  sets = " It belongs to a set published as one download, "
+                              + "so issues not shown here are removed too."
+        default:         sets = " Some belong to sets published as one download, "
+                              + "so issues not shown here are removed too."
+        }
+        return "\(subject) Remove \(count == 1 ? "its" : "their") files from this "
+            + "device.\(sets) Every title stays in your library and can be "
+            + "downloaded again."
+    }
+
+    static func deleteVisibleTitle(_ count: Int) -> String {
+        "Delete \(count) issue\(count == 1 ? "" : "s")?"
+    }
+
+    static func deleteVisibleMessage(_ count: Int, wholeLibrary: Bool) -> String {
+        let issues = count == 1 ? "the issue shown" : "the \(count) issues shown"
+        // Worth saying plainly: with no search and no filters the shelf is the
+        // whole library, and "delete the ones shown" is then not the narrower
+        // thing it sounds like.
+        let scope = wholeLibrary ? " That is everything in the library." : ""
+        let back = count == 1 ? "it back means importing its page"
+                              : "them back means importing their pages"
+        return "Delete \(issues) from the library, including any "
+            + "downloads.\(scope) Getting \(back) again."
     }
 
     /// The title, or the code when the post gave none.
@@ -636,28 +720,43 @@ struct LibraryView: View {
             || !model.readStates.isEmpty
     }
 
+    /// Whether the shelf is empty because nothing has been downloaded at all.
+    ///
+    /// Not the same as "the Downloaded filter is on and the shelf is empty",
+    /// which is what this used to test. With downloads in the library and a
+    /// series filter that none of them fall under, that told the reader to go
+    /// and download issues they already had.
+    ///
+    /// `downloadedCount` is the whole library's, not the shelf's, so it still
+    /// answers the question once the filters have emptied what is on screen.
+    private var nothingDownloaded: Bool {
+        model.downloadedOnly && model.downloadedCount == 0
+    }
+
     /// Three distinct empty cases, because "nothing here" for three different
     /// reasons needs three different next steps.
     private var emptyIcon: String {
-        if model.downloadedOnly { return "arrow.down.circle" }
+        if nothingDownloaded { return "arrow.down.circle" }
         return model.issueCount == 0 ? "books.vertical" : "magnifyingglass"
     }
 
     private var emptyTitle: String {
-        if model.downloadedOnly { return "No downloaded comics yet" }
-        return model.issueCount == 0 ? "No imported comics yet" : "No match"
+        if nothingDownloaded { return "No downloaded issues yet" }
+        return model.issueCount == 0 ? "No imported issues yet" : "No match"
     }
 
     private var emptyDetail: String {
-        if model.downloadedOnly {
-            return model.query.isEmpty
-                ? "Turn off the Downloaded filter and download some comics!"
-                : "Nothing you have downloaded matches “\(model.query)”."
+        if nothingDownloaded {
+            return "Turn off the Downloaded filter and download some issues!"
         }
+        // One sentence for both ways of narrowing the shelf. Quoting the query
+        // was only ever right when there was one: a filter with no search text
+        // — a series with nothing downloaded in it, say — rendered as
+        // “Nothing in your 192 imported issues matches “”.”
         return model.issueCount == 0
             ? "Tap Import, login to StripZona (if needed), browse and like a post "
-              + "with the comics you want to read and then import that page."
-            : "Nothing in your \(model.issueCount) imported issues matches “\(model.query)”."
+              + "with the issues you want to read and then import that page."
+            : "Nothing in your library matches that search / filter."
     }
 
     private var emptyState: some View {

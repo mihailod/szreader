@@ -85,12 +85,13 @@ public struct StoredIssue: Equatable, Sendable {
     /// Missing pieces are dropped rather than left as empty separators.
     public var readerTitle: String {
         // shelfMark rather than the bare code, so the issue number travels
-        // with the series — "SSB 1" is what identifies a comic; "SSB" alone
+        // with the series — "SSB 1" is what identifies an issue; "SSB" alone
         // names a whole run of several hundred.
         let parts = [shelfMark, heroDisplay, title ?? code]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
-        return parts.isEmpty ? "Comic" : parts.joined(separator: " · ")
+        // "Issue", never "Comic": the library holds magazines too.
+        return parts.isEmpty ? "Issue" : parts.joined(separator: " · ")
     }
 
     /// "Mister No, Lunov Magnus Strip" — who it is about and what it is from.
