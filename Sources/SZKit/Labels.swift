@@ -53,8 +53,18 @@ enum Labels {
 
     /// A trailing archive extension or a size, which describe the file rather
     /// than the comic: "… 24Mb", "… 77.43 MB", "….cbr".
+    /// A trailing extension or size, and the volume marker of a split
+    /// archive: these describe the file rather than the comic.
+    ///
+    /// ".part1" matters as much as ".rar" — Galaksija posts its halves as
+    /// "Galaksija 213 (1990) (with levels) (Tvinsi).part1", and leaving the
+    /// marker on made each half a comic of its own, so one issue arrived as
+    /// three rows sharing a number.
     static let fileNoise = Rx(
-        #"(?i)(?:\s*\.(?:cbr|cbz|rar|zip|pdf))?(?:\s*[\(\[]?\s*\d+(?:[.,]\d+)?\s*[MG]B?\s*[\)\]]?)?\s*$"#)
+        #"(?i)(?:\s*\.part\s*\d{1,3})?"#
+        + #"(?:\s*\.(?:cbr|cbz|rar|zip|7z|pdf))?"#
+        + #"(?:\s*\.part\s*\d{1,3})?"#
+        + #"(?:\s*[\(\[]?\s*\d+(?:[.,]\d+)?\s*[MG]B?\s*[\)\]]?)?\s*$"#)
 
     /// Lines that look like labels but are forum chrome. Without this,
     /// "Posted 06 March 2011 - 09:26 PM" becomes a label and claims every
@@ -63,6 +73,12 @@ enum Labels {
         "posted", "edited", "brojevi", "broj", "hvala", "format", "izlazilo",
         "popular", "attached", "quote", "report", "download", "novo",
         "update", "edit", "uploader", "scan", "str", "strana", "page",
+        // Notes the posters leave between the links, which read as a series
+        // followed by a number: "Fali stranica 37." (a page is missing),
+        // "Linkovi za Galaksiju 101" (links for…), "Ne mislim na broj 105"
+        // (I don't mean issue…). Each of them otherwise becomes an issue and
+        // claims the next link posted.
+        "fali", "linkovi", "ne", "stranica",
     ]
 
     struct NameNum { let number: String; let title: String?; let name: String }
@@ -80,10 +96,45 @@ enum Labels {
         // comic arrives twice — once plain, once with a size or filename stuck
         // to it — and the two land as separate issues because the title is
         // part of the natural key.
+        // Trailing punctuation first: these lists introduce their link with a
+        // colon — "Galaksija 091 (stvarni izgled) (drazen23) [217 MB]:" — and
+        // both the size and the bracket strippers anchor to the end, so one
+        // stray character leaves the whole tail sitting there as a title.
+        let tail = g[3].trimmingCharacters(in: CharacterSet(charactersIn: " -–_.:;,"))
         let title = trailingParens
-            .replacing(fileNoise.replacing(g[3], with: ""), with: "")
+            .replacing(fileNoise.replacing(tail, with: ""), with: "")
             .trimmingCharacters(in: CharacterSet(charactersIn: " -–_.:"))
+        guard title.isEmpty || readsAsATitle(title) else { return nil }
+        // A month and a year is a caption, not an issue: "januar 1982." reads
+        // as issue 1982 of a series called "januar". No run in this corpus
+        // reaches four figures, so a year-shaped number with nothing after it
+        // is a date every time.
+        if title.isEmpty, let n = Int(g[2]), (1900...2099).contains(n) { return nil }
         return NameNum(number: g[2], title: title.isEmpty ? nil : title, name: g[1])
+    }
+
+    /// Whether what follows a number is a title or the rest of a sentence.
+    ///
+    /// Forum prose reads as a label all too easily: "Ne mislim na broj 105
+    /// (stvarni izgled), nego na obradu broja 105" parses as issue 105 of a
+    /// series called "Ne mislim na broj", and then claims every link after
+    /// it. So does a caption — "Stranica 37 iz Galaksije broj 297".
+    ///
+    /// A title starts where a sentence continues: with a capital or a number,
+    /// never mid-clause in lower case. Digits are allowed to lead because
+    /// "900 Baka" is a real title, but something with no letters at all is a
+    /// list of poster numbers rather than a name.
+    /// A sub-volume suffix belongs to the number, not the title: Corto
+    /// Maltese numbers two of its books "03a" and "03b", which the number
+    /// parse leaves at the front as "a - Karipska svita".
+    private static let volumeSuffix = Rx(#"^[a-z]\s*[-–_.:]\s*"#)
+
+    static func readsAsATitle(_ title: String) -> Bool {
+        let body = volumeSuffix.replacing(title, with: "")
+        guard body.filter(\.isLetter).count >= 2 else { return false }
+        guard let first = body.first(where: { $0.isLetter || $0.isNumber })
+        else { return false }
+        return !first.isLowercase
     }
 
     /// A range of issues rather than one: "Sirius 001-116 (pdf)".

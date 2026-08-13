@@ -260,12 +260,48 @@ extension Catalog {
         Rx(#"(https?://[^"'\s]*?(?:[-_ ]|[A-Za-z](?=\d{2}))(\d{1,4})"#
            + #"(?:_[A-Za-z0-9]{4,})?\.(?:jpe?g|png))"#, [.caseInsensitive])
 
+    /// A filename that opens with the series and its issue number, and then
+    /// runs on into the scanners' credits:
+    /// `Galaksija-097-drazen23-Mick-RC-Mad-Mate-1.jpg`.
+    ///
+    /// Read from the front, not the back. The trailing tier above takes the
+    /// *last* number in the name, which on these is the credit run's own
+    /// "-1" — so a whole magazine's art collapsed onto issue 1 and the rest
+    /// fell through to position, which then filed `Galaksija-020.jpg` under
+    /// issue 11.
+    ///
+    /// Anchored to the start of the last path component, so the random id
+    /// postimg puts in the directory above cannot be read as a number. Across
+    /// the corpus this fires on six pages, and on every one the leading word
+    /// is the series' own name with a dense run of issues behind it — there
+    /// is no page where it finds something else. Where those pages already
+    /// had covers from a tier that was right (Dzudas, Gigant, Sirius) it
+    /// reproduces them exactly; every case where it disagrees is one of the
+    /// misfilings above.
+    static let leadingNumberedImage = Rx(
+        #"(https?://[^\s"'<>]+/([A-Za-zČĆŠŽĐčćšžđ]{3,})[-_ ](\d{1,4})"#
+        + #"(?:[-_ ][^/\s"'<>]*)?\.(?:jpe?g|png|webp))"#, [.caseInsensitive])
+
+    /// Tier 1c: the number at the head of the filename.
+    static func leadingNumberedCovers(in html: String) -> [Int: String] {
+        var out: [Int: String] = [:]
+        for match in leadingNumberedImage.allGroups(html) where isPlausibleCover(match[1]) {
+            guard let number = Int(match[3]) else { continue }
+            // A four-digit number in that slot is a year, not an issue:
+            // no magazine here runs past a few hundred.
+            if match[3].count == 4, (1900...2099).contains(number) { continue }
+            if out[number] == nil { out[number] = https(match[1]) }
+        }
+        return out
+    }
+
     /// Issue number → cover URL, for the covers referenced by one page.
     ///
-    /// Two tiers, in order of confidence:
+    /// Tiers, in order of confidence:
     ///
     ///  1. the stripovi.com filename, whose trailing number names the issue
     ///     outright — exact, so it always wins;
+    ///  1c. a filename that opens with the series and its number;
     ///  2. a second number the label itself gives, when the filenames are
     ///     numbered by that instead;
     ///  3. failing both, the position of the images in the post.
@@ -276,6 +312,11 @@ extension Catalog {
     /// to go on is where the image sits relative to the titles.
     public static func covers(in html: String) -> [Int: String] {
         var out = numberedCovers(in: html)
+        // Ahead of the trailing reading, which on these filenames finds the
+        // credit run's number rather than the issue's.
+        for (number, url) in leadingNumberedCovers(in: html) where out[number] == nil {
+            out[number] = url
+        }
         for (number, url) in numberedCovers(in: html, pattern: numberedImage)
         where out[number] == nil {
             out[number] = url
@@ -504,5 +545,23 @@ extension Catalog {
     /// anything appears. Normalise once, here.
     private static func https(_ url: String) -> String {
         url.replacingOccurrences(of: "http://", with: "https://")
+    }
+}
+
+extension Catalog {
+    /// The covers whose own filename says which issue they belong to.
+    ///
+    /// The subset of `covers(in:)` that carries evidence rather than
+    /// inference, which is what makes it safe to apply to issues listed on a
+    /// different page than the art.
+    public static func exactCovers(in html: String) -> [Int: String] {
+        var out = numberedCovers(in: html)
+        for (number, url) in leadingNumberedCovers(in: html) where out[number] == nil {
+            out[number] = url
+        }
+        for (number, url) in doubleNumberedCovers(in: html) where out[number] == nil {
+            out[number] = url
+        }
+        return out
     }
 }

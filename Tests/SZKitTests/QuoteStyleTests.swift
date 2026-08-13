@@ -29,7 +29,7 @@ final class QuoteStyleTests: XCTestCase {
 
     /// The case that was broken on device while green in the tests.
     func testAlefParsesTheSameEitherWay() throws {
-        let saved = try page("Alef")
+        let saved = try page("Alef - Ostale")
         let serialised = asSerialisedByTheDOM(saved)
 
         let a = try Store(); _ = try a.importPage(html: saved, source: "saved")
@@ -42,7 +42,7 @@ final class QuoteStyleTests: XCTestCase {
 
     /// The reduction itself must fire on both forms.
     func testPostReductionWorksOnBothForms() throws {
-        let saved = try page("Alef")
+        let saved = try page("Alef - Ostale")
         for html in [saved, asSerialisedByTheDOM(saved)] {
             let reduced = Catalog.authoritativeHTML(html)
             XCTAssertLessThan(reduced.count, html.count, "nothing was reduced")

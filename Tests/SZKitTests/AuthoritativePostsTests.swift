@@ -23,7 +23,7 @@ final class AuthoritativePostsTests: XCTestCase {
     /// The whole run, from the one member who posted it complete.
     func testAlefYieldsTheCompleteRun() throws {
         let store = try Store()
-        _ = try store.importPage(html: try page("Alef"), source: "alef")
+        _ = try store.importPage(html: try page("Alef - Ostale"), source: "alef")
         let rows = try store.recent(limit: nil)
 
         XCTAssertEqual(rows.count, 26, "the edition ran to 26 issues")
@@ -34,7 +34,7 @@ final class AuthoritativePostsTests: XCTestCase {
 
     /// Eleven posts on the page, six of them the ones worth reading.
     func testOnlyTheDesignatedAuthorSurvives() throws {
-        let whole = try page("Alef")
+        let whole = try page("Alef - Ostale")
         let reduced = Catalog.authoritativeHTML(whole)
         XCTAssertEqual(postCount(whole), 11)
         XCTAssertEqual(postCount(reduced), 6)
@@ -44,7 +44,7 @@ final class AuthoritativePostsTests: XCTestCase {
     /// The page context comes from the head and breadcrumbs, so those must
     /// survive the reduction — otherwise the series and publisher are lost.
     func testReductionKeepsThePageContext() throws {
-        let reduced = Catalog.authoritativeHTML(try page("Alef"))
+        let reduced = Catalog.authoritativeHTML(try page("Alef - Ostale"))
         let context = Catalog.pageContext(in: reduced)
         XCTAssertEqual(context.edition, "Alef")
         XCTAssertNotNil(context.topic)
@@ -89,6 +89,19 @@ final class NameFirstLabelTests: XCTestCase {
     func testPlainNameFirstStillWorks() {
         XCTAssertEqual(Labels.matchNameFirst("Zagor 13 - Nasilje u Darkvudu")?.number, "13")
         XCTAssertEqual(Labels.matchNameFirst("Alef 07")?.number, "07")
+    }
+
+    /// A month and a year is a caption between issues, not an issue: the
+    /// Galaksija topic dates its groups that way, and "januar 1982." read as
+    /// issue 1982 of a series called "januar".
+    func testAMonthAndAYearIsNotAnIssue() {
+        XCTAssertNil(Labels.matchNameFirst("januar 1982."))
+        XCTAssertNil(Labels.matchNameFirst("decembar 1976"))
+        // Only when the number is all there is. A year followed by a real
+        // title is a label like any other.
+        XCTAssertEqual(Labels.matchNameFirst("Galaksija 1982 - Retrospektiva")?.number, "1982")
+        // And a number of an ordinary size is untouched, whatever precedes it.
+        XCTAssertEqual(Labels.matchNameFirst("januar 150")?.number, "150")
     }
 
     /// Page furniture must not be read as a label.

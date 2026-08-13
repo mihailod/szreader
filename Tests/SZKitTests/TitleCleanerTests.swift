@@ -389,6 +389,50 @@ final class LabelStyleTests: XCTestCase {
                        "https://stripzona.com/thumbs/strider/Sirius/Sirius_121_122.jpg")
     }
 
+    /// Forum prose reads as a label all too easily, and a label claims every
+    /// link posted after it — so a stray sentence takes a run of comics with
+    /// it.
+    func testProseIsNotALabel() {
+        // "I don't mean issue 105, but the rework of issue 105."
+        XCTAssertNil(Labels.matchNameFirst(
+            "Ne mislim na broj 105 (stvarni izgled), nego na obradu broja 105."))
+        // "Page 37 from Galaksija issue 297" — a caption.
+        XCTAssertNil(Labels.matchNameFirst("Stranica 37 iz Galaksije broj 297, 2000. god"))
+        // "A page is missing." / "Links for Galaksija"
+        XCTAssertNil(Labels.matchNameFirst("Fali stranica 37."))
+        XCTAssertNil(Labels.matchNameFirst("Linkovi za Galaksiju 101"))
+    }
+
+    /// The rule cannot be "a title starts with a capital": one begins with a
+    /// number, and a sub-volume letter belongs to the number in front of it.
+    func testTitlesThatOnlyLookIrregular() {
+        XCTAssertEqual(Labels.matchNameFirst("Sirius 099 - 900 Baka")?.title, "900 Baka")
+        XCTAssertNotNil(Labels.matchNameFirst("Corto Maltese - 03a - Karipska svita"))
+    }
+
+    /// An issue with no title, introduced by a colon.
+    ///
+    /// Both the size and the bracket strippers anchor to the end of the line,
+    /// so one stray character left the whole tail sitting there as a title —
+    /// and once the tail is junk, rejecting junk loses the issue entirely.
+    func testQualifiersAreNotATitle() {
+        let nn = Labels.matchNameFirst(
+            "Galaksija 091 (stvarni izgled) (drazen23 & MadMate) [217 MB]:")
+        XCTAssertEqual(nn?.number, "091")
+        XCTAssertEqual(nn?.name, "Galaksija")
+        XCTAssertNil(nn?.title, "the qualifiers were kept as a title")
+    }
+
+    /// The halves of a split archive are one comic. Left on, the volume
+    /// marker made each half an issue of its own, so one number arrived as
+    /// three rows.
+    func testSplitVolumeMarkersAreNotTitles() {
+        XCTAssertNil(Labels.matchNameFirst(
+            "Galaksija 213 (1990) (with levels) (Tvinsi).part1")?.title)
+        XCTAssertNil(Labels.matchNameFirst(
+            "Galaksija 213 (1990) (with levels) (Tvinsi).part2")?.title)
+    }
+
     func testInlinePrevLine() {
         let recs = Catalog.links(in: """
             <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>

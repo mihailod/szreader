@@ -18,6 +18,11 @@ final class FixtureCountsTests: XCTestCase {
 
     /// (filename fragment, total links, attributed) — measured by survey.py.
     ///
+    /// Kosmoplov and Galaksija share three pages of one topic, and the first
+    /// leaves 22 links unattributed: notes the posters left between them —
+    /// "Fali stranica 37.", "Linkovi za Galaksiju 101" — which read as a
+    /// series followed by a number and would otherwise claim the next link.
+    ///
     /// Sirius leaves six links unattributed on purpose — collected volumes
     /// covering ranges of issues. Its seven double numbers ("121/122") are
     /// one issue each, and "YU SIRIUS", the special that closes the run, is
@@ -36,12 +41,18 @@ final class FixtureCountsTests: XCTestCase {
     /// the spike missed rather than new mis-parses.
     private let expected: [(String, Int, Int)] = [
         ("Alan Ford",        70,   70),
-        ("Alef",             51,   50),
+        ("Alef - Ostale",    51,   50),
+        ("Alef - pdf",       26,   26),
+        ("Kosmoplov - pdf",  24,   24),
+        ("Galaksija - pdf", 102,  102),
         ("Asteriks",         20,   20),
         ("Dzudas",           33,   33),
         ("Gigant",           79,   79),
         ("Johnny Logan",     22,   21),
         ("Kapetan Miki",     67,   67),
+        ("Kosmoplov i Galaksija - obrade - Casopisi", 268, 246),
+        ("obrade - Page 2",   63,   63),
+        ("obrade - Page 3",   40,   40),
         ("Komandant Mark",   37,   37),
         // Both Kit Teler pages and Martin Mystere were re-saved on 10 Aug 2026
         // with more of their content unlocked, so these are larger than the
@@ -66,6 +77,12 @@ final class FixtureCountsTests: XCTestCase {
     private func html(matching fragment: String) throws -> String? {
         let fm = FileManager.default
         guard let names = try? fm.contentsOfDirectory(atPath: Self.pagesDir.path) else { return nil }
+        // A fragment matching two saved pages is a trap: the shorter filename
+        // wins, so adding a page can quietly point an old expectation at it.
+        // "Alef" started meaning "Alef - pdf" the moment that was saved.
+        let matching = names.filter { $0.lowercased().contains(".htm") && $0.contains(fragment) }
+        XCTAssertLessThan(matching.count, 2,
+                          "“\(fragment)” matches \(matching.count) saved pages: \(matching.sorted())")
         // Longest match wins, so "Kolorka -" doesn't shadow "Kolorka Specijal".
         let hit = names
             .filter { $0.lowercased().contains(".htm") && $0.contains(fragment) }
@@ -96,8 +113,8 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 1721)
-        XCTAssertEqual(attributed, 1708)
+        XCTAssertEqual(total, 2244)
+        XCTAssertEqual(attributed, 2209)
     }
 
     /// A long run split across forum pages has to read as one series.
@@ -152,5 +169,78 @@ final class FixtureCountsTests: XCTestCase {
         let lines = HTMLText.plainLines(
             "<img onerror='if(x.indexOf(1)>-1){y}' src='a.jpg'><div>Title</div>")
         XCTAssertEqual(lines, ["Title"])
+    }
+}
+
+/// Two runs sharing one topic.
+final class TwoSeriesInOneTopicTests: XCTestCase {
+
+    /// Kosmoplov ran 1–24 and Galaksija numbers its own from 1, both on the
+    /// same page. Neither has a title or a code, so with the series left out
+    /// of the natural key they were the same twenty-four rows: the second to
+    /// arrive was dropped and its links handed to the first, leaving a run
+    /// that appeared to begin at 25.
+    func testTwoSeriesKeepTheirOwnNumbering() throws {
+        let store = try Store()
+        try store.ingest(html: """
+            <title>Kosmoplov i Galaksija - obrade - Casopisi - Stripzona</title>
+            <span itemprop="title">Casopisi</span>
+            <div>Kosmoplov 01 (rosko &amp; MickRC)</div>
+            <div>https://mega.co.nz/#!FAKEKOS1!FAKEKEY</div>
+            <div>Galaksija 01 (stvarni izgled) (drazen23)</div>
+            <div>https://mega.co.nz/#!FAKEGAL1!FAKEKEY</div>
+            """)
+        let rows = try store.recent(limit: nil)
+        XCTAssertEqual(rows.count, 2, "one series absorbed the other")
+        XCTAssertEqual(Set(rows.compactMap(\.series)), ["Kosmoplov", "Galaksija"])
+        // Each keeps its own link rather than one collecting both.
+        XCTAssertEqual(rows.map(\.mirrorCount), [1, 1])
+    }
+
+    /// Re-importing still must not duplicate anything.
+    func testReimportIsStillIdempotent() throws {
+        let page = """
+            <title>Kosmoplov i Galaksija - obrade - Casopisi - Stripzona</title>
+            <span itemprop="title">Casopisi</span>
+            <div>Galaksija 01 (stvarni izgled) (drazen23)</div>
+            <div>https://mega.co.nz/#!FAKEGAL1!FAKEKEY</div>
+            """
+        let store = try Store()
+        try store.ingest(html: page)
+        try store.ingest(html: page)
+        XCTAssertEqual(try store.recent(limit: nil).count, 1)
+    }
+}
+
+/// What a topic gathering two runs is called.
+final class CombinedTopicNamingTests: XCTestCase {
+
+    /// "Kosmoplov i Galaksija" is where these were found, not what they are —
+    /// and it reduces to "KIG", which names neither. Where the topic names
+    /// the series inside itself, the series is the finer answer, so the shelf
+    /// and the filters separate them.
+    func testTheSeriesNamesTheIssueWhenTheTopicIsACompound() throws {
+        let store = try Store()
+        try store.ingest(html: """
+            <title>Kosmoplov i Galaksija - obrade - Casopisi - Stripzona</title>
+            <span itemprop="title">Casopisi</span>
+            <div>Kosmoplov 01 (rosko &amp; MickRC)</div>
+            <div>https://mega.co.nz/#!FAKEKOS1!FAKEKEY</div>
+            <div>Galaksija 91 (drazen23)</div>
+            <div>https://mega.co.nz/#!FAKEGAL91!FAKEKEY</div>
+            """)
+        let rows = try store.recent(limit: nil)
+        XCTAssertEqual(Set(rows.compactMap(\.edition)), ["Kosmoplov", "Galaksija"])
+        XCTAssertEqual(Set(rows.compactMap(\.shelfMark)), ["Kosmoplov 1", "Galaksija 91"])
+    }
+
+    /// A topic that does not name the series keeps its own name: Alef's
+    /// issues are "Alef 1", not "ASM 1".
+    func testAnOrdinaryTopicKeepsItsName() {
+        XCTAssertEqual(Store.edition(of: "Alef - SF magazin", under: "Alef"), "Alef")
+        XCTAssertEqual(Store.edition(of: "Mister No", under: "LUNOV MAGNUS STRIP"),
+                       "LUNOV MAGNUS STRIP")
+        // Nothing to prefer when the topic says nothing.
+        XCTAssertNil(Store.edition(of: "Corto Maltese", under: nil))
     }
 }

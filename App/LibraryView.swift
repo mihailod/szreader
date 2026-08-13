@@ -596,7 +596,8 @@ struct LibraryView: View {
 
     private func cover(_ issue: StoredIssue) -> some View {
         CoverImage(url: issue.coverURL, number: issue.number,
-                   grayscale: !issue.isDownloaded)
+                   grayscale: !issue.isDownloaded,
+                   awaitingDownload: !issue.isDownloaded)
             .opacity(issue.isDownloaded ? 1 : 0.75)
             .overlay(alignment: .bottom) {
                 // These are ~80 MB over throttled third-party hosts, so a
@@ -745,13 +746,17 @@ private struct CoverImage: View {
     let url: String?
     let number: Int?
     let grayscale: Bool
+    /// Whether the comic is still to be fetched, which decides what the
+    /// empty frame should say.
+    var awaitingDownload = true
 
     @State private var image: UIImage?
 
-    init(url: String?, number: Int?, grayscale: Bool) {
+    init(url: String?, number: Int?, grayscale: Bool, awaitingDownload: Bool = true) {
         self.url = url
         self.number = number
         self.grayscale = grayscale
+        self.awaitingDownload = awaitingDownload
         _image = State(initialValue: CoverStore.shared.cached(url, grayscale: grayscale))
     }
 
@@ -776,12 +781,29 @@ private struct CoverImage: View {
         }
     }
 
+    /// What stands in when there is no artwork.
+    ///
+    /// An issue number in an empty frame says only what the caption below
+    /// already says. Once the comic is here its own first page becomes the
+    /// cover, so the frame can say what to do about it instead.
     private var placeholder: some View {
         ZStack {
             Color(.tertiarySystemFill)
-            Text(number.map(String.init) ?? "-")
-                .font(.title2.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.secondary)
+            VStack(spacing: 6) {
+                if awaitingDownload {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.title2)
+                    Text("Download to\nsee the cover")
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text(number.map(String.init) ?? "-")
+                        .font(.title2.weight(.semibold).monospacedDigit())
+                }
+            }
+            .foregroundStyle(.secondary)
+            .padding(6)
+            .minimumScaleFactor(0.7)
         }
     }
 }

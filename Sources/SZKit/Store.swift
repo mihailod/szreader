@@ -151,8 +151,28 @@ public final class Store: @unchecked Sendable {
 
             -- Natural key. An issue may legitimately appear on several pages,
             -- and re-importing the same page must not duplicate it.
-            CREATE UNIQUE INDEX IF NOT EXISTS issue_identity
-              ON issue (IFNULL(code,''), IFNULL(number,-1), title_folded);
+            --
+            -- The series belongs in it. One topic can carry two runs — the
+            -- Kosmoplov/Galaksija page carries both, and Galaksija continues
+            -- its own numbering from 1 — so without it Galaksija 1 and
+            -- Kosmoplov 1 are the same row. Neither has a title or a code,
+            -- and the second to arrive was silently dropped with its links
+            -- handed to the first: twenty-four issues gone, and no sign of it
+            -- anywhere except a run that appeared to start at 25.
+            CREATE UNIQUE INDEX IF NOT EXISTS issue_identity_v2
+              ON issue (IFNULL(code,''), IFNULL(number,-1), title_folded,
+                        IFNULL(series,''));
+            DROP INDEX IF EXISTS issue_identity;
+
+            -- Covers read off a page that did not list the issue they name.
+            -- Keyed by what identifies the issue to a reader, since the row
+            -- itself may not exist yet.
+            CREATE TABLE IF NOT EXISTS cover_offer (
+              edition TEXT NOT NULL,
+              number  INTEGER NOT NULL,
+              url     TEXT NOT NULL,
+              PRIMARY KEY (edition, number)
+            );
 
             CREATE TABLE IF NOT EXISTS mirror (
               id       INTEGER PRIMARY KEY,
@@ -331,14 +351,19 @@ public final class Store: @unchecked Sendable {
         let pageContext = Catalog.pageContext(in: html)
         let context = pageContext.searchableText
         let covers = Catalog.covers(in: html)
+        // The filename tiers alone travel off this page; see spendLeftoverCovers.
+        let exact = Catalog.exactCovers(in: html)
         let named = Catalog.namedCovers(in: html)
+        var coveredHere: Set<Int> = []
+        var editionsHere: Set<String> = []
         try recordSegments(Catalog.segments(in: html), context: context)
         try db.transaction {
             for parsed in Catalog.issues(in: html) {
                 let folded = Fold.fold(parsed.label.title ?? parsed.label.code ?? "")
                 let id = try upsertIssue(parsed, folded: folded, source: source,
                                          context: context, hero: pageContext.hero,
-                                         edition: pageContext.edition,
+                                         edition: Self.edition(of: parsed.label.series,
+                                                               under: pageContext.edition),
                                          publisher: pageContext.publisher,
                                          inserted: &newIssues)
                 // Covers arrive per page; fill one in if this issue lacks one.
@@ -350,7 +375,9 @@ public final class Store: @unchecked Sendable {
                                      edition = COALESCE(edition, ?),
                                      publisher = COALESCE(publisher, ?)
                     WHERE id = ?
-                    """, [SQLValue(pageContext.hero), SQLValue(pageContext.edition),
+                    """, [SQLValue(pageContext.hero),
+                          SQLValue(Self.edition(of: parsed.label.series,
+                                                under: pageContext.edition)),
                           SQLValue(pageContext.publisher), .int(id)])
                 if let number = parsed.label.number, let cover = covers[number] {
                     try db.run("UPDATE issue SET cover_url = ? WHERE id = ? AND cover_url IS NULL",
@@ -362,6 +389,9 @@ public final class Store: @unchecked Sendable {
                     try db.run("UPDATE issue SET cover_url = ? WHERE id = ? AND cover_url IS NULL",
                                [.text(cover), .int(id)])
                 }
+                coveredHere.insert(parsed.label.number ?? -1)
+                editionsHere.insert(Self.edition(of: parsed.label.series,
+                                                 under: pageContext.edition) ?? "")
                 for m in parsed.mirrors {
                     // URL is UNIQUE: re-importing a page is a no-op for mirrors.
                     try db.run("""
@@ -371,8 +401,83 @@ public final class Store: @unchecked Sendable {
                     if try db.scalarInt("SELECT changes()") > 0 { newMirrors += 1 }
                 }
             }
+            try spendLeftoverCovers(exact, coveredHere: coveredHere, editions: editionsHere)
+            // Unconditional: this page may have supplied the issues that an
+            // earlier page's covers were waiting for. The mixed topics are
+            // precisely the ones that record no offers and need them most.
+            try claimCoverOffers()
         }
         return (newIssues, newMirrors)
+    }
+
+    /// Covers for issues that are not on the page carrying them.
+    ///
+    /// A run is often spread over several topics — Galaksija's issues come
+    /// from three "obrade" pages, while the page with the artwork lists a
+    /// different hundred of them. The art names its issue outright, so a
+    /// cover with no issue beside it is still an answer for the issue it
+    /// names; without this, 68 of Galaksija's covers were read off the page
+    /// and then dropped for want of a row to put them on.
+    ///
+    /// Deliberately narrow, because a number on its own means nothing across
+    /// a library — every series has an issue 5:
+    ///
+    ///  * only the filename tiers, never the positional guess. Position is
+    ///    inferred from where art sits in *this* page's post and says nothing
+    ///    about any other page;
+    ///  * only from a page whose issues are all one edition. "Kosmoplov i
+    ///    Galaksija" is one topic holding two runs, each numbered from one,
+    ///    and a leftover cover there names an issue in one of them with no
+    ///    way to say which;
+    ///  * only where the issue has no cover, so nothing already established
+    ///    is overwritten.
+    ///
+    /// Kept rather than spent on the spot, because which page is imported
+    /// first is arbitrary. Alphabetically the artwork page comes before the
+    /// three topics listing the issues, and a cover applied before its issue
+    /// exists is a cover thrown away: Galaksija landed 106 that way against
+    /// 175 in the other order. An offer sits in the table until an issue it
+    /// names turns up.
+    func spendLeftoverCovers(_ covers: [Int: String], coveredHere: Set<Int>,
+                             editions: Set<String>) throws {
+        guard editions.count == 1, let edition = editions.first, !edition.isEmpty else { return }
+        for (number, url) in covers where !coveredHere.contains(number) {
+            try db.run("""
+                INSERT OR IGNORE INTO cover_offer (edition, number, url) VALUES (?, ?, ?)
+                """, [.text(edition), .int(Int64(number)), .text(url)])
+        }
+    }
+
+    /// Hands every kept cover to the issue it names, if that issue has none.
+    func claimCoverOffers() throws {
+        try db.run("""
+            UPDATE issue SET cover_url = (
+                SELECT o.url FROM cover_offer o
+                WHERE o.edition = issue.edition AND o.number = issue.number)
+            WHERE cover_url IS NULL AND edition IS NOT NULL AND number IS NOT NULL
+              AND EXISTS (SELECT 1 FROM cover_offer o
+                          WHERE o.edition = issue.edition AND o.number = issue.number)
+            """)
+    }
+
+    /// Which name an issue is filed under.
+    ///
+    /// Usually the topic's: "LUNOV MAGNUS STRIP" is what a Mister No issue
+    /// belongs to. But a topic can gather several runs — "Kosmoplov i
+    /// Galaksija" carries both, each numbering from one — and then the
+    /// topic's name says where the issue was found rather than what it is,
+    /// and reduces to "KIG", which names neither.
+    ///
+    /// The giveaway is that the topic names the series inside itself. Where
+    /// it does, the series is the finer answer and becomes the edition, so
+    /// the shelf and the filters separate them.
+    static func edition(of series: String?, under topic: String?) -> String? {
+        guard let series, !series.isEmpty, let topic, !topic.isEmpty,
+              Fold.fold(topic) != Fold.fold(series) else { return topic }
+        let words = Set(Fold.fold(topic).split(whereSeparator: { !$0.isLetter }).map(String.init))
+        let mine = Fold.fold(series).split(whereSeparator: { !$0.isLetter }).map(String.init)
+        guard !mine.isEmpty, mine.allSatisfy(words.contains) else { return topic }
+        return series
     }
 
     /// The cover whose name appears in an issue's title.
@@ -424,8 +529,10 @@ public final class Store: @unchecked Sendable {
         try db.query("""
             SELECT id FROM issue
             WHERE IFNULL(code,'') = ? AND IFNULL(number,-1) = ? AND title_folded = ?
+              AND IFNULL(series,'') = ?
             """, [.text(parsed.label.code ?? ""),
-                  .int(Int64(parsed.label.number ?? -1)), .text(folded)]) { row in
+                  .int(Int64(parsed.label.number ?? -1)), .text(folded),
+                  .text(parsed.label.series ?? "")]) { row in
             id = Int64(row.int(0) ?? 0)
         }
         return id
