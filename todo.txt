@@ -1,11 +1,8 @@
-- LMS ken parker has redirects to LMS, needs a join
-
-- fibra ken parker 1st 32 are on the libelus page, needs a join
+- LMS ken parker has redirects to LMS -- no can do
 
 - add setting for unloaded: gray or cloud symbol
 
 testing:
-- 3rd page of zagor
 - rest of komandant mark
 - rest of blek lms
 - rest of galaksija PDF (ran out of likes)

@@ -47,7 +47,7 @@ final class PDFMagazineCoversTests: XCTestCase {
     /// leading reading has to agree with it rather than displace it.
     func testItAgreesWithThePagesThatWereAlreadyCorrect() throws {
         let saved = try FileManager.default.contentsOfDirectory(atPath: Self.pagesDir.path)
-        for name in ["Dzudas", "Gigant"] {
+        for name in ["Dzudas - STRIPZONA", "Gigant"] {
             // Matched by fragment: the Gigant page's name carries a decomposed
             // "č" that does not survive being written out as a literal here.
             let file = try XCTUnwrap(saved.first { $0.hasPrefix(name) && $0.hasSuffix(".html") },

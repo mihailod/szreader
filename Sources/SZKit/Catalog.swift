@@ -137,6 +137,13 @@ public enum Catalog {
                     style = .inlineSameLine
                     label = IssueLabel(number: Int(g[1]), title: TitleCleaner.tidyInline(g[2]))
                     stamp = instance
+                } else if !before.isEmpty, let g = Labels.bareNumber.firstGroups(before),
+                          let n = Int(g[1]), n > 0 {
+                    // "01 <url>" — the number is the whole label.
+                    instance += 1
+                    style = .inlineSameLine
+                    label = IssueLabel(number: n, title: nil)
+                    stamp = instance
                 } else if !after.isEmpty, let trailing = Labels.trailingLabel(after) {
                     instance += 1
                     style = .inlineSameLine

@@ -46,7 +46,8 @@ final class FixtureCountsTests: XCTestCase {
         ("Kosmoplov - pdf",  24,   24),
         ("Galaksija - pdf", 102,  102),
         ("Asteriks",         20,   20),
-        ("Dzudas",           33,   33),
+        ("Dzudas - LUNOV",   22,   22),
+        ("Dzudas - STRIPZONA", 33,  33),
         ("Gigant",           79,   79),
         ("Johnny Logan",     22,   21),
         ("Kapetan Miki",     67,   67),
@@ -58,6 +59,9 @@ final class FixtureCountsTests: XCTestCase {
         // with more of their content unlocked, so these are larger than the
         // spike measured. The fixtures changed, not the parser — each page was
         // checked for implausible numbers before these were moved.
+        ("Ken Parker - FIBRA",    49,   49),
+        ("Ken Parker - LIBELLUS", 79,   79),
+        ("Ken Parker - SYSTEM",   25,   25),
         ("Kit Teler - LUNOV", 82,   82),
         ("Kit Teler - ZLATNA", 15,  15),
         ("Kolorka -",        144,  144),
@@ -114,8 +118,8 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 2320)
-        XCTAssertEqual(attributed, 2285)
+        XCTAssertEqual(total, 2495)
+        XCTAssertEqual(attributed, 2460)
     }
 
     /// A long run split across forum pages has to read as one series.

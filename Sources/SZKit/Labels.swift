@@ -31,6 +31,26 @@ enum Labels {
         + #"(?:\s*[A-Za-zČĆŠŽĐčćšžđ][A-Za-zČĆŠŽĐčćšžđ\s]{1,30}?\s+\d{1,4})?"#
         + #"\s*[-–.]\s*(.+?)\s*$"#)
 
+    /// A label that is nothing but the issue's number: "01 <url>".
+    ///
+    /// Ken Parker's topic is a bare list — a padded number, a space, the link,
+    /// and no title anywhere on the page. Every other style here needs a
+    /// separator and something after it, so all 79 of its links went
+    /// unattributed.
+    ///
+    /// Safe because of where it is applied rather than what it matches: the
+    /// classifier has already discarded every URL on a `noise` host, and the
+    /// only other thing in the corpus shaped like this is the forum's own
+    /// pagination — "2 …showtopic=933&page=2" — which is a stripzona.com link
+    /// and so never reaches here. Measured across the corpus: this fires on
+    /// one page.
+    ///
+    /// `\s` rather than a trimmed string: the classifier trims plain spaces,
+    /// and what sits after the number here is the non-breaking space IPB
+    /// writes as `&nbsp;`. ICU's `\s` covers it; the trim set did not, so the
+    /// label arrived as "01\u{00A0}" and matched nothing.
+    static let bareNumber = Rx(#"^\s*0*(\d{1,4})\s*$"#)
+
     // "MN_LMS_511", and "ZS_85 - Komadant Mark" where the code is followed by
     // the title. TN_* are cover thumbnails hotlinked from stripovi.com, not
     // labels. The title is group 3; the code and number keep their positions,
