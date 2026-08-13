@@ -4,8 +4,6 @@
 
 - add settings (/ help / about) screen
 
-- need deleting of the visible set with confirmation (delete all is too broad and deleting one by one too tedious)
-
 testing:
 - 3rd page of zagor
 - rest of komandant mark
@@ -15,4 +13,4 @@ testing:
 priority:
 - bonelli zs lms
 
-Enhancement: support for pc-sux! rename app to be more generic and in import have a popup: StripZona, Retrospec 
+Enhancement: support for pc-sux! and in import have a popup: StripZona, Retrospec

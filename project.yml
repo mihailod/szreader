@@ -34,7 +34,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: SZ Reader
+        CFBundleDisplayName: StreamZine
         UILaunchScreen:
           UIColorName: ""
         UISupportedInterfaceOrientations:
