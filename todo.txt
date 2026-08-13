@@ -2,10 +2,6 @@
 
 - fibra ken parker 1st 32 are on the libelus page, needs a join
 
-- add settings (/ help / about) screen
-
-- revisit some ui
-
 testing:
 - 3rd page of zagor
 - rest of komandant mark
@@ -15,4 +11,3 @@ testing:
 priority:
 - bonelli zs lms
 
-Enhancement: support for pc-sux! and in import have a popup: StripZona, Retrospec

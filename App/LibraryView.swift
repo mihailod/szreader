@@ -64,6 +64,7 @@ struct LibraryView: View {
     @ObservedObject var model: AppModel
     @State private var selected: StoredIssue?
     @State private var showingImport = false
+    @State private var showingSettings = false
     @AppStorage("libraryLayout") private var layoutRaw = LibraryLayout.grid.rawValue
     @State private var pending: PendingAction?
 
@@ -114,6 +115,7 @@ struct LibraryView: View {
         .fullScreenCover(isPresented: $showingImport) {
             ImportView { html in try model.importPage(html: html) }
         }
+        .sheet(isPresented: $showingSettings) { SettingsView() }
     }
 
     // MARK: - Header
@@ -835,7 +837,32 @@ struct LibraryView: View {
         return f.string(fromByteCount: bytes)
     }
 
+    /// The counts stay centred in the bar, so the button is laid over the
+    /// left of it rather than placed in the same row — a row would push the
+    /// summary off-centre by exactly the button's width.
     private var statusBar: some View {
+        ZStack {
+            summary
+            HStack {
+                Button { showingSettings = true } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 27))
+                        // A 27pt glyph is not a 44pt target; the frame is what
+                        // makes the corner tappable.
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Settings")
+                Spacer()
+            }
+            .padding(.leading, 12)
+        }
+        .frame(height: 64)
+        .background(.bar)
+    }
+
+    private var summary: some View {
         HStack(spacing: 14) {
             Text(summaryLine)
             if model.freeSpace > 0 {
@@ -857,11 +884,10 @@ struct LibraryView: View {
         .foregroundStyle(.secondary)
         .lineLimit(1)
         .minimumScaleFactor(0.6)
-        .padding(.horizontal, 20)
-        // maxWidth centres horizontally, the fixed height centres vertically.
+        // Clear of the settings button at either end, so a long status line
+        // shrinks rather than running underneath it.
+        .padding(.horizontal, 64)
         .frame(maxWidth: .infinity)
-        .frame(height: 64)
-        .background(.bar)
     }
 }
 
