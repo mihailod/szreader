@@ -145,6 +145,11 @@ public enum TitleCleaner {
             if shorter == t || shorter.isEmpty { break }
             t = shorter
         }
+        // Punctuation that introduced the links rather than ending the title:
+        // Gigant and Maxmagnus both write "Bob Moran: <url>", and the colon
+        // came through into the name on 102 issues. Nothing else in the corpus
+        // has a title ending this way, and no title needs to.
+        t = t.trimmingCharacters(in: CharacterSet(charactersIn: " :;,"))
         let parts = split(t)
         // Only a single ALL-CAPS word is treated as a hero prefix. Requiring a
         // single word keeps a genuinely shouted multi-word title intact.

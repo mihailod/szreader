@@ -250,7 +250,7 @@ final class LabelStyleTests: XCTestCase {
             """)
         XCTAssertEqual(recs.count, 2, "both links should be found")
         XCTAssertEqual(recs.map { $0.label?.number }, [1, 1])
-        XCTAssertEqual(recs.map { $0.label?.title }, ["Bob Moran:", "Bob Moran:"])
+        XCTAssertEqual(recs.map { $0.label?.title }, ["Bob Moran", "Bob Moran"])
         XCTAssertEqual(recs.map(\.instance), [recs.first?.instance, recs.first?.instance],
                        "they are one issue, so they belong to one instance")
     }
@@ -331,7 +331,7 @@ final class LabelStyleTests: XCTestCase {
             <div>01. Bob Moran: http://www.mediafire.com/?FAKEKEY001 [181.20 MB]</div>
             """)
         XCTAssertEqual(recs.first?.label?.number, 1)
-        XCTAssertEqual(recs.first?.label?.title, "Bob Moran:")
+        XCTAssertEqual(recs.first?.label?.title, "Bob Moran")
     }
 
     /// The topic describes itself as well as naming itself.
