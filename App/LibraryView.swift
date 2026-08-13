@@ -274,26 +274,50 @@ struct LibraryView: View {
     /// One menu for both layouts — long-pressing cover art behaves identically
     /// in grid and list, so there is only one thing to learn.
     ///
-    /// Ordered by consequence: fetching, then the two that only reclaim disk,
-    /// then — below a divider and marked destructive so they render red — the
-    /// two that actually remove things from the library. Only "Delete" ever
-    /// costs an import to undo.
+    /// Labels are kept short enough to sit on one line. A context menu's width
+    /// is UIKit's to decide — there is no API for it in SwiftUI or UIKit — so
+    /// a label that does not fit wraps to two lines, and eight wrapped rows
+    /// made the menu tall enough to scroll. Each row names its scope only
+    /// ("Visible", "All"); the noun is established by the row above it and by
+    /// the icon.
+    ///
+    /// Ordered by consequence: the two that act on this issue, then the two
+    /// that only reclaim disk, then — below a divider and marked destructive
+    /// so they render red — the three that remove things from the library.
+    /// Only the deletes ever cost an import to undo.
     @ViewBuilder private func issueMenu(for issue: StoredIssue) -> some View {
-        // Green for the only action that adds something; red is reserved for
-        // the two that remove from the library.
+        // One item for both directions, the same as the list row: an issue
+        // either is on disk or is not, so the other item could only ever be a
+        // greyed-out twin saying what the cover already shows.
+        //
+        // Green for the only action that adds something. No red here: in this
+        // menu red is reserved for the three below the divider, and this one
+        // reclaims disk without touching the library.
         Button {
-            beginDownload(issue, model: model, pending: &pending)
+            if issue.isDownloaded {
+                beginRemoveDownload(issue, model: model, pending: &pending)
+            } else {
+                beginDownload(issue, model: model, pending: &pending)
+            }
         } label: {
-            Label(issue.isDownloaded ? "Download again" : "Download",
-                  systemImage: "arrow.down.circle")
+            Label(issue.isDownloaded ? "Remove Download" : "Download",
+                  systemImage: issue.isDownloaded ? "trash" : "arrow.down.circle")
         }
-        .tint(.green)
+        .tint(issue.isDownloaded ? nil : Color.green)
         .disabled(model.downloading.contains(issue.id))
 
+        // Second, because like the item above it this is about the issue in
+        // hand rather than the shelf.
+        //
+        // Blue, matching its button in the list: the tint here colours the
+        // icon, so the same action wears the same colour in both views.
         Button {
-            beginRemoveDownload(issue, model: model, pending: &pending)
-        } label: { Label("Remove Download", systemImage: "trash") }
-            .disabled(!issue.isDownloaded)
+            model.setRead(!issue.isRead, for: issue)
+        } label: {
+            Label(issue.isRead ? "Mark as Unread" : "Mark as Read",
+                  systemImage: issue.isRead ? "circle" : "checkmark.circle")
+        }
+        .tint(.accentColor)
 
         // Between one and all of them, and wearing the shelf's own filter mark
         // so "visible" reads as "whatever the filters and the search left".
@@ -301,22 +325,14 @@ struct LibraryView: View {
             pending = .removeVisibleDownloads(count: model.visibleDownloadedCount,
                                               touchesASet: model.visibleDownloadsTouchASet)
         } label: {
-            Label("Remove All Visible Downloads",
-                  systemImage: "line.3.horizontal.decrease.circle")
+            Label("Remove Visible", systemImage: "line.3.horizontal.decrease.circle")
         }
         .disabled(model.visibleDownloadedCount == 0)
 
         Button {
             pending = .removeAllDownloads(model.downloadedCount)
-        } label: { Label("Remove All Downloads", systemImage: "arrow.down.circle.dotted") }
+        } label: { Label("Remove All", systemImage: "arrow.down.circle.dotted") }
             .disabled(model.downloadedCount == 0)
-
-        Button {
-            model.setRead(!issue.isRead, for: issue)
-        } label: {
-            Label(issue.isRead ? "Mark as Unread" : "Mark as Read",
-                  systemImage: issue.isRead ? "circle" : "checkmark.circle")
-        }
 
         Divider()
 
@@ -326,12 +342,12 @@ struct LibraryView: View {
 
         Button(role: .destructive) {
             pending = .deleteVisible(model.results.count)
-        } label: { Label("Delete All Visible Issues", systemImage: "xmark.bin.circle") }
+        } label: { Label("Delete Visible", systemImage: "xmark.bin.circle") }
             .disabled(model.results.isEmpty)
 
         Button(role: .destructive) {
             pending = .deleteAll(model.issueCount)
-        } label: { Label("Delete Entire Library", systemImage: "trash.slash") }
+        } label: { Label("Delete Library", systemImage: "trash.slash") }
     }
 
     private func confirmation(for action: PendingAction) -> Alert {
@@ -603,6 +619,20 @@ struct LibraryView: View {
                 .buttonStyle(.bordered)
                 .tint(issue.isDownloaded ? .red : .green)
             }
+            // Marking something read was buried in the long press, which is
+            // not where a reader looks for it — the list is the view where
+            // every other action is already a button in front of them.
+            //
+            // Its own colour: the two either side are about having the files,
+            // this one is about having read them. Not the green the read badge
+            // uses — sitting next to the green Download button, the two pills
+            // read as the same action at a glance.
+            Button(issue.isRead ? "Mark as Unread" : "Mark as Read") {
+                model.setRead(!issue.isRead, for: issue)
+            }
+            .buttonStyle(.bordered)
+            .tint(.accentColor)
+
             Button("Delete") { pending = .remove(issue) }
                 .buttonStyle(.bordered)
                 .tint(.red)

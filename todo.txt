@@ -4,6 +4,8 @@
 
 - add settings (/ help / about) screen
 
+- revisit some ui
+
 testing:
 - 3rd page of zagor
 - rest of komandant mark
