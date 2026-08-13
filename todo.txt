@@ -7,6 +7,10 @@
 testing:
 - 3rd page of zagor
 - rest of komandant mark
+- rest of blek lms
 
 priority:
 - bonelli zs lms
+
+- sirius
+- kosmoplov

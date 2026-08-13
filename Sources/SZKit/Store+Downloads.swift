@@ -93,11 +93,20 @@ extension Store {
     /// Measured on disk rather than summed from the recorded sizes: the archive
     /// is deleted after unpacking but the unpacked pages remain, so the
     /// recorded byte count is not what the library actually occupies.
+    /// Bytes the downloads actually occupy.
+    ///
+    /// Each directory once, however many issues live in it. A set is one
+    /// download shared by a whole run — 116 issues out of one archive — and
+    /// charging every one of them for the folder they share reported 16.68 GB
+    /// for 144 MB on disk.
     public var totalDownloadedBytes: Int64 {
+        var counted: Set<String> = []
         var total: Int64 = 0
         try? db.query("SELECT path FROM download") { row in
             guard let p = row.string(0) else { return }
-            total += Self.sizeOnDisk(resolvedURL(p).deletingLastPathComponent())
+            let directory = resolvedURL(p).deletingLastPathComponent()
+            guard counted.insert(directory.standardizedFileURL.path).inserted else { return }
+            total += Self.sizeOnDisk(directory)
         }
         return total
     }

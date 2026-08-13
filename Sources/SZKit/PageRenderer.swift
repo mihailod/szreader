@@ -80,19 +80,38 @@ public final class ComicDocument {
     /// itself. What separates the cases is whether its pages are *new*.
     private let volumes: [(reader: ArchiveReader, pages: [String])]
 
-    /// Every page across every volume, in order.
+    /// Every page across every volume, in order. Empty for a PDF, whose
+    /// pages are drawn rather than stored.
     public let pages: [String]
+
+    /// Set when the comic is a PDF instead of a folder of scans.
+    private let pdf: PDFComic?
 
     /// The first archive, which is what a caller inspecting the container
     /// means by "the archive".
     public var archive: ArchiveReader { volumes[0].reader }
 
+    /// Whether the pages are drawn from a PDF rather than read from files.
+    public var isPDF: Bool { pdf != nil }
+
     public convenience init(archive: ArchiveReader) throws {
         try self.init(volumes: [archive])
     }
 
+    /// A comic that is a single PDF — one issue out of a collected archive,
+    /// or a PDF downloaded on its own.
+    public init(pdfAt url: URL) throws {
+        guard let pdf = PDFComic(fileURL: url), pdf.pageCount > 0 else {
+            throw ArchiveError.corrupt("not a readable PDF: \(url.lastPathComponent)")
+        }
+        self.pdf = pdf
+        self.volumes = []
+        self.pages = []
+    }
+
     public init(volumes readers: [ArchiveReader]) throws {
         precondition(!readers.isEmpty, "a comic needs at least one archive")
+        self.pdf = nil
         var built: [(ArchiveReader, [String])] = []
         var seen: Set<String> = []
         for reader in readers {
@@ -186,6 +205,13 @@ public final class ComicDocument {
     public convenience init(fileURL: URL, workDirectory: URL? = nil) throws {
         let work = workDirectory
             ?? fileURL.deletingPathExtension().appendingPathExtension("unpacked")
+        // A comic that is simply a PDF: nothing to unpack, and its pages are
+        // drawn straight out of it.
+        if ArchiveKind.sniff(fileURL) == .pdf {
+            try self.init(pdfAt: fileURL)
+            return
+        }
+
         // Every archive of a multi-volume comic gets a directory of its own.
         // The reader indexes a work directory by walking it, so two archives
         // sharing one — or worse, one nested inside the other's — means each
@@ -318,7 +344,7 @@ public final class ComicDocument {
         return readers
     }
 
-    public var pageCount: Int { pages.count }
+    public var pageCount: Int { pdf?.pageCount ?? pages.count }
 
     public func pageData(_ index: Int) throws -> Data {
         guard pages.indices.contains(index) else {
@@ -338,7 +364,8 @@ public final class ComicDocument {
 
     /// Decoded page, sized for the target screen.
     public func page(_ index: Int, maxPixelSize: Int) throws -> CGImage? {
-        PageRenderer.downsample(data: try pageData(index), maxPixelSize: maxPixelSize)
+        if let pdf { return pdf.image(index, maxPixelSize: maxPixelSize) }
+        return PageRenderer.downsample(data: try pageData(index), maxPixelSize: maxPixelSize)
     }
 
     /// Indices worth decoding ahead of `current`.

@@ -18,6 +18,11 @@ final class FixtureCountsTests: XCTestCase {
 
     /// (filename fragment, total links, attributed) — measured by survey.py.
     ///
+    /// Sirius leaves six links unattributed on purpose — collected volumes
+    /// covering ranges of issues. Its seven double numbers ("121/122") are
+    /// one issue each, and "YU SIRIUS", the special that closes the run, is
+    /// an issue with no number at all.
+    ///
     /// Johnny Logan came later than the spike and is measured here rather than
     /// by it. Its one unattributed link is a second, "fixed" scan of issue 1
     /// posted on its own line with no label of its own — an extra mirror, not
@@ -51,6 +56,7 @@ final class FixtureCountsTests: XCTestCase {
         ("Mister No",        268,  268),
         ("Orka -",            62,   62),
         ("Orka Specijal",     30,   30),
+        ("Sirius",           164,  158),
         ("Veliki Blek",      107,  107),
         ("Zagor - LUNOV",     43,   43),
         ("Zagor - ZLATNA SERIJA - ZS", 125, 125),
@@ -90,8 +96,8 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 1557)
-        XCTAssertEqual(attributed, 1550)
+        XCTAssertEqual(total, 1721)
+        XCTAssertEqual(attributed, 1708)
     }
 
     /// A long run split across forum pages has to read as one series.

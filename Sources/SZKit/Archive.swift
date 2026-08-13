@@ -135,6 +135,10 @@ public struct UnpackedReader: ArchiveReader {
             let work = workDirectory ?? url.deletingPathExtension()
                 .appendingPathExtension("unpacked")
             return try SevenZipReader(url: url, workDirectory: work)
+        case .pdf:
+            // Not a container at all: its pages are drawn, not extracted, so
+            // it is opened by `ComicDocument` rather than read as entries.
+            throw ArchiveError.notAnArchive
         case .unknown:
             throw ArchiveError.notAnArchive
         }

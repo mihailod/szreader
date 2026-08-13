@@ -297,6 +297,98 @@ final class LabelStyleTests: XCTestCase {
         }
     }
 
+    /// A label written after its link rather than before it:
+    /// "http://…?7wdy… - Sirius 001 - Ne ubijte Rulla".
+    func testLabelAfterTheLink() {
+        let recs = Catalog.links(in:
+            "<div>http://www.mediafire.com/?FAKEKEY001 - Sirius 001 - Ne ubijte Rulla</div>")
+        XCTAssertEqual(recs.first?.label?.number, 1)
+        XCTAssertEqual(recs.first?.label?.title, "Ne ubijte Rulla")
+        XCTAssertEqual(recs.first?.label?.series, "Sirius")
+    }
+
+    /// A collected volume is a range of issues, not an issue.
+    func testACollectedVolumeIsNotAnIssue() {
+        let recs = Catalog.links(in:
+            "<div>http://www.mediafire.com/?FAKEKEY002 - Sirius 001-116 (pdf)</div>")
+        XCTAssertEqual(recs.count, 1, "the link should still be found")
+        XCTAssertNil(recs.first?.label, "a collected volume was imported as issue 1")
+    }
+
+    /// …but a title that begins with a number is a real issue. The bundles
+    /// join their range with a bare dash; a title is separated by spaces.
+    func testATitleStartingWithANumberSurvives() {
+        let recs = Catalog.links(in:
+            "<div>http://www.mediafire.com/?FAKEKEY099 - Sirius 099 - 900 Baka</div>")
+        XCTAssertEqual(recs.first?.label?.number, 99)
+        XCTAssertEqual(recs.first?.label?.title, "900 Baka")
+    }
+
+    /// A line that labels itself in front keeps doing so — its links may be
+    /// followed by sizes, which are not a label.
+    func testALineLabelledInFrontIgnoresWhatFollows() {
+        let recs = Catalog.links(in: """
+            <div>01. Bob Moran: http://www.mediafire.com/?FAKEKEY001 [181.20 MB]</div>
+            """)
+        XCTAssertEqual(recs.first?.label?.number, 1)
+        XCTAssertEqual(recs.first?.label?.title, "Bob Moran:")
+    }
+
+    /// The topic describes itself as well as naming itself.
+    func testEditionDropsItsDescription() {
+        let ctx = Catalog.pageContext(in: """
+            <title>Sirius, SF časopis - Casopisi - Stripzona</title>
+            <span itemprop="title">Casopisi</span>
+            """)
+        XCTAssertEqual(ctx.edition, "Sirius")
+    }
+
+    /// One magazine printed over two numbers: "Sirius 121/122". The ordinary
+    /// parse stopped at the first, leaving the issue numbered 121 and titled
+    /// "/122 - Euroconski dvoboj".
+    func testDoubleIssueKeepsBothNumbers() {
+        let recs = Catalog.links(in:
+            "<div>http://www.mediafire.com/?FAKEKEY121 - Sirius 121/122 - Euroconski dvoboj</div>")
+        XCTAssertEqual(recs.first?.label?.number, 121)
+        XCTAssertEqual(recs.first?.label?.numberTo, 122)
+        XCTAssertEqual(recs.first?.label?.title, "Euroconski dvoboj")
+    }
+
+    /// Consecutive is what tells a double issue from a collected volume.
+    func testANonConsecutivePairIsNotADoubleIssue() {
+        let recs = Catalog.links(in:
+            "<div>http://www.mediafire.com/?FAKEKEY001 - Sirius 001/116 (pdf)</div>")
+        XCTAssertNil(recs.first?.label?.numberTo)
+    }
+
+    /// A special with no number of its own still belongs in the library.
+    func testAnUnnumberedSpecialIsAnIssue() {
+        let recs = Catalog.links(in:
+            "<div>http://www.mediafire.com/?FAKEKEY999 - YU SIRIUS</div>")
+        XCTAssertEqual(recs.first?.label?.title, "YU SIRIUS")
+        XCTAssertNil(recs.first?.label?.number)
+    }
+
+    /// Its cover is filed under the same word rather than a number.
+    func testCoverNamedAfterTheSpecial() {
+        let named = Catalog.namedCovers(in:
+            "<div><img src=\"http://stripzona.com/thumbs/strider/Sirius/Sirius_YU.jpg\"></div>")
+        XCTAssertEqual(Store.namedCover(for: "YU SIRIUS", among: named),
+                       "https://stripzona.com/thumbs/strider/Sirius/Sirius_YU.jpg")
+        // Contains "yu", but does not name it. A short key loose in the
+        // middle of a word would put this cover on an unrelated issue.
+        XCTAssertNil(Store.namedCover(for: "Bayushi i zmaj", among: named),
+                     "a cover was matched on a fragment of a word")
+    }
+
+    /// A double issue's cover is filed under both numbers at once.
+    func testCoverNamedAfterBothNumbers() {
+        let covers = Catalog.covers(in:
+            "<div><img src=\"http://stripzona.com/thumbs/strider/Sirius/Sirius_121_122.jpg\"></div>")
+        XCTAssertEqual(covers[121],
+                       "https://stripzona.com/thumbs/strider/Sirius/Sirius_121_122.jpg")
+    }
+
     func testInlinePrevLine() {
         let recs = Catalog.links(in: """
             <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>

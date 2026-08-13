@@ -7,7 +7,7 @@ final class ShelfSortTests: XCTestCase {
     private func issue(_ id: Int, edition: String? = nil, number: Int? = nil,
                        title: String? = nil, hero: String? = nil) -> StoredIssue {
         StoredIssue(id: id, code: "C\(id)", number: number, title: title, series: nil,
-                    hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, started: false, downloadFailed: false, style: .labeledBlock,
+                    hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, numberTo: nil, started: false, downloadFailed: false, style: .labeledBlock,
                     mirrorCount: 1, coverURL: nil, isDownloaded: false)
     }
 

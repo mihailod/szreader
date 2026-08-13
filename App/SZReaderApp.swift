@@ -520,7 +520,12 @@ final class AppModel: ObservableObject {
     /// Fetches the archive: resolve a mirror, download, decrypt if needed,
     /// verify it is really an archive. Falls through to the next mirror when
     /// one is dead.
-    func download(_ issue: StoredIssue) {
+    /// The set an issue belongs to, when its topic publishes them together.
+    func set(for issue: StoredIssue) -> IssueSegment? {
+        try? library?.segment(forIssue: issue.id)
+    }
+
+    func download(_ issue: StoredIssue, asSet: Bool = false) {
         guard let library, !downloading.contains(issue.id) else { return }
         let issueID = issue.id
         let name = issue.title ?? issue.code ?? "issue"
@@ -616,6 +621,13 @@ final class AppModel: ObservableObject {
     func deleteDownload(_ issue: StoredIssue) {
         guard let store else { return }
         do {
+            // Issues published as one download share a directory, so there is
+            // no removing one of them on its own — the reader has already been
+            // told that and agreed.
+            if let library, try library.removeSegmentDownload(issueID: issue.id) {
+                refresh(note: "removed the set")
+                return
+            }
             removeFromDisk(try store.deleteDownload(issueID: issue.id))
             refresh(note: "removed download for “\(issue.title ?? issue.code ?? "issue")”")
         } catch {

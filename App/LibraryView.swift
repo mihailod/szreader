@@ -10,14 +10,42 @@ enum LibraryLayout: String {
 /// At file scope because the detail sheet raises these too, and a
 /// confirmation that only exists on the shelf would mean the same action
 /// asking in one place and not the other.
+/// Starts a download, asking first when the issue is published as part of a
+/// set — one archive holding a run of issues, so a single tap fetches all of
+/// them and a single removal discards all of them.
+@MainActor
+func beginDownload(_ issue: StoredIssue, model: AppModel, pending: inout PendingAction?) {
+    if let set = model.set(for: issue) {
+        pending = .downloadSet(issue, set.downloadWarning)
+    } else {
+        model.download(issue)
+    }
+}
+
+/// The same question before removing one.
+@MainActor
+func beginRemoveDownload(_ issue: StoredIssue, model: AppModel, pending: inout PendingAction?) {
+    if let set = model.set(for: issue) {
+        pending = .removeSet(issue, set.removalWarning)
+    } else {
+        pending = .deleteDownload(issue)
+    }
+}
+
 enum PendingAction: Identifiable {
     case deleteDownload(StoredIssue)
     case remove(StoredIssue)
     case removeAllDownloads(Int)
     case deleteAll(Int)
+    /// Issues published as one download: taking or discarding any of them
+    /// does the same to all of them, so both are asked about first.
+    case downloadSet(StoredIssue, String)
+    case removeSet(StoredIssue, String)
 
     var id: String {
         switch self {
+        case .downloadSet(let i, _): return "set-dl-\(i.id)"
+        case .removeSet(let i, _): return "set-rm-\(i.id)"
         case .deleteDownload(let i): return "dl-\(i.id)"
         case .remove(let i): return "rm-\(i.id)"
         case .removeAllDownloads: return "all-downloads"
@@ -248,7 +276,7 @@ struct LibraryView: View {
         // Green for the only action that adds something; red is reserved for
         // the two that remove from the library.
         Button {
-            model.download(issue)
+            beginDownload(issue, model: model, pending: &pending)
         } label: {
             Label(issue.isDownloaded ? "Download again" : "Download",
                   systemImage: "arrow.down.circle")
@@ -257,7 +285,7 @@ struct LibraryView: View {
         .disabled(model.downloading.contains(issue.id))
 
         Button {
-            pending = .deleteDownload(issue)
+            beginRemoveDownload(issue, model: model, pending: &pending)
         } label: { Label("Remove Download", systemImage: "trash") }
             .disabled(!issue.isDownloaded)
 
@@ -286,6 +314,18 @@ struct LibraryView: View {
 
     private func confirmation(for action: PendingAction) -> Alert {
         switch action {
+        case let .downloadSet(issue, description):
+            return Alert(
+                title: Text("Download the whole set?"),
+                message: Text(description),
+                primaryButton: .default(Text("Download")) { model.download(issue, asSet: true) },
+                secondaryButton: .cancel())
+        case let .removeSet(issue, description):
+            return Alert(
+                title: Text("Remove the whole set?"),
+                message: Text(description),
+                primaryButton: .destructive(Text("Remove")) { model.deleteDownload(issue) },
+                secondaryButton: .cancel(Text("No")))
         case .deleteDownload(let issue):
             return Alert(
                 title: Text("Are you sure?"),
@@ -471,9 +511,9 @@ struct LibraryView: View {
                 // nothing a reader cannot already see from the cover.
                 Button(issue.isDownloaded ? "Remove Download" : "Download") {
                     if issue.isDownloaded {
-                        pending = .deleteDownload(issue)
+                        beginRemoveDownload(issue, model: model, pending: &pending)
                     } else {
-                        model.download(issue)
+                        beginDownload(issue, model: model, pending: &pending)
                     }
                 }
                 .buttonStyle(.bordered)
@@ -779,9 +819,9 @@ struct IssueDetail: View {
                     } else {
                         Button {
                             if current.isDownloaded {
-                                pending = .deleteDownload(current)
+                                beginRemoveDownload(current, model: model, pending: &pending)
                             } else {
-                                model.download(current)
+                                beginDownload(current, model: model, pending: &pending)
                             }
                         } label: {
                             Label(current.isDownloaded ? "Remove Download" : "Download",

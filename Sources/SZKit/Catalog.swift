@@ -7,12 +7,15 @@ import Foundation
 public struct IssueLabel: Equatable, Sendable {
     public let code: String?      // "MN_LMS_511"
     public let number: Int?
+    /// The far end of a double issue — one magazine printed as "121/122".
+    /// Nil for the ordinary case.
+    public let numberTo: Int?
     public let title: String?
     public let series: String?    // "Kolorka", "Alef"
 
-    public init(code: String? = nil, number: Int? = nil,
+    public init(code: String? = nil, number: Int? = nil, numberTo: Int? = nil,
                 title: String? = nil, series: String? = nil) {
-        self.code = code; self.number = number
+        self.code = code; self.number = number; self.numberTo = numberTo
         self.title = title; self.series = series
     }
 }
@@ -107,6 +110,16 @@ public enum Catalog {
                 let before = line.components(separatedBy: urls[0]).first?
                     .trimmingCharacters(in: trimSet) ?? ""
 
+                // Some topics write the label after the link instead:
+                // "http://…?7wdy… - Sirius 001 - Ne ubijte Rulla". Only when
+                // nothing precedes the first link, so a line that labels
+                // itself in front — and may carry sizes after its links —
+                // keeps reading the way it always did.
+                let after = before.isEmpty
+                    ? line.components(separatedBy: urls[urls.count - 1]).last?
+                        .trimmingCharacters(in: trimSet) ?? ""
+                    : ""
+
                 let style: LabelStyle?
                 let label: IssueLabel?
                 let stamp: Int?
@@ -123,6 +136,11 @@ public enum Catalog {
                     instance += 1
                     style = .inlineSameLine
                     label = IssueLabel(number: Int(g[1]), title: TitleCleaner.tidyInline(g[2]))
+                    stamp = instance
+                } else if !after.isEmpty, let trailing = Labels.trailingLabel(after) {
+                    instance += 1
+                    style = .inlineSameLine
+                    label = trailing
                     stamp = instance
                 } else if let p = pendingNum {
                     style = .inlinePrevLine

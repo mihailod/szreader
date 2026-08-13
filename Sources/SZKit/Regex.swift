@@ -23,6 +23,19 @@ struct Rx {
 
     func matches(_ s: String) -> Bool { firstGroups(s) != nil }
 
+    /// Every match, with its capture groups — for patterns that pull several
+    /// things out of one match, which `allMatches` cannot.
+    func allGroups(_ s: String) -> [[String]] {
+        let ns = s as NSString
+        return re.matches(in: s, range: NSRange(location: 0, length: ns.length))
+            .map { m in
+                (0..<m.numberOfRanges).map { i in
+                    let r = m.range(at: i)
+                    return r.location == NSNotFound ? "" : ns.substring(with: r)
+                }
+            }
+    }
+
 
     /// All matches of group `group` (default: whole match), in order.
     func allMatches(_ s: String, group: Int = 0) -> [String] {

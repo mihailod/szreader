@@ -23,6 +23,8 @@ public struct StoredIssue: Equatable, Sendable {
     /// Furthest page reached, zero-based. Nil until the reader moves off the
     /// cover.
     public let lastPage: Int?
+    /// The far end of a double issue, when one magazine covers two numbers.
+    public let numberTo: Int?
     /// Whether reading ever got past the cover. Sticky: only finishing the
     /// comic and then unmarking it clears this.
     public let started: Bool
@@ -58,10 +60,12 @@ public struct StoredIssue: Equatable, Sendable {
 
     /// "LMS 511" — the edition and number as a reader refers to an issue.
     public var shelfMark: String? {
-        switch (editionCode, number) {
+        // A double issue reads as the pair it was printed as: "Sirius 121-122".
+        let mark = number.map { n in numberTo.map { "\(n)-\($0)" } ?? "\(n)" }
+        switch (editionCode, mark) {
         case let (code?, num?): return "\(code) \(num)"
         case let (code?, nil):  return code
-        case let (nil, num?):   return "\(num)"
+        case let (nil, num?):   return num
         default:                return nil
         }
     }
@@ -161,6 +165,23 @@ public final class Store: @unchecked Sendable {
             );
             CREATE INDEX IF NOT EXISTS mirror_issue ON mirror (issue_id);
 
+            -- A single download covering a run of issues.
+            --
+            -- Some topics outlive their individual links: Sirius's are all
+            -- dead, and the only surviving copies are three archives holding
+            -- one PDF per issue. A mirror cannot express that — its URL is
+            -- unique to one issue — so the set is recorded once and matched
+            -- to issues by number.
+            CREATE TABLE IF NOT EXISTS segment (
+              id      INTEGER PRIMARY KEY,
+              context TEXT NOT NULL,
+              url     TEXT NOT NULL,
+              label   TEXT NOT NULL,
+              first   INTEGER NOT NULL,
+              last    INTEGER NOT NULL,
+              UNIQUE(context, url)
+            );
+
             -- Standalone FTS5 with rowid = issue.id. Folding both the stored
             -- key and the query is what makes "celjusti" find "čeljusti" --
             -- nobody types diacritics into a search field on an iPad.
@@ -182,6 +203,8 @@ public final class Store: @unchecked Sendable {
         // When the catalogue was last asked for a cover this page did not
         // link. Without it a miss is asked again on every pass.
         try? db.execute("ALTER TABLE issue ADD COLUMN cover_asked_at REAL")
+        // The far end of a double issue: one magazine printed as "121/122".
+        try? db.execute("ALTER TABLE issue ADD COLUMN number_to INTEGER")
 
         // Libraries that already took the forum's "picture missing" graphic
         // as artwork. Clearing it puts those issues back to having no cover,
@@ -308,6 +331,8 @@ public final class Store: @unchecked Sendable {
         let pageContext = Catalog.pageContext(in: html)
         let context = pageContext.searchableText
         let covers = Catalog.covers(in: html)
+        let named = Catalog.namedCovers(in: html)
+        try recordSegments(Catalog.segments(in: html), context: context)
         try db.transaction {
             for parsed in Catalog.issues(in: html) {
                 let folded = Fold.fold(parsed.label.title ?? parsed.label.code ?? "")
@@ -330,6 +355,12 @@ public final class Store: @unchecked Sendable {
                 if let number = parsed.label.number, let cover = covers[number] {
                     try db.run("UPDATE issue SET cover_url = ? WHERE id = ? AND cover_url IS NULL",
                                [.text(cover), .int(id)])
+                } else if parsed.label.number == nil,
+                          let cover = Self.namedCover(for: parsed.label.title, among: named) {
+                    // A special with no number of its own — "YU SIRIUS" — whose
+                    // cover is filed under that name rather than a number.
+                    try db.run("UPDATE issue SET cover_url = ? WHERE id = ? AND cover_url IS NULL",
+                               [.text(cover), .int(id)])
                 }
                 for m in parsed.mirrors {
                     // URL is UNIQUE: re-importing a page is a no-op for mirrors.
@@ -344,6 +375,17 @@ public final class Store: @unchecked Sendable {
         return (newIssues, newMirrors)
     }
 
+    /// The cover whose name appears in an issue's title.
+    ///
+    /// "Sirius_YU.jpg" against "YU SIRIUS". Whole words only, so a two-letter
+    /// key cannot latch onto the middle of an unrelated title.
+    static func namedCover(for title: String?, among named: [String: String]) -> String? {
+        guard let title, !named.isEmpty else { return nil }
+        let words = Set(Fold.fold(title).split(whereSeparator: { !$0.isLetter }).map(String.init))
+        for (key, url) in named where words.contains(key) { return url }
+        return nil
+    }
+
     private func upsertIssue(_ parsed: ParsedIssue, folded: String, source: String?,
                              context: String, hero: String?, edition: String?,
                              publisher: String?, inserted: inout Int) throws -> Int64 {
@@ -352,10 +394,11 @@ public final class Store: @unchecked Sendable {
                                          series: parsed.label.series, context: context)
         try db.run("""
             INSERT OR IGNORE INTO issue
-              (code, number, title, title_folded, series, style, source, context,
-               search_text, hero, edition, publisher)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (code, number, number_to, title, title_folded, series, style, source,
+               context, search_text, hero, edition, publisher)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [SQLValue(parsed.label.code), SQLValue(parsed.label.number),
+                  SQLValue(parsed.label.numberTo),
                   SQLValue(parsed.label.title), .text(folded),
                   SQLValue(parsed.label.series), .text(parsed.style.rawValue),
                   SQLValue(source), .text(context), .text(searchText),
@@ -417,7 +460,8 @@ public final class Store: @unchecked Sendable {
                    i.read_at IS NOT NULL,
                    i.last_page,
                    i.download_failed_at IS NOT NULL,
-                   i.started_at IS NOT NULL
+                   i.started_at IS NOT NULL,
+                   i.number_to
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
@@ -436,6 +480,7 @@ public final class Store: @unchecked Sendable {
                 publisher: row.string(11),
                 isRead: (row.int(12) ?? 0) == 1,
                 lastPage: row.int(13),
+                numberTo: row.int(16),
                 started: (row.int(15) ?? 0) == 1,
                 downloadFailed: (row.int(14) ?? 0) == 1,
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
@@ -628,7 +673,8 @@ public final class Store: @unchecked Sendable {
                    i.read_at IS NOT NULL,
                    i.last_page,
                    i.download_failed_at IS NOT NULL,
-                   i.started_at IS NOT NULL
+                   i.started_at IS NOT NULL,
+                   i.number_to
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
             """, terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
@@ -638,6 +684,7 @@ public final class Store: @unchecked Sendable {
                 publisher: row.string(11),
                 isRead: (row.int(12) ?? 0) == 1,
                 lastPage: row.int(13),
+                numberTo: row.int(16),
                 started: (row.int(15) ?? 0) == 1,
                 downloadFailed: (row.int(14) ?? 0) == 1,
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,

@@ -26,6 +26,11 @@ public struct LibraryPaths: Sendable {
         root.appendingPathComponent("\(id)", isDirectory: true)
     }
 
+    /// Where a set downloaded once for many issues lives.
+    public func directory(forSegment id: Int) -> URL {
+        root.appendingPathComponent("set-\(id)", isDirectory: true)
+    }
+
     /// Artwork taken from a comic's own first page.
     ///
     /// Beside the downloads rather than inside the issue's folder: removing a
@@ -168,6 +173,88 @@ public final class Library {
     /// accepted, instead of charging it to the first tap on the cover — where
     /// the same seconds are the difference between "opening" and "broken".
     ///
+    /// Removes a set: its files, and the record of every issue it served.
+    ///
+    /// One directory holds them all, so there is no removing a single issue
+    /// from it — which is why the reader is told before agreeing to either.
+    @discardableResult
+    public func removeSegmentDownload(issueID: Int) throws -> Bool {
+        guard let segment = try store.segment(forIssue: issueID) else { return false }
+        let context = try store.context(forIssue: issueID) ?? ""
+        for id in try store.issues(inSegment: segment, context: context) {
+            _ = try store.deleteDownload(issueID: id)
+        }
+        try? FileManager.default.removeItem(at: paths.directory(forSegment: segment.id))
+        return true
+    }
+
+    /// The set an issue belongs to, for the warning shown before either.
+    public func segment(forIssue issueID: Int) throws -> IssueSegment? {
+        try store.segment(forIssue: issueID)
+    }
+
+    /// Downloads a whole set and gives every issue in it its own file.
+    ///
+    /// The archives hold one PDF per issue, so after a single transfer each
+    /// issue points at its own member. They share the unpacked directory,
+    /// which is why removing one removes the set.
+    private func fetchSegment(_ segment: IssueSegment, wanting issueID: Int,
+                              progress: (@Sendable (DownloadProgress) -> Void)?)
+        async throws -> DownloadOutcome {
+
+        let directory = paths.directory(forSegment: segment.id)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let unpacked = directory.appendingPathComponent("contents", isDirectory: true)
+        var entries = (try? UnpackedReader(root: unpacked).entries()) ?? []
+
+        if entries.isEmpty {
+            guard let url = URL(string: segment.url) else {
+                throw DownloadError.notAnArchive("the set has no usable link")
+            }
+            try checkSpace(forIssue: issueID)
+            let name = ((try? await registry.probe(url, via: transport).filename) ?? nil)
+                ?? "set-\(segment.id)"
+            let outcome = try await attempt(
+                mirror: MirrorLink(url: segment.url, host: "", ordinal: 0),
+                url: url, issueID: issueID, into: directory,
+                filename: name, progress: progress)
+
+            let reader = try ArchiveOpener.open(outcome.path, workDirectory: unpacked)
+            entries = try reader.entries()
+            // The archive has served its purpose; what is read from now on is
+            // the members it left behind.
+            try? FileManager.default.removeItem(at: outcome.path)
+        }
+
+        guard !entries.isEmpty else {
+            throw DownloadError.notAnArchive("the set unpacked to nothing")
+        }
+
+        // Every issue the set covers now has a file of its own.
+        let context = try store.context(forIssue: issueID) ?? ""
+        var mine: DownloadOutcome?
+        for id in try store.issues(inSegment: segment, context: context) {
+            guard let issue = try store.issueIdentity(id: id),
+                  let member = IssueSegment.member(entries, number: issue.number,
+                                                   numberTo: issue.numberTo,
+                                                   title: issue.title) else { continue }
+            let file = unpacked.appendingPathComponent(member)
+            let size = ((try? FileManager.default.attributesOfItem(atPath: file.path)[.size])
+                as? Int64) ?? 0
+            try store.recordDownload(issueID: id, mirrorURL: segment.url,
+                                     path: file, bytes: size)
+            if id == issueID {
+                mine = DownloadOutcome(issueID: id, path: file, kind: .pdf,
+                                       bytes: size, mirrorURL: segment.url)
+            }
+        }
+        guard let mine else {
+            throw DownloadError.notAnArchive("this issue is not in the set")
+        }
+        return mine
+    }
+
     /// The document is discarded: what matters is the unpacked directory it
     /// leaves behind, which every later open reuses.
     public func prepareForReading(issueID: Int) throws {
@@ -335,6 +422,13 @@ public final class Library {
            FileManager.default.fileExists(atPath: existing.path.path)
             || (try? ComicDocument(unpackedAt: paths.directory(forIssue: issueID))) != nil {
             return existing
+        }
+
+        // Some topics outlive their individual links and survive only as a
+        // set: one archive holding every issue. Downloading any of them means
+        // downloading all of them, so it is fetched once and shared.
+        if let segment = try store.segment(forIssue: issueID) {
+            return try await fetchSegment(segment, wanting: issueID, progress: progress)
         }
 
         let directory = paths.directory(forIssue: issueID)

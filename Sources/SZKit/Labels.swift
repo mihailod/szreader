@@ -85,4 +85,80 @@ enum Labels {
             .trimmingCharacters(in: CharacterSet(charactersIn: " -–_.:"))
         return NameNum(number: g[2], title: title.isEmpty ? nil : title, name: g[1])
     }
+
+    /// A range of issues rather than one: "Sirius 001-116 (pdf)".
+    ///
+    /// The same topics that label a link after it also post collected
+    /// volumes — every issue as one PDF — and those read as an issue with a
+    /// title beginning in digits.
+    ///
+    /// No spaces around the dash, which is what separates a range from a
+    /// title that starts with a number: the bundles are written
+    /// "Sirius 001-116 (pdf)", while issue 99 is "Sirius 099 - 900 Baka" and
+    /// is a real comic that a looser rule throws away.
+    private static let numericRange = Rx(#"\d+[-–]\d+"#)
+
+    /// One issue printed as two: "Sirius 121/122 - Euroconski dvoboj".
+    ///
+    /// Consecutive by definition — that is what tells a double issue from a
+    /// collected volume covering a hundred of them.
+    static let doubleNumber = Rx(#"^(\d{1,4})\s*[/–-]\s*(\d{1,4})\b"#)
+
+    /// The pair of numbers a double issue carries, if that is what this is.
+    static func doubleIssue(in text: String) -> (first: Int, second: Int)? {
+        guard let g = doubleNumber.firstGroups(text),
+              let first = Int(g[1]), let second = Int(g[2]),
+              second == first + 1 else { return nil }
+        return (first, second)
+    }
+
+    /// A label written after its link.
+    ///
+    /// Nil for anything that is not clearly one issue: a bundle covering a
+    /// range, or text with no number in it at all.
+    static func trailingLabel(_ text: String) -> IssueLabel? {
+        if let label = doubleTrailingLabel(text) { return label }
+        guard !numericRange.matches(text) else { return nil }
+        if let g = code.firstGroups(text) {
+            let named = g.capture(3).isEmpty ? nil : TitleCleaner.tidyInline(g.capture(3))
+            return IssueLabel(code: g[1], number: Int(g[2]), title: named)
+        }
+        if let g = num.firstGroups(text), g[2].count > 2, !g[2].lowercased().hasPrefix("http") {
+            return IssueLabel(number: Int(g[1]), title: TitleCleaner.tidyInline(g[2]))
+        }
+        if let nn = matchNameFirst(text) {
+            return IssueLabel(number: Int(nn.number), title: nn.title, series: nn.name)
+        }
+        // A special with no number of its own: "YU SIRIUS". Kept only when it
+        // reads as a name, so the assorted notes that follow a link — sizes,
+        // formats, remarks — do not each become an issue.
+        let named = TitleCleaner.tidyInline(text)
+        if TitleCleaner.isPlausible(named), named.count <= 40,
+           !named.contains(where: \.isNumber), !furniture.contains(Fold.fold(named)) {
+            return IssueLabel(title: named)
+        }
+        return nil
+    }
+
+    /// "Sirius 121/122 - Euroconski dvoboj" — the series, both numbers, then
+    /// the title.
+    ///
+    /// The ordinary parse stops at the first number and leaves "/122 - …" as
+    /// the title, which is how these arrived: numbered 121, named "/122 -
+    /// Euroconski dvoboj", and with no cover, because the catalogue files
+    /// them under both numbers at once.
+    private static let secondOfPair = Rx(#"^[/–-]\s*(\d{1,4})\b"#)
+
+    private static func doubleTrailingLabel(_ text: String) -> IssueLabel? {
+        guard let nn = matchNameFirst(text), let first = Int(nn.number),
+              let rest = nn.title,
+              let g = secondOfPair.firstGroups(rest), let second = Int(g[1]),
+              second == first + 1 else { return nil }
+
+        let title = TitleCleaner.tidyInline(
+            secondOfPair.replacing(rest, with: "")
+                .trimmingCharacters(in: CharacterSet(charactersIn: " -–_.:")))
+        return IssueLabel(number: first, numberTo: second,
+                          title: title.isEmpty ? nil : title, series: nn.name)
+    }
 }

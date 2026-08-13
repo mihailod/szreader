@@ -120,7 +120,7 @@ public struct PageContext: Equatable, Sendable {
         // there is no evidence either way, and the shouted part is the better
         // guess — that is what every character topic uses.
         if !trail.isEmpty, heroCrumb == nil,
-           let own = topicParts.first, !own.isEmpty { return own }
+           let own = topicParts.first, !own.isEmpty { return Self.named(own) }
 
         let heroFolded = hero.map(Fold.fold)
         let parts = topicParts.filter { Fold.fold($0) != heroFolded }
@@ -140,18 +140,24 @@ public struct PageContext: Equatable, Sendable {
             candidate = String(candidate.dropFirst(hero.count))
                 .trimmingCharacters(in: .whitespaces)
         }
-        // Some topics qualify the run with commas: "Johnny Logan, Vjesnik,
-        // 1980-1984" leaves ", Vjesnik, 1980-1984" once the hero is off the
-        // front. The edition is the first part that is a name rather than a
-        // span of years, and no edition in the corpus has a comma in it.
-        candidate = candidate.trimmingCharacters(in: CharacterSet(charactersIn: " ,-–"))
-        if candidate.contains(",") {
-            let named = candidate.split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .first { $0.contains(where: \.isLetter) }
-            candidate = named ?? candidate
-        }
+        candidate = Self.named(candidate)
         return candidate.isEmpty ? nil : candidate
+    }
+
+    /// The name out of a comma-qualified run.
+    ///
+    /// Topics describe themselves as well as naming themselves: "Sirius, SF
+    /// časopis", "Asteriks, Politika, 1995-1999, cirilica", "Johnny Logan,
+    /// Vjesnik, 1980-1984". The edition is the first part that is a name
+    /// rather than a span of years, and no edition in the corpus has a comma
+    /// in it — the descriptions are searchable through the page context
+    /// either way.
+    private static func named(_ run: String) -> String {
+        let trimmed = run.trimmingCharacters(in: CharacterSet(charactersIn: " ,-–"))
+        guard trimmed.contains(",") else { return trimmed }
+        let parts = trimmed.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        return parts.first { $0.contains(where: \.isLetter) && Int($0) == nil } ?? trimmed
     }
 
     /// Editions whose initials are not what readers call them.
@@ -289,6 +295,13 @@ extension Catalog {
         // The threshold rather than "any at all": one stray catalogued cover
         // on a scanlation page must not switch off the only tier that page
         // has.
+        // A magazine printed as one issue over two numbers is filed under
+        // both: "Sirius_121_122.jpg". The ordinary reading takes the trailing
+        // number, files it under 122 — an issue that does not exist — and
+        // leaves 121-122 with nothing.
+        for (number, url) in doubleNumberedCovers(in: html) where out[number] == nil {
+            out[number] = url
+        }
         guard out.count < Self.catalogued else { return out }
         for (number, url) in positionalCovers(in: html) where out[number] == nil {
             out[number] = url
@@ -377,6 +390,39 @@ extension Catalog {
                   let issue = Int(groups[1]), let other = Int(groups[2]),
                   issue != other, let url = byNumber[other] else { continue }
             if out[issue] == nil { out[issue] = url }
+        }
+        return out
+    }
+
+    /// Covers named after both numbers of a double issue, filed under the
+    /// first — which is the number the issue itself carries.
+    static let doubleCoverImage = Rx(
+        #"(https?://[^\s"'<>]+?_(\d{1,4})_(\d{1,4})\.(?:jpe?g|png|webp))"#, [.caseInsensitive])
+
+    static func doubleNumberedCovers(in html: String) -> [Int: String] {
+        var out: [Int: String] = [:]
+        for match in doubleCoverImage.allGroups(html) {
+            guard let first = Int(match[2]), let second = Int(match[3]),
+                  second == first + 1, isPlausibleCover(match[1]) else { continue }
+            if out[first] == nil { out[first] = https(match[1]) }
+        }
+        return out
+    }
+
+    /// Covers named after something other than a number: "Sirius_YU.jpg" for
+    /// the special that closes the run.
+    ///
+    /// Keyed on that word, folded, so an issue with no number of its own can
+    /// still be matched by what it is called.
+    static let namedCoverImage = Rx(
+        #"(https?://[^\s"'<>]+?[_-]([A-Za-zČĆŠŽĐčćšžđ]{2,12})\.(?:jpe?g|png|webp))"#,
+        [.caseInsensitive])
+
+    public static func namedCovers(in html: String) -> [String: String] {
+        var out: [String: String] = [:]
+        for match in namedCoverImage.allGroups(html) where isPlausibleCover(match[1]) {
+            let key = Fold.fold(match[2])
+            if out[key] == nil { out[key] = https(match[1]) }
         }
         return out
     }
