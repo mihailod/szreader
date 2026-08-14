@@ -169,6 +169,26 @@ enum Labels {
     /// is a real comic that a looser rule throws away.
     private static let numericRange = Rx(#"\d+[-–]\d+"#)
 
+    /// A whole line that is nothing but a range of issue numbers:
+    /// "151.-160.", "181.,182.,183.,184.".
+    ///
+    /// Posts on long topics end with one of these summarising what the post
+    /// contained. It is not a label, and left as one it becomes a pending
+    /// label that claims whatever link comes next.
+    ///
+    /// Distinct from `numericRange`, which asks whether a *label* contains a
+    /// range; this asks whether the line has anything else in it at all. A
+    /// line with a title in it — "Sirius 099 - 900 Baka" — has letters and is
+    /// not this.
+    private static let onlyNumbers = Rx(#"^[\s\d.,;:()\[\]/–-]+$"#)
+
+    static func isNumericRange(_ line: String) -> Bool {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        // Two numbers minimum, so a bare "151." pending label still works.
+        guard t.count >= 4, onlyNumbers.matches(t) else { return false }
+        return Rx(#"\d"#).allMatches(t).count >= 2
+    }
+
     /// One issue printed as two: "Sirius 121/122 - Euroconski dvoboj".
     ///
     /// Consecutive by definition — that is what tells a double issue from a

@@ -18,6 +18,26 @@ public struct IssueLabel: Equatable, Sendable {
         self.code = code; self.number = number; self.numberTo = numberTo
         self.title = title; self.series = series
     }
+
+    /// Whether a number is the only thing identifying this issue.
+    ///
+    /// Such a label says nothing that tells it from the same number in
+    /// another topic, and the natural key is exactly those fields — so two
+    /// bare-number topics collide row for row. Ken Parker's list runs 1…79
+    /// and Erotski Roman's 1…184; imported together the second lost its first
+    /// seventy-nine issues without a word, because `INSERT OR IGNORE` found
+    /// ('', 1, '', '') already there.
+    var isBareNumber: Bool {
+        code == nil && title == nil && series == nil && number != nil
+    }
+
+    /// The same label with the topic's name standing in for the missing
+    /// series, so it has something of its own in the key.
+    func qualified(by edition: String?) -> IssueLabel {
+        guard isBareNumber, let edition, !edition.isEmpty else { return self }
+        return IssueLabel(code: code, number: number, numberTo: numberTo,
+                          title: title, series: edition)
+    }
 }
 
 /// One download link, and the label it was attributed to.
@@ -183,6 +203,12 @@ public enum Catalog {
                 pendingNum = nil
                 continue
             }
+            // A run of issues named as a range is a summary, not a label:
+            // Erotski Roman closes each post with "151.-160.", which read as
+            // issue 151 titled "-160." and then claimed the next link it
+            // found — the bundle covering all ten — so issue 151 appeared
+            // twice, once with its own scan and once with the whole decade.
+            if Labels.isNumericRange(line) { continue }
             if let g = Labels.num.firstGroups(line),
                g[2].count > 2, !g[2].lowercased().hasPrefix("http") {
                 instance += 1

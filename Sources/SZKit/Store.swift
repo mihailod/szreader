@@ -359,7 +359,14 @@ public final class Store: @unchecked Sendable {
         var editionsHere: Set<String> = []
         try recordSegments(Catalog.segments(in: html), context: context)
         try db.transaction {
-            for parsed in Catalog.issues(in: html) {
+            for raw in Catalog.issues(in: html) {
+                // A label that is only a number carries nothing to tell it
+                // from the same number on another topic, so the topic's own
+                // name goes into the key. Applied here rather than in the
+                // parser because it is identity, not reading: only the store
+                // cares that two pages must not collide.
+                let parsed = ParsedIssue(label: raw.label.qualified(by: pageContext.edition),
+                                         style: raw.style, mirrors: raw.mirrors)
                 let folded = Fold.fold(parsed.label.title ?? parsed.label.code ?? "")
                 let id = try upsertIssue(parsed, folded: folded, source: source,
                                          context: context, hero: pageContext.hero,
