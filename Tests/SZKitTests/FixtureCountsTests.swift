@@ -58,9 +58,12 @@ final class FixtureCountsTests: XCTestCase {
         ("Kosmoplov i Galaksija - obrade - Casopisi", 268, 246),
         ("obrade - Page 2",   63,   63),
         ("obrade - Page 3",   40,   40),
-        // Also re-saved 13 Aug 2026 with more posts unlocked: 37 links
-        // became 157, all attributed, 121 issues across 85…384.
-        ("Komandant Mark",  157,  157),
+        // Re-saved 13 Aug 2026 with more posts unlocked (37 links became
+        // 157), and joined by two further topic pages on 14 Aug. The three
+        // read as one run, 85…1102, every issue with a cover.
+        ("Komandant Mark - Zlatna Serija - Komandant", 157, 157),
+        ("Komandant Mark - Zlatna Serija - Page 2",    120, 120),
+        ("Komandant Mark - Zlatna Serija - Page 3",     43,  43),
         // Both Kit Teler pages and Martin Mystere were re-saved on 10 Aug 2026
         // with more of their content unlocked, so these are larger than the
         // spike measured. The fixtures changed, not the parser — each page was
@@ -131,8 +134,8 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 3307)
-        XCTAssertEqual(attributed, 3270)
+        XCTAssertEqual(total, 3470)
+        XCTAssertEqual(attributed, 3433)
     }
 
     /// A long run split across forum pages has to read as one series.
@@ -203,6 +206,30 @@ final class FixtureCountsTests: XCTestCase {
         XCTAssertEqual(numbers.first, 128)
         XCTAssertEqual(numbers.last, 995)
         XCTAssertEqual(Set(numbers).count, numbers.count, "an issue number appears twice")
+    }
+
+    /// Komandant Mark is the other title-case run split over forum pages,
+    /// and it arrived after the pagination marker was already handled — so
+    /// this is the check that the fix holds for a series it was not written
+    /// against.
+    func testKomandantMarkContinuesAcrossPages() throws {
+        guard let one = try html(matching: "Komandant Mark - Zlatna Serija - Komandant"),
+              let two = try html(matching: "Komandant Mark - Zlatna Serija - Page 2"),
+              let three = try html(matching: "Komandant Mark - Zlatna Serija - Page 3")
+        else { throw XCTSkip("Komandant Mark fixtures not present") }
+
+        let store = try Store()
+        for page in [one, two, three] { try store.ingest(html: page) }
+        let rows = try store.recent(limit: nil)
+
+        XCTAssertEqual(Set(rows.compactMap(\.edition)), ["Zlatna Serija"])
+        XCTAssertEqual(rows.count, 282)
+        let numbers = rows.compactMap(\.number).sorted()
+        XCTAssertEqual(numbers.first, 85)
+        XCTAssertEqual(numbers.last, 1102)
+        XCTAssertEqual(Set(numbers).count, numbers.count, "an issue number appears twice")
+        // This run is the one page in the corpus where every issue has art.
+        XCTAssertEqual(rows.filter { $0.coverURL != nil }.count, 282)
     }
 
     /// Entity decoding is not optional: IPB writes `http&#58;//...`, and
