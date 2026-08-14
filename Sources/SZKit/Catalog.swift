@@ -87,7 +87,19 @@ public enum Catalog {
         "photobucket", "ibb.co", "picpaste", "slika.rs",
     ]
 
-    static let url = Rx(#"https?://[^\s"'<>\]\)]+"#)
+    /// A URL, allowing balanced parentheses inside it.
+    ///
+    /// Scanners put their handles in the filename — ".../LMS+0144+-+Veliki+
+    /// Blek+-Tragican+lov(enwil-rescan_2014)-SZ.cbr" — and a pattern that
+    /// simply excludes ")" stops at the closing bracket. That left the link
+    /// truncated and, worse, handed the remainder ")-SZ.cbr" to the trailing
+    /// label reader, which made an issue of it: a row with no number called
+    /// ")-SZ.cbr" holding the two links it stole.
+    ///
+    /// A lone ")" still ends the URL, because the alternation only accepts a
+    /// bracket that opens a group — so "(see https://example.com)" is
+    /// unaffected.
+    static let url = Rx(#"https?://(?:[^\s"'<>\]()]|\([^\s"'<>()]*\))+"#)
 
     /// A label instance claiming more than this many URLs is stale, not
     /// successful — the signature of an unrecognised convention, where one
@@ -164,7 +176,15 @@ public enum Catalog {
                     style = .inlineSameLine
                     label = IssueLabel(number: n, title: nil)
                     stamp = instance
-                } else if !after.isEmpty, let trailing = Labels.trailingLabel(after) {
+                } else if !after.isEmpty, let trailing = Labels.trailingLabel(after),
+                          // A trailing label with no number of its own is the
+                          // weakest thing here: it is whatever words followed
+                          // the link. It must not displace a numbered label
+                          // still waiting from the line above — "LMS 349 -
+                          // Okovani Blek" lost its issue to the note "cijeli
+                          // strip" written after its link, so 349 vanished and
+                          // an issue called "cijeli strip" took its download.
+                          trailing.number != nil || (pendingNum == nil && pendingCode == nil) {
                     instance += 1
                     style = .inlineSameLine
                     label = trailing

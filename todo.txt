@@ -1,12 +1,7 @@
-- LMS ken parker has redirects to LMS -- no can do
-
-- add setting for unloaded: gray or cloud symbol
+- LMS ken parker has redirects to LMS -- no can do?
 
 testing:
 - rest of komandant mark
-- rest of blek lms
+- rest of kit teller
 - rest of galaksija PDF (ran out of likes)
-
-priority:
-- bonelli zs lms
 

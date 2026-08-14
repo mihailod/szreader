@@ -82,15 +82,66 @@ public struct PageContext: Equatable, Sendable {
         }
         return cleaned.components(separatedBy: " - ")
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+            .filter { !$0.isEmpty && !Self.pageMarker.matches($0) }
     }
+
+    /// The forum's own pagination, which rides along in the title of every
+    /// topic past the first screen: "Veliki Blek - Lunov Magnus Strip - Page 2".
+    ///
+    /// Never an edition. Zagor survived it only by accident — "ZLATNA SERIJA"
+    /// is shouted, so the shouted-part rule reached it first — while Veliki
+    /// Blek's "Lunov Magnus Strip" is title case, so the edition fell through
+    /// to the last part and pages 2 and 3 became series called "Page 2" and
+    /// "Page 3", each with its own hundred issues.
+    private static let pageMarker = Rx(#"^Page\s*\d+$"#, [.caseInsensitive])
 
     /// The grouping directly above the hero ("BONELLI", "Magnus - Bunker").
     ///
     /// Found relative to the hero rather than at a fixed depth: some topics
     /// carry an extra section crumb below it ("ZS i LMS"), which shifts every
     /// fixed offset by one.
+    /// Houses that appear in this corpus by name in a topic's own title.
+    ///
+    /// A list, because nothing in the text separates a publisher from a city:
+    /// "Kriminal, Bookglobe, Zagreb" and "Roto Biblioteka X-100 SF, Naučna
+    /// fantastika X-100, Dnevnik" have the same shape, and only knowing what
+    /// these words are says which part is the house.
+    ///
+    /// Folded, so spelling and case cannot miss.
+    private static let publishers: Set<String> = [
+        "dnevnik", "vjesnik", "politika", "decje novine", "bookglobe",
+        "slobodna dalmacija", "libellus", "fibra", "marketprint", "system comics",
+    ]
+
+    /// The publisher a topic names in its own title, when the edition has not
+    /// already taken it.
+    ///
+    /// Most comma topics are "<name>, <house>, <city>", and `edition` picks
+    /// the house up as the series — that is what makes it searchable, and
+    /// nothing more is needed. Roto Biblioteka is the exception: its comma run
+    /// leads with a genre ("… X-100 SF, Naučna fantastika X-100, Dnevnik"), so
+    /// the edition became "SF" and the house went nowhere.
+    private var namedPublisher: String? {
+        guard let topic else { return nil }
+        let editionFolded = edition.map(Fold.fold)
+        // Split on both separators. The house is the last comma part, but the
+        // topic carries the forum section after a dash — "…, Dnevnik - Roto
+        // Biblioteka X-100" — so a comma split alone leaves the two joined.
+        return topic
+            .components(separatedBy: ",")
+            .flatMap { $0.components(separatedBy: " - ") }
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { part in
+                Self.publishers.contains(Fold.fold(part)) && Fold.fold(part) != editionFolded
+            }
+    }
+
     public var publisher: String? {
+        // A house the topic names itself, where the series did not already
+        // become it. More specific than the crumb above, which for a novel
+        // series is a section — "Pisani romani" — rather than anyone who
+        // published anything.
+        if let named = namedPublisher { return named }
         // Character topics: the crumb above the hero.
         if let crumb = heroCrumb, let index = trail.firstIndex(of: crumb), index > 0 {
             return trail[index - 1]
@@ -343,10 +394,148 @@ extension Catalog {
         for (number, url) in doubleNumberedCovers(in: html) where out[number] == nil {
             out[number] = url
         }
-        guard out.count < Self.catalogued else { return out }
-        for (number, url) in positionalCovers(in: html) where out[number] == nil {
+        // Worked out now but spent last, so the tiers in between see the page
+        // as they always did. What is needed here is only *which* images are
+        // sheets: one sits in a run like any other image, and the run reading
+        // below would hand a whole grid of six to a single issue — which is
+        // how issue 137 came to be showing all of 128…137.
+        //
+        // Only the *names* are taken now. Which issues the tiles go to is
+        // worked out again at the end, against the finished map, so every
+        // tier in between behaves exactly as it did before this existed.
+        let grids = Set(contactSheetCovers(in: html, claimed: out).values
+            .compactMap { CoverTile(reference: $0)?.sheet })
+
+        // Runs of art beside runs of issues, where the ones already spoken
+        // for prove the two line up.
+        for (number, url) in anchoredRunCovers(in: html, claimed: out, skipping: grids)
+        where out[number] == nil {
             out[number] = url
         }
+        if out.count < Self.catalogued {
+            for (number, url) in positionalCovers(in: html) where out[number] == nil {
+                out[number] = url
+            }
+        }
+        for (number, url) in contactSheetCovers(in: html, claimed: out)
+        where out[number] == nil {
+            out[number] = url
+        }
+        return out
+    }
+
+    /// How many images in a run must already be spoken for before the rest of
+    /// that run may be trusted.
+    ///
+    /// Two, not one: a single agreement between an image and the issue beside
+    /// it is as likely to be luck as alignment.
+    private static let anchorsNeeded = 2
+
+    /// Covers posted as a run of images, then the run of issues they belong
+    /// to, matched position for position.
+    ///
+    /// Veliki Blek posts six covers and then lists six issues:
+    ///
+    ///     TN_VB_LMS_176  TN_VB_LMS_177  TN_VB_LMS_180  RalRsSZ  KxQxofS  TN_..185
+    ///            176            177            180       181      184      185
+    ///
+    /// Four of those images name their issue in the filename and are already
+    /// claimed; the other two are bare imgur ids that no tier can read. They
+    /// are 181 and 184, and the run says so — but only because the four
+    /// claimed images each sit opposite their own issue.
+    ///
+    /// That agreement is the whole point. Pairing runs on position alone is
+    /// guesswork, and it was tried: it moved covers on two other pages and
+    /// fixed nothing. Here the page proves the alignment before anything is
+    /// inferred from it, and a single image landing opposite the wrong issue
+    /// throws the whole run away.
+    /// `skipping` names images that are grids of covers rather than one
+    /// cover, so a run containing a contact sheet still lines up — that slot
+    /// simply goes unfilled here and the sheet is shared out into tiles later.
+    static func anchoredRunCovers(in html: String, claimed: [Int: String],
+                                  skipping grids: Set<String> = []) -> [Int: String] {
+        var owner: [String: Int] = [:]
+        for (number, url) in claimed { owner[url] = number }
+
+        var out: [Int: String] = [:]
+        var images: [String] = []
+        var labels: [Int] = []
+
+        func settle() {
+            defer { images = []; labels = [] }
+            guard images.count == labels.count, images.count >= anchorsNeeded else { return }
+
+            var anchors = 0
+            for (index, url) in images.enumerated() {
+                guard let number = owner[url] else { continue }
+                // One image opposite an issue that is not its own means these
+                // two runs are not the same list.
+                guard number == labels[index] else { return }
+                anchors += 1
+            }
+            guard anchors >= anchorsNeeded else { return }
+
+            for (index, url) in images.enumerated()
+            where owner[url] == nil && !grids.contains(url) && claimed[labels[index]] == nil {
+                out[labels[index]] = url
+            }
+        }
+
+        for line in HTMLText.plainLines(html, keepingImages: true) {
+            if let url = HTMLText.markedImage(line), isPlausibleCover(url) {
+                if !labels.isEmpty { settle() }
+                images.append(https(url))
+            } else if let number = label(in: line) {
+                labels.append(number)
+            }
+        }
+        settle()
+        return out
+    }
+
+    /// Grids a contact sheet is posted in: three across, one or two down.
+    private static let sheetSizes = [3, 6]
+
+    /// Covers posted as one image holding a grid of them.
+    ///
+    /// Veliki Blek illustrates a group of six issues with a single JPEG of
+    /// six covers, three across and two down, and then lists those six issues
+    /// underneath. No tier can use that image, because it is not any one
+    /// issue's cover — and handing the whole sheet to whichever issue sits
+    /// nearest is the mistake the positional tier was stopped from making.
+    ///
+    /// But the relationship is not a guess: one image, then exactly six
+    /// labels, in reading order. Tile *k* belongs to label *k*. Each issue
+    /// gets a reference naming its tile, and the crop happens once, when the
+    /// image is decoded.
+    ///
+    /// Only for an image nothing else claimed, and only for issues that have
+    /// no cover — an issue with art of its own keeps it, so a sheet whose
+    /// issues are already covered contributes nothing but the gaps.
+    static func contactSheetCovers(in html: String, claimed: [Int: String]) -> [Int: String] {
+        let used = Set(claimed.values)
+        var out: [Int: String] = [:]
+        var sheet: String?
+        var following: [Int] = []
+
+        func spend() {
+            defer { following = [] }
+            guard let url = sheet.map(https), !used.contains(url),
+                  sheetSizes.contains(following.count) else { return }
+            for (tile, number) in following.enumerated() where claimed[number] == nil {
+                out[number] = CoverTile.reference(url, tile: tile, of: following.count)
+            }
+        }
+
+        for line in HTMLText.plainLines(html, keepingImages: true) {
+            if let url = HTMLText.markedImage(line), isPlausibleCover(url) {
+                spend()
+                sheet = url
+            } else if let number = label(in: line) {
+                following.append(number)
+            }
+        }
+        spend()
         return out
     }
 

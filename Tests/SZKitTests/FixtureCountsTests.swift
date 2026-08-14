@@ -58,7 +58,9 @@ final class FixtureCountsTests: XCTestCase {
         ("Kosmoplov i Galaksija - obrade - Casopisi", 268, 246),
         ("obrade - Page 2",   63,   63),
         ("obrade - Page 3",   40,   40),
-        ("Komandant Mark",   37,   37),
+        // Also re-saved 13 Aug 2026 with more posts unlocked: 37 links
+        // became 157, all attributed, 121 issues across 85…384.
+        ("Komandant Mark",  157,  157),
         // Both Kit Teler pages and Martin Mystere were re-saved on 10 Aug 2026
         // with more of their content unlocked, so these are larger than the
         // spike measured. The fixtures changed, not the parser — each page was
@@ -76,8 +78,14 @@ final class FixtureCountsTests: XCTestCase {
         ("Mister No",        268,  268),
         ("Orka -",            62,   62),
         ("Orka Specijal",     30,   30),
+        ("Roto Biblioteka",  38,   38),
         ("Sirius",           164,  158),
-        ("Veliki Blek",      107,  107),
+        // Re-saved 13 Aug 2026 with more of its posts unlocked — 107 links
+        // became 238 — and joined by two further topic pages. The three
+        // read as one run, 128…995; see testVelikiBlekContinuesAcrossPages.
+        ("Veliki Blek - Lunov Magnus Strip - Veliki", 238, 238),
+        ("Veliki Blek - Lunov Magnus Strip - Page 2", 244, 244),
+        ("Veliki Blek - Lunov Magnus Strip - Page 3",  36,  36),
         ("Zagor - LUNOV",     43,   43),
         ("Zagor - ZLATNA SERIJA - ZS", 125, 125),
         ("ZLATNA SERIJA - Page 2",      120, 120),
@@ -123,8 +131,8 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 2738)
-        XCTAssertEqual(attributed, 2701)
+        XCTAssertEqual(total, 3307)
+        XCTAssertEqual(attributed, 3270)
     }
 
     /// A long run split across forum pages has to read as one series.
@@ -164,6 +172,37 @@ final class FixtureCountsTests: XCTestCase {
         try store.ingest(html: two)
         try store.ingest(html: three)
         XCTAssertEqual(try store.recent(limit: nil).count, 302, "re-import duplicated the run")
+    }
+
+    /// The same, for a series whose edition is not shouted.
+    ///
+    /// Zagor survived the forum's pagination by luck: "ZLATNA SERIJA" is in
+    /// capitals, so the shouted-part rule reached it before the topic's
+    /// trailing "Page 2" could be mistaken for the edition. Veliki Blek's
+    /// "Lunov Magnus Strip" is title case and had no such protection — its
+    /// three pages arrived as three separate series called "Lunov Magnus
+    /// Strip", "Page 2" and "Page 3", a hundred issues each.
+    func testVelikiBlekContinuesAcrossPages() throws {
+        guard let one = try html(matching: "Veliki Blek - Lunov Magnus Strip - Veliki"),
+              let two = try html(matching: "Veliki Blek - Lunov Magnus Strip - Page 2"),
+              let three = try html(matching: "Veliki Blek - Lunov Magnus Strip - Page 3")
+        else { throw XCTSkip("Veliki Blek fixtures not present") }
+
+        let store = try Store()
+        for page in [one, two, three] { try store.ingest(html: page) }
+        let rows = try store.recent(limit: nil)
+
+        XCTAssertEqual(Set(rows.compactMap(\.edition)), ["Lunov Magnus Strip"],
+                       "the pagination marker leaked into the edition")
+        // 258, not 259: the run once carried two rows that were not issues
+        // — ")-SZ.cbr", the tail of a filename the URL pattern cut short,
+        // and "cijeli strip", a note after a link that displaced LMS 349 —
+        // and did not carry 349 itself.
+        XCTAssertEqual(rows.count, 258)
+        let numbers = rows.compactMap(\.number).sorted()
+        XCTAssertEqual(numbers.first, 128)
+        XCTAssertEqual(numbers.last, 995)
+        XCTAssertEqual(Set(numbers).count, numbers.count, "an issue number appears twice")
     }
 
     /// Entity decoding is not optional: IPB writes `http&#58;//...`, and

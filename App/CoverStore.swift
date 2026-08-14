@@ -86,6 +86,36 @@ final class CoverStore: @unchecked Sendable {
     // MARK: - Loading
 
     private func fetchAndDecode(_ url: String) async -> UIImage? {
+        // One cover out of a sheet of six. The sheet is fetched and cached
+        // like any other image — under its own URL — so six tiles cost one
+        // download between them, and the crop happens once per tile.
+        if let tile = CoverTile(reference: url) {
+            guard let sheet = await image(tile.sheet, grayscale: false),
+                  let cropped = Self.crop(sheet, to: tile) else { return nil }
+            store(cropped, url: url, grayscale: false)
+            if let gray = desaturate(cropped) { store(gray, url: url, grayscale: true) }
+            return cropped
+        }
+        return await fetchAndDecodeWhole(url)
+    }
+
+    /// The tile's rectangle, in the sheet's own pixels.
+    ///
+    /// Integer division deliberately: a sheet whose width does not divide by
+    /// three leaves a column of at most two pixels at the right edge, which is
+    /// invisible, where rounding up would read past the end.
+    private static func crop(_ sheet: UIImage, to tile: CoverTile) -> UIImage? {
+        guard let cg = sheet.cgImage else { return nil }
+        let width = cg.width / tile.columns
+        let height = cg.height / tile.rows
+        guard width > 0, height > 0 else { return nil }
+        let rect = CGRect(x: width * tile.column, y: height * tile.row,
+                          width: width, height: height)
+        guard let cut = cg.cropping(to: rect) else { return nil }
+        return UIImage(cgImage: cut, scale: sheet.scale, orientation: sheet.imageOrientation)
+    }
+
+    private func fetchAndDecodeWhole(_ url: String) async -> UIImage? {
         // A cover taken from the comic's own first page: already on disk in
         // the library, and nothing to fetch or cache a second time.
         if let issueID = Library.coverIssueID(reference: url) {
