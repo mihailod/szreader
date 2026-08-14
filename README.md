@@ -1,66 +1,53 @@
 # StreamZine
 
-Comics/magazines reader for iPad. For now it only supports
-[StripZona](https://www.stripzona.com), a Serbian/ex-YU comics fan site.
+Comics/magazines reader for iPad.
 
-You browse the forum inside the app, import a topic page, and its issues become
-a searchable shelf — covers, series, hero, publisher and issue numbers, all read
-off the page. Downloads and reading happen in the app.
+<img src="screenshot.png" alt="Screenshot" width="400" />
+
+For now it only supports [StripZona](https://www.stripzona.com), a Serbian/ex-YU comics fan site. You browse its forum inside the app, import a topic page, and its issues become
+a searchable shelf — covers, series, hero, publisher and issue numbers, all read off the page in a convenient Kindle-style reader. Downloads and reading happen in the app.
 
 ## What it does
 
 - **Imports a saved topic page** and turns its posts into library entries.
-  Uploaders on the forum label issues five or six different ways; the parser
-  handles each, and 44 real pages are kept as test fixtures so a change to one
-  convention cannot quietly break another.
-- **Finds cover art** from the page itself, from stripovi.com filenames that
-  name their issue, or — where a post shows a grid of six covers above six
-  issues — by cropping that sheet into tiles.
-- **Downloads** from MediaFire, Mega and Pixeldrain, including split archives
+  Uploaders on the forum label issues in many ways; the parser learns offline from corpus and tries to
+  handle each.
+- **Finds cover art** from the page itself, or resolving the name against stripovi.com.
+- **Downloads** from mirrors (MediaFire, Mega, Pixeldrain), including split archives
   and sets where one archive holds a run of issues.
-- **Reads** CBR, CBZ, RAR, ZIP, 7z and PDF. Portrait turns pages; landscape is
-  one continuous scroll with a scrubber down each edge, so it works in either
-  hand. It remembers where you stopped.
-- **Search and filter** by title, hero, publisher, series or number, with
-  read/unread state.
+- **Reads** CBR, CBZ, RAR, ZIP, 7z and PDF. Portrait turns pages like Kindle; landscape is
+  one continuous fit to width (for oversized content) scroll with a scrubber down each edge, so it works in either
+  hand. It remembers where you stopped reading.
+- **Search, filter, sort** by title, hero, publisher, series or number, with
+  read/redaging/unread and downloaded states.
 
-## Signing in
+## StripZona Signing in
 
-Some posts hide their links until you are logged in. You log in on StripZona's
-own form, inside the app's web view — there is no login screen of its own, and
-nothing here reads, stores or replays a password. Your typing goes from that
-form to the site and nowhere else; no Keychain, no credential store.
-
-The session cookie lives in WebKit's data store inside the app's sandboxed
-container, which is why the login survives a relaunch and why removing the app
-takes it with it.
+All posts hide their links until you are logged in and liked them. You log in on StripZona's
+own form, inside the app's sandboxed web view (the reader doesn't know, store or replay your credentials.
 
 ## Tested against
 
-44 saved StripZona topics — **2,435 issues, 2,316 with cover art** — are kept as
-fixtures, and every one is checked on each build: how many links a page holds,
-how many reach an issue, and that a run split over several forum pages reads as
-one series.
-
-| | Titles | Issues |
-|---|---|---|
-| **Bonelli** heroes | Zagor, Veliki Blek, Ken Parker, Mister No, Komandant Mark, Martin Mystere, Kit Teler, Kapetan Miki, Džudas | 1,259 |
-| **SF and prose magazines** | Galaksija, Erotski Roman, Sirius, Alef, Roto Biblioteka X-100, Kosmoplov | 667 |
-| **FIBRA** | Kolorka, Orka, and both Specijals | 249 |
-| **Magnus & Bunker** | Alan Ford, Maxmagnus, Johnny Logan, Diabolik, Kriminal, Satanik | 148 |
-| Other | Gigant, Asteriks, Korto Malteze | 112 |
+| Category | Heros / Series |
+|---|---|
+| **Bonelli** | Zagor, Veliki Blek, Ken Parker, Mister No, Komandant Mark, Martin Mystere, Kit Teler, Kapetan Miki, Džudas |
+| **Magnus & Bunker** | Alan Ford, Maxmagnus, Johnny Logan, Diabolik, Kriminal, Satanik |
+| **FIBRA** | Kolorka, Orka, and both Specijals |
+| **SF magazines** | Galaksija, Sirius, Alef, Roto Biblioteka X-100, Kosmoplov |
+| **Other** | Gigant, Asteriks, Korto Malteze |
 
 Editions covered include Lunov Magnus Strip, Zlatna Serija, Super Strip
 Biblioteka, Stripzona Scanlation, Libellus i Fibra and System Comics;
 publishers include Bonelli, Dnevnik, Vjesnik, Politika, Dečje Novine,
 Bookglobe, Slobodna Dalmacija and Fibra.
 
-Cover art is complete for most of these. Two known gaps: **Ken Parker** (46% —
-one of its four topics posts no artwork at all) and **Galaksija** (82%).
+Cover art is complete for most of these but there are some inevitable gaps / misses.
 
-### Anything else
+### Will it work for my favorite hero / series?
 
-A topic that is written like one of the above should import the same way. One
+I will keep adding to the offline training corpus but I cannot claim 100% coverage.
+
+In the meantime, a topic that is written like one of the above should import the same way. One
 that is not may import partially — missing links, missing cover art, or issues
 skipped entirely — and it will do so quietly rather than reporting an error,
 because there is no way to tell an unread convention from a post that simply
@@ -88,10 +75,10 @@ and PDF decoding — and builds on macOS, which is why the tests run without a
 simulator. `unrar` and the LZMA SDK are vendored under `Sources/CUnrar` and
 `Sources/C7z`.
 
-The test fixtures are saved forum pages in `spike/pages/`, which is gitignored:
-the tests skip cleanly without them.
+The test fixtures are saved forum pages in `spike/pages/`, which is gitignored to protect the mirror links.
 
 ## Licence
 
-[PolyForm Noncommercial 1.0.0](LICENSE). The app is a reader — it hosts nothing
-and ships no content.
+Content: the app is just a reader — it hosts nothing and ships no content.
+
+Code: © Mihailo Despotovic, 2006. [PolyForm Noncommercial 1.0.0](LICENSE).
