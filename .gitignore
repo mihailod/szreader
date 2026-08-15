@@ -12,6 +12,9 @@ spike/*.csv
 DerivedData/
 # NB: git has no inline comments — a '#' only starts a comment at the start of
 # a line, so a trailing comment becomes part of the pattern and matches nothing.
+# xcodebuild archive/export output: the .xcarchive and the signed .ipa
+build/
+
 # xcodebuild -derivedDataPath
 .xcbuild/
 .xcbuild-device/

@@ -68,14 +68,18 @@ final class FixtureCountsTests: XCTestCase {
         ("Komandant Mark - Zlatna Serija - Komandant", 157, 157),
         ("Komandant Mark - Zlatna Serija - Page 2",    120, 120),
         ("Komandant Mark - Zlatna Serija - Page 3",     43,  43),
-        // Both Kit Teler pages and Martin Mystere were re-saved on 10 Aug 2026
-        // with more of their content unlocked, so these are larger than the
-        // spike measured. The fixtures changed, not the parser — each page was
-        // checked for implausible numbers before these were moved.
+        // Martin Mystere and Kit Teler's Zlatna Serija page were re-saved on
+        // 10 Aug 2026 with more of their content unlocked, so these are larger
+        // than the spike measured. The fixtures changed, not the parser — each
+        // page was checked for implausible numbers before these were moved.
         ("Ken Parker - FIBRA",    49,   49),
         ("Ken Parker - LIBELLUS", 79,   79),
         ("Ken Parker - SYSTEM",   25,   25),
-        ("Kit Teler - LUNOV", 82,   82),
+        // Re-saved 15 Aug 2026 with more posts unlocked (82 links became
+        // 137) and joined by two further topic pages: 8…996 as one run.
+        ("Kit Teler - LUNOV MAGNUS STRIP - Kit",    137, 137),
+        ("Kit Teler - LUNOV MAGNUS STRIP - Page 2", 148, 148),
+        ("Kit Teler - LUNOV MAGNUS STRIP - Page 3", 102, 102),
         ("Kit Teler - ZLATNA", 15,  15),
         ("Kolorka -",        144,  144),
         ("Kolorka Specijal",  34,   34),
@@ -138,8 +142,8 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 3600)
-        XCTAssertEqual(attributed, 3563)
+        XCTAssertEqual(total, 3905)
+        XCTAssertEqual(attributed, 3868)
     }
 
     /// A long run split across forum pages has to read as one series.
