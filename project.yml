@@ -23,6 +23,11 @@ targets:
       - path: App
         excludes:
           - "Info.plist"      # referenced via INFOPLIST_FILE instead
+          # Editor scratch files. xcodegen globs the directory, so a swap file
+          # open at generate time is baked into the project and the build then
+          # fails on it once the editor removes it.
+          - "**/.*.sw?"
+          - "**/*~"
 
     dependencies:
       - package: SZKit
@@ -35,6 +40,20 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: StreamZine
+        # Answers the export-compliance question once, here, instead of on
+        # every upload. "false" asserts that the app uses no encryption
+        # beyond what is exempt — see docs/export-compliance.md for the full
+        # inventory this rests on. Revisit it if the app ever gains a
+        # password prompt for encrypted archives, or its own crypto.
+        ITSAppUsesNonExemptEncryption: false
+        # Comics readers conventionally file under Books; the alternative is
+        # public.app-category.magazines-and-newspapers, which on the store
+        # means periodical subscriptions rather than a reader.
+        #
+        # Informational on iOS: the category an iOS app is actually listed
+        # under is chosen in App Store Connect, not here. This key is what the
+        # Mac App Store reads, and what Xcode's General tab shows.
+        LSApplicationCategoryType: public.app-category.books
         # Both read from the build settings below rather than being written
         # out again here, so the version has exactly one place it is set.
         # The app reads them back off its own bundle at runtime.

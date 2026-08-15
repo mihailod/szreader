@@ -15,6 +15,7 @@ DerivedData/
 # xcodebuild -derivedDataPath
 .xcbuild/
 .xcbuild-device/
+.xcbuild-release/
 .simbuild/
 # Snapshot of the simulator's logged-in forum session (cookies). Local only.
 .simsession/

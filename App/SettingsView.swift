@@ -43,6 +43,18 @@ struct SettingsView: View {
                     .foregroundStyle(.tertiary)
 
                 Spacer()
+
+                // Not decoration: UnRAR's licence requires its second clause
+                // to appear in the licence or documentation of anything that
+                // ships its source, and a submitted binary carries no
+                // documentation of its own. This screen is where it lives.
+                NavigationLink {
+                    Acknowledgements()
+                } label: {
+                    Text("Acknowledgements")
+                        .font(.callout)
+                }
+                .padding(.bottom, 12)
             }
             .frame(maxWidth: .infinity)
             .multilineTextAlignment(.center)
@@ -54,5 +66,55 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+}
+
+/// Third-party source the app is built on, and what its licences require.
+private struct Acknowledgements: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Group {
+                    Text("UnRAR").font(.headline)
+                    // Reproduced verbatim, and it has to be: the licence asks
+                    // for the full text of this paragraph, from those first
+                    // two words onward.
+                    Text("""
+                        UnRAR source code may be used in any software to \
+                        handle RAR archives without limitations free of \
+                        charge, but cannot be used to develop RAR (WinRAR) \
+                        compatible archiver and to re-create RAR compression \
+                        algorithm, which is proprietary. Distribution of \
+                        modified UnRAR source code in separate form or as a \
+                        part of other software is permitted, provided that \
+                        full text of this paragraph, starting from "UnRAR \
+                        source code" words, is included in license, or in \
+                        documentation if license is not available, and in \
+                        source code comments of resulting package.
+                        """)
+                    Text("All copyrights to RAR and the utility UnRAR are "
+                         + "exclusively owned by the author — Alexander Roshal.")
+                }
+                Group {
+                    Text("LZMA SDK").font(.headline)
+                    Text("7-Zip's LZMA SDK by Igor Pavlov, placed in the "
+                         + "public domain. Used to read 7z archives.")
+                }
+                Group {
+                    Text("StripZona").font(.headline)
+                    Text("This is an independent reader. It is not affiliated "
+                         + "with, endorsed by, or connected to stripzona.com, "
+                         + "and it hosts no content of its own. A stripzona.com "
+			 + "approved account is needed to access any content.")
+                }
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(24)
+        }
+        .navigationTitle("Acknowledgements")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
