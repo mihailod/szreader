@@ -44,9 +44,13 @@ final class FixtureCountsTests: XCTestCase {
         ("Alef - Ostale",    51,   50),
         ("Alef - pdf",       26,   26),
         ("Kosmoplov - pdf",  24,   24),
-        ("Galaksija - pdf", 102,  102),
+        // Re-saved 14 Aug 2026 with more posts unlocked (102 links became
+        // 172) and joined by a second topic page: together 1…190.
+        ("Galaksija - pdf - Casopisi", 172, 172),
+        ("Galaksija - pdf - Page 2",    20,  20),
         ("Asteriks",         20,   20),
         ("Diabolik",          18,   18),
+        ("Vjesnik, 1987-1988", 40,   40),
         ("Kriminal",           6,    6),
         ("Satanik",            6,    6),
         ("Dzudas - LUNOV",   22,   22),
@@ -134,8 +138,8 @@ final class FixtureCountsTests: XCTestCase {
             total += cov.total; attributed += cov.attributed; found += 1
         }
         try XCTSkipIf(found < expected.count, "fixture set incomplete")
-        XCTAssertEqual(total, 3470)
-        XCTAssertEqual(attributed, 3433)
+        XCTAssertEqual(total, 3600)
+        XCTAssertEqual(attributed, 3563)
     }
 
     /// A long run split across forum pages has to read as one series.

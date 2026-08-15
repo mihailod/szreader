@@ -24,14 +24,14 @@ a searchable shelf — covers, series, hero, publisher and issue numbers, all re
 ## StripZona Signing in
 
 All posts hide their links until you are logged in and liked them. You log in on StripZona's
-own form, inside the app's sandboxed web view (the reader doesn't know, store or replay your credentials.
+own form, inside the app's sandboxed web view (the reader doesn't know, store or replay your credentials).
 
 ## Tested against
 
 | Category | Heros / Series |
 |---|---|
 | **Bonelli** | Zagor, Veliki Blek, Ken Parker, Mister No, Komandant Mark, Martin Mystere, Kit Teler, Kapetan Miki, Džudas |
-| **Magnus & Bunker** | Alan Ford, Maxmagnus, Johnny Logan, Diabolik, Kriminal, Satanik |
+| **Magnus & Bunker** | Alan Ford, Maxmagnus, Johnny Logan, Družina od vješala, Diabolik, Kriminal, Satanik |
 | **FIBRA** | Kolorka, Orka, and both Specijals |
 | **SF magazines** | Galaksija, Sirius, Alef, Roto Biblioteka X-100, Kosmoplov |
 | **Other** | Gigant, Asteriks, Korto Malteze |
@@ -81,4 +81,4 @@ The test fixtures are saved forum pages in `spike/pages/`, which is gitignored t
 
 Content: the app is just a reader — it hosts nothing and ships no content.
 
-Code: © Mihailo Despotovic, 2006. [PolyForm Noncommercial 1.0.0](LICENSE).
+Code: © Mihailo Despotovic, 2026. [PolyForm Noncommercial 1.0.0](LICENSE).
