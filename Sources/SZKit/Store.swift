@@ -52,6 +52,9 @@ public struct StoredIssue: Equatable, Sendable {
     /// Which archive this came from. Drives nothing about how an issue reads
     /// — only whether the reader has asked to see that source at all.
     public let site: IssueSite
+    /// Scanned pages, where the source states them. Nil for anything from the
+    /// forum, which never does — so this says "unknown", not "empty".
+    public let pageCount: Int?
 
     /// Spelled out rather than left to the compiler's memberwise one, so
     /// `site` can carry a default. Every issue in existence was StripZona's
@@ -66,7 +69,7 @@ public struct StoredIssue: Equatable, Sendable {
                 isRead: Bool, lastPage: Int?, numberTo: Int?, started: Bool,
                 downloadFailed: Bool, style: LabelStyle, mirrorCount: Int,
                 coverURL: String?, isDownloaded: Bool,
-                site: IssueSite = .default) {
+                site: IssueSite = .default, pageCount: Int? = nil) {
         self.id = id; self.code = code; self.number = number; self.title = title
         self.series = series; self.hero = hero; self.edition = edition
         self.publisher = publisher; self.isRead = isRead; self.lastPage = lastPage
@@ -74,6 +77,7 @@ public struct StoredIssue: Equatable, Sendable {
         self.downloadFailed = downloadFailed; self.style = style
         self.mirrorCount = mirrorCount; self.coverURL = coverURL
         self.isDownloaded = isDownloaded; self.site = site
+        self.pageCount = pageCount
     }
 
     /// Short form of the edition for the shelf: initials when it is several
@@ -256,6 +260,19 @@ public final class Store: @unchecked Sendable {
         // is what they all are — without a second statement to backfill them.
         try? db.execute("""
             ALTER TABLE issue ADD COLUMN site TEXT NOT NULL DEFAULT 'stripzona'
+            """)
+        // How many scanned pages the archive holds, where the source says so.
+        // Nil for everything imported from the forum, which never states it.
+        try? db.execute("ALTER TABLE issue ADD COLUMN page_count INTEGER")
+
+        // Small facts about the library itself rather than about any issue —
+        // currently just which build of the shipped catalogue has been
+        // applied, so re-seeding an unchanged one costs a single read.
+        try db.execute("""
+            CREATE TABLE IF NOT EXISTS meta (
+              key   TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
             """)
 
         // The natural key, now that `site` exists to go in it.
@@ -650,7 +667,7 @@ public final class Store: @unchecked Sendable {
                    i.download_failed_at IS NOT NULL,
                    i.started_at IS NOT NULL,
                    i.number_to,
-                   i.site
+                   i.site, i.page_count
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
@@ -676,7 +693,8 @@ public final class Store: @unchecked Sendable {
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
                 isDownloaded: (row.int(8) ?? 0) == 1,
-                site: IssueSite(rawValue: row.string(17) ?? "") ?? .default))
+                site: IssueSite(rawValue: row.string(17) ?? "") ?? .default,
+                pageCount: row.int(18)))
         }
         return out
     }
@@ -884,7 +902,7 @@ public final class Store: @unchecked Sendable {
                    i.download_failed_at IS NOT NULL,
                    i.started_at IS NOT NULL,
                    i.number_to,
-                   i.site
+                   i.site, i.page_count
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
             """, terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
@@ -901,7 +919,8 @@ public final class Store: @unchecked Sendable {
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
                 isDownloaded: (row.int(8) ?? 0) == 1,
-                site: IssueSite(rawValue: row.string(17) ?? "") ?? .default))
+                site: IssueSite(rawValue: row.string(17) ?? "") ?? .default,
+                pageCount: row.int(18)))
         }
         return out
     }

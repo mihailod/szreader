@@ -179,6 +179,24 @@ final class AppModel: ObservableObject {
                               transport: transport,
                               downloader: URLSessionDownloader())
 
+            // The RetroSpec catalogue, which ships with the app rather than
+            // being imported from anywhere. Synchronous, and deliberately:
+            // the first launch pays one transaction of 653 rows, and every
+            // launch after it reads a single stamp row and stops. Doing it
+            // here rather than in a task keeps the shelf from being built
+            // twice — once empty, then again once the rows land.
+            //
+            // A failure is not fatal. The forum library is the app's original
+            // reason to exist and works with or without this.
+            do {
+                let report = try store.seedRetroSpecCatalogue()
+                if report.inserted > 0 {
+                    status = "added \(report.inserted) RetroSpec issues"
+                }
+            } catch {
+                status = "RetroSpec catalogue unavailable: \(Library.reason(error))"
+            }
+
             #if DEBUG
             seedFromSavedPages(into: store)
             #endif
