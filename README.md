@@ -1,10 +1,22 @@
-# StreamZine
+<table><tr>
+<th>
+      <img src=https://raw.githubusercontent.com/mihailod/szreader/refs/heads/master/App/Assets.xcassets/AppIcon.appiconset/icon_1024.png width=200>
 
-Comics/magazines reader for iOS.
+</th>
+<th>
+  StreamZine for iOS<br>
+  comics & magazines reader<br>
+  that supports<br>
+  StripZona forum<br>
+</th>
+</tr>
+</table>
+
+## SOON ON APPLE APP STORE!
+
+iPad shown and recommended (larger screen):
 
 <img src="screenshot.png" alt="Screenshot" width="400" />
-
-iPad shown and recommended (larger screen).
 
 For now it only supports [StripZona](https://www.stripzona.com), a Serbian/ex-YU comics fan site. You browse its forum inside the app, import a topic page, and its issues become
 a searchable shelf — covers, series, hero, publisher and issue numbers, all read off the page in a convenient Kindle-style reader. Downloads and reading happen in the app.
