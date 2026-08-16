@@ -13,7 +13,7 @@
 </tr>
 </table>
 
-## COMING SOON TO APPLE APP STORE!
+## V1.0 IS COMING SOON TO APPLE APP STORE! (review in progress)
 
 iPad shown and recommended (larger screen):
 
@@ -24,7 +24,7 @@ inside the app, import a topic page, and its issues become a searchable shelf �
 hero, publisher and issue numbers, all read off the page in a convenient Kindle-style reader.
 Downloads and reading happen in the app.
 
-## New in 1.1 — RetroSpec
+## New in 1.1 (work in progress)
 
 A second source: [RetroSpec](https://retrospec.elite.org/users/tomcat/yu/revije.php), Tomaž Kac's
 archive of scanned ex-Yugoslav computer magazines. **653 issues across 19 runs** — Svet Kompjutera,
