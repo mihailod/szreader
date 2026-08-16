@@ -120,9 +120,33 @@ struct LibraryView: View {
 
     // MARK: - Header
 
-    private var header: some View {
-        HStack(spacing: 14) {
-            HStack(spacing: 12) {
+    /// One row on iPad, two on a phone.
+    ///
+    /// The iPad branch is the original row, untouched. A phone cannot hold it:
+    /// the picker, the two menus and the Import button alone come to about
+    /// 394pt before the search field gets anything, which is wider than the
+    /// screen — so the field ended up unusably narrow and Import sat off the
+    /// edge. Giving the field a row of its own is the whole fix.
+    @ViewBuilder private var header: some View {
+        if Device.isPhone {
+            VStack(spacing: 10) {
+                searchField
+                HStack(spacing: 10) { headerControls }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        } else {
+            HStack(spacing: 14) {
+                searchField
+                headerControls
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass")
                     .font(.title3).foregroundStyle(.secondary)
                 // "your library": this searches what has been imported, never
@@ -142,16 +166,18 @@ struct LibraryView: View {
                     }
                 }
             }
-            .padding(.horizontal, 18)
-            .frame(height: 56)
-            .background(Color(.secondarySystemBackground), in: Capsule())
+        .padding(.horizontal, 18)
+        .frame(height: 56)
+        .background(Color(.secondarySystemBackground), in: Capsule())
+    }
 
+    @ViewBuilder private var headerControls: some View {
             Picker("", selection: $layoutRaw) {
                 Image(systemName: "square.grid.2x2").tag(LibraryLayout.grid.rawValue)
                 Image(systemName: "list.bullet").tag(LibraryLayout.list.rawValue)
             }
             .pickerStyle(.segmented)
-            .frame(width: 120)
+            .frame(width: Device.isPhone ? 96 : 120)
 
             // Filled icon when the order is not the default, for the same
             // reason the filter fills: a shelf in an unexpected order should
@@ -258,15 +284,21 @@ struct LibraryView: View {
             .menuStyle(.borderlessButton)
             .tint(filtering ? .accentColor : .secondary)
 
+            // The icon goes on a phone. Even on its own row the controls
+            // came to about 420pt against a 6.1" screen's 393, and Import —
+            // the one button the first screen exists for — was what ran off
+            // the edge. The word alone is unambiguous; the icon was decoration.
             Button { showingImport = true } label: {
-                Label("Import", systemImage: "square.and.arrow.down")
-                    .font(.headline).padding(.horizontal, 6).frame(height: 40)
+                if Device.isPhone {
+                    Text("Import")
+                        .font(.headline).padding(.horizontal, 4).frame(height: 36)
+                } else {
+                    Label("Import", systemImage: "square.and.arrow.down")
+                        .font(.headline).padding(.horizontal, 6).frame(height: 40)
+                }
             }
             .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+            .controlSize(Device.isPhone ? .regular : .large)
     }
 
     // MARK: - Actions
@@ -583,6 +615,13 @@ struct LibraryView: View {
                         }
                         if let name = name(issue) {
                             Text(name).font(.title3.weight(.medium))
+                                // A phone's caption column is narrow, and an
+                                // unbroken title was being hyphenated down the
+                                // middle of a word — "Op-eracija Franke
+                                // nstein". Two lines, shrinking before it
+                                // wraps, keeps it readable.
+                                .lineLimit(Device.isPhone ? 2 : nil)
+                                .minimumScaleFactor(Device.isPhone ? 0.8 : 1)
                         }
                     }
                     // Who it is about and what it is from. The mirror count
@@ -590,6 +629,7 @@ struct LibraryView: View {
                     // it is in the details, where it belongs.
                     if let provenance = issue.provenance {
                         Text(provenance).font(.subheadline).foregroundStyle(.secondary)
+                            .lineLimit(Device.isPhone ? 1 : nil)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -602,6 +642,24 @@ struct LibraryView: View {
         .padding(.vertical, 6)
     }
 
+    /// A row button's label: the word on iPad, the icon alone on a phone.
+    ///
+    /// Three worded buttons need about 380pt between them. A phone row has
+    /// nowhere near that, so SwiftUI squeezed each one until its text wrapped
+    /// to a single character per line and the buttons read vertically. The
+    /// words are kept for VoiceOver, and every one of these actions is also in
+    /// the long-press menu, spelled out.
+    @ViewBuilder private func rowLabel(_ title: String, icon: String) -> some View {
+        if Device.isPhone {
+            Image(systemName: icon)
+                .font(.body)
+                .frame(minWidth: 24)
+                .accessibilityLabel(title)
+        } else {
+            Text(title)
+        }
+    }
+
     private func rowActions(_ issue: StoredIssue) -> some View {
         HStack(spacing: 10) {
             if model.downloading.contains(issue.id) {
@@ -611,12 +669,15 @@ struct LibraryView: View {
                 // mutually exclusive: a comic either is on disk or is not, and
                 // a permanently greyed-out twin of the button next to it says
                 // nothing a reader cannot already see from the cover.
-                Button(issue.isDownloaded ? "Remove Download" : "Download") {
+                Button {
                     if issue.isDownloaded {
                         beginRemoveDownload(issue, model: model, pending: &pending)
                     } else {
                         beginDownload(issue, model: model, pending: &pending)
                     }
+                } label: {
+                    rowLabel(issue.isDownloaded ? "Remove Download" : "Download",
+                             icon: issue.isDownloaded ? "trash" : "arrow.down.circle")
                 }
                 .buttonStyle(.bordered)
                 .tint(issue.isDownloaded ? .red : .green)
@@ -629,15 +690,22 @@ struct LibraryView: View {
             // this one is about having read them. Not the green the read badge
             // uses — sitting next to the green Download button, the two pills
             // read as the same action at a glance.
-            Button(issue.isRead ? "Mark as Unread" : "Mark as Read") {
-                model.setRead(!issue.isRead, for: issue)
-            }
-            .buttonStyle(.bordered)
-            .tint(.accentColor)
+            if !Device.isPhone {
+                Button {
+                    model.setRead(!issue.isRead, for: issue)
+                } label: {
+                    rowLabel(issue.isRead ? "Mark as Unread" : "Mark as Read",
+                             icon: issue.isRead ? "circle" : "checkmark.circle")
+                }
+                .buttonStyle(.bordered)
+                .tint(.accentColor)
 
-            Button("Delete") { pending = .remove(issue) }
+                Button { pending = .remove(issue) } label: {
+                    rowLabel("Delete", icon: "xmark.bin")
+                }
                 .buttonStyle(.bordered)
                 .tint(.red)
+            }
         }
         .buttonBorderShape(.capsule)
         .controlSize(.regular)
@@ -808,6 +876,13 @@ struct LibraryView: View {
     }
 
     private var summaryLine: String {
+        // A phone cannot hold the sentence. Spelled out it is wider than the
+        // screen even shrunken, which truncated it *and* stretched the bar it
+        // sits in until the settings button was pushed off the left edge.
+        if Device.isPhone {
+            return "\(model.results.count)/\(model.issueCount) · "
+                + "\(model.downloadedCount) ↓ \(Self.gb(model.diskUsage))"
+        }
         var line = "\(model.results.count) shown · \(model.issueCount) imported"
         line += " · \(model.downloadedCount) downloaded (\(Self.gb(model.diskUsage)))"
         return line
@@ -864,6 +939,21 @@ struct LibraryView: View {
 
     private var summary: some View {
         HStack(spacing: 14) {
+            // Three segments never fit a phone. A status message is the news —
+            // it says what just happened — so while there is one it has the
+            // bar to itself, and the standing counts come back when it clears.
+            if Device.isPhone {
+                if model.status.isEmpty {
+                    Text(summaryLine)
+                    if model.freeSpace > 0 {
+                        Text("·")
+                        Text(freeText)
+                            .foregroundStyle(lowOnSpace ? Color.red : Color.secondary)
+                    }
+                } else {
+                    Text(model.status)
+                }
+            } else {
             Text(summaryLine)
             if model.freeSpace > 0 {
                 Text("·")
@@ -879,15 +969,22 @@ struct LibraryView: View {
                 Text("·")
                 Text(model.status)
             }
+            }
         }
-        .font(.system(size: 25, weight: .semibold))
+        .font(.system(size: Device.isPhone ? 15 : 25, weight: .semibold))
         .foregroundStyle(.secondary)
         .lineLimit(1)
         .minimumScaleFactor(0.6)
         // Clear of the settings button at either end, so a long status line
         // shrinks rather than running underneath it.
-        .padding(.horizontal, 64)
+        .padding(.horizontal, Device.isPhone ? 60 : 64)
+        // Held to the width it was given. Without this the line's own ideal
+        // width — one unbroken sentence — sizes the bar around it, and on a
+        // phone that pushed the settings button off the screen. Phone only:
+        // the iPad's bar is already right, and this is the one modifier here
+        // that would change it.
         .frame(maxWidth: .infinity)
+        .modifier(ClampWidth(active: Device.isPhone))
     }
 }
 
@@ -1071,3 +1168,12 @@ struct IssueDetail: View {
 }
 
 extension StoredIssue: Identifiable {}
+
+/// Stops a view's own ideal width from sizing its parent.
+private struct ClampWidth: ViewModifier {
+    let active: Bool
+    func body(content: Content) -> some View {
+        if active { content.fixedSize(horizontal: false, vertical: true) }
+        else { content }
+    }
+}

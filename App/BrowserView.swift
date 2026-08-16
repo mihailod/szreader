@@ -25,6 +25,19 @@ final class BrowserModel: NSObject, ObservableObject {
         let config = WKWebViewConfiguration()
         // .default() is the persistent store: the login cookie outlives launches.
         config.websiteDataStore = .default()
+        // Always ask for the desktop site, the way Safari's "Request Desktop
+        // Website" does.
+        //
+        // StripZona serves a different forum entirely to phones — different
+        // markup, different link shapes — and the import reads the page it is
+        // shown. That mobile skin is not what any of the parsing was built
+        // against, so on a phone the same topic imported differently, or not
+        // at all. Asking for the desktop site makes the page the app sees the
+        // same page on every device.
+        //
+        // Unconditional rather than phone-only: iPadOS already requests
+        // desktop by default, so this states what the iPad was doing anyway.
+        config.defaultWebpagePreferences.preferredContentMode = .desktop
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
         webView.allowsBackForwardNavigationGestures = true

@@ -53,15 +53,28 @@ struct ImportView: View {
                 .background(.bar)
             }
             .toolbar {
+                // Five items do not fit a phone's navigation bar: it folds
+                // the overflow into a "…" menu, and Import — the last one, and
+                // the only reason to be here — was what disappeared into it.
+                // The web view keeps its edge-swipe back and forward either
+                // way, so on a phone these three cost little.
                 ToolbarItemGroup(placement: .topBarLeading) {
+                    // Back on every device: on a phone it is the one you
+                    // actually need, since the forum's own pages give you no
+                    // way back to where you came from.
                     Button { browser.webView.goBack() } label: {
                         Image(systemName: "chevron.backward")
                     }.disabled(!browser.canGoBack)
-                    Button { browser.webView.goForward() } label: {
-                        Image(systemName: "chevron.forward")
-                    }.disabled(!browser.canGoForward)
-                    Button { browser.webView.reload() } label: {
-                        Image(systemName: "arrow.clockwise")
+                    // Forward and reload only where there is room. Five items
+                    // overflow a phone's navigation bar into a "…" menu, and
+                    // Import — the reason to be here — was what went into it.
+                    if !Device.isPhone {
+                        Button { browser.webView.goForward() } label: {
+                            Image(systemName: "chevron.forward")
+                        }.disabled(!browser.canGoForward)
+                        Button { browser.webView.reload() } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
                     }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {

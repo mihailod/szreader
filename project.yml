@@ -101,7 +101,7 @@ targets:
         # integer that only ever increases; it does not reset when
         # MARKETING_VERSION changes.
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "3"
         INFOPLIST_FILE: App/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"        # iPhone and iPad

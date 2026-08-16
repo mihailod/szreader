@@ -16,6 +16,7 @@
 		4DA39CCBA66CCAC30888EB87 /* BrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DA4EDA742DCFD028234085B /* BrowserView.swift */; };
 		670053E4B9842CA70D36D12D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 897256247FA21EB8FD55169C /* PrivacyInfo.xcprivacy */; };
 		8BAE8FA4A68B422E6C8F6C61 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29AF759576024F9476C06792 /* SettingsView.swift */; };
+		8D11AF31CC02487A4E530E0C /* Device.swift in Sources */ = {isa = PBXBuildFile; fileRef = F917A2E24F939F7AEBBCAC66 /* Device.swift */; };
 		94082F888333404B61A3C818 /* SZReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */; };
 		95E0C572BF4994B77DDB41B0 /* CoverStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */; };
 		A0542A495542645E1D9C357D /* ReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A12CF237924287D34868EA /* ReaderView.swift */; };
@@ -37,6 +38,7 @@
 		C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SZReaderApp.swift; sourceTree = "<group>"; };
 		CCF6729017ACD258D0298D8F /* szreader */ = {isa = PBXFileReference; lastKnownFileType = folder; name = szreader; path = .; sourceTree = SOURCE_ROOT; };
 		F6ECA8838FF66470193A9021 /* CoverViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverViewer.swift; sourceTree = "<group>"; };
+		F917A2E24F939F7AEBBCAC66 /* Device.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Device.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -68,6 +70,7 @@
 				0DA4EDA742DCFD028234085B /* BrowserView.swift */,
 				3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */,
 				F6ECA8838FF66470193A9021 /* CoverViewer.swift */,
+				F917A2E24F939F7AEBBCAC66 /* Device.swift */,
 				640135922A53F0FDE2BFEDE9 /* ImportView.swift */,
 				34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */,
 				B0919F3692489FEBE9A67D8D /* LibraryView.swift */,
@@ -176,6 +179,7 @@
 				4DA39CCBA66CCAC30888EB87 /* BrowserView.swift in Sources */,
 				95E0C572BF4994B77DDB41B0 /* CoverStore.swift in Sources */,
 				0C1E38893CAB2B217CA9D632 /* CoverViewer.swift in Sources */,
+				8D11AF31CC02487A4E530E0C /* Device.swift in Sources */,
 				0AAA7ACFD7935BADE0E1AC10 /* ImportView.swift in Sources */,
 				1BAD08BEBBFB9D7731135C47 /* LandscapeReader.swift in Sources */,
 				13A8C6AB3E55AC67FEC8D747 /* LibraryView.swift in Sources */,
@@ -258,7 +262,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = MUYBB8YH5X;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = App/Info.plist;
@@ -284,7 +288,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = MUYBB8YH5X;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = App/Info.plist;

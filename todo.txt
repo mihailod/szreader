@@ -1,5 +1,1 @@
-- LMS ken parker has redirects to LMS -- no can do?
-
-testing:
-- rest of kit teller
 
