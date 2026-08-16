@@ -12,7 +12,7 @@
 </tr>
 </table>
 
-## SOON ON APPLE APP STORE!
+## COMING SOON TO APPLE APP STORE!
 
 iPad shown and recommended (larger screen):
 
