@@ -49,6 +49,32 @@ public struct StoredIssue: Equatable, Sendable {
     /// Whether the archive is on disk. Drives the greyed-out cover and which
     /// actions are offered.
     public let isDownloaded: Bool
+    /// Which archive this came from. Drives nothing about how an issue reads
+    /// — only whether the reader has asked to see that source at all.
+    public let site: IssueSite
+
+    /// Spelled out rather than left to the compiler's memberwise one, so
+    /// `site` can carry a default. Every issue in existence was StripZona's
+    /// before this column, and the tests that build a row to check sorting or
+    /// a label have no opinion about where it came from — making them all say
+    /// so would be noise around the thing each is actually testing.
+    ///
+    /// The two places that read real rows out of the database pass it
+    /// explicitly; nothing else should need to.
+    public init(id: Int, code: String?, number: Int?, title: String?, series: String?,
+                hero: String?, edition: String?, publisher: String?,
+                isRead: Bool, lastPage: Int?, numberTo: Int?, started: Bool,
+                downloadFailed: Bool, style: LabelStyle, mirrorCount: Int,
+                coverURL: String?, isDownloaded: Bool,
+                site: IssueSite = .default) {
+        self.id = id; self.code = code; self.number = number; self.title = title
+        self.series = series; self.hero = hero; self.edition = edition
+        self.publisher = publisher; self.isRead = isRead; self.lastPage = lastPage
+        self.numberTo = numberTo; self.started = started
+        self.downloadFailed = downloadFailed; self.style = style
+        self.mirrorCount = mirrorCount; self.coverURL = coverURL
+        self.isDownloaded = isDownloaded; self.site = site
+    }
 
     /// Short form of the edition for the shelf: initials when it is several
     /// words ("Lunov Magnus Strip" -> "LMS"), the word itself when it is one
@@ -160,9 +186,8 @@ public final class Store: @unchecked Sendable {
             -- and the second to arrive was silently dropped with its links
             -- handed to the first: twenty-four issues gone, and no sign of it
             -- anywhere except a run that appeared to start at 25.
-            CREATE UNIQUE INDEX IF NOT EXISTS issue_identity_v2
-              ON issue (IFNULL(code,''), IFNULL(number,-1), title_folded,
-                        IFNULL(series,''));
+            -- The index itself is created further down, once the `site`
+            -- column it now includes is guaranteed to exist.
             DROP INDEX IF EXISTS issue_identity;
 
             -- Covers read off a page that did not list the issue they name.
@@ -226,6 +251,32 @@ public final class Store: @unchecked Sendable {
         try? db.execute("ALTER TABLE issue ADD COLUMN cover_asked_at REAL")
         // The far end of a double issue: one magazine printed as "121/122".
         try? db.execute("ALTER TABLE issue ADD COLUMN number_to INTEGER")
+        // Which archive a row came from. NOT NULL with a default, so every
+        // issue that existed before the column is a StripZona issue — which
+        // is what they all are — without a second statement to backfill them.
+        try? db.execute("""
+            ALTER TABLE issue ADD COLUMN site TEXT NOT NULL DEFAULT 'stripzona'
+            """)
+
+        // The natural key, now that `site` exists to go in it.
+        //
+        // Two archives are two namespaces: RetroSpec's Galaksija is a
+        // Belgrade science monthly and StripZona's is an SF magazine, and
+        // nothing but the source tells their issue 1 apart. Without the
+        // column in the key they are one row, and the second to arrive is
+        // dropped with its links handed to the first — the same silent loss
+        // the v2 comment above describes, across catalogues instead of within
+        // one.
+        //
+        // Safe to create over existing data whatever it holds: adding a
+        // column to a unique index only ever admits more rows than the
+        // narrower index did, so anything v2 accepted v3 accepts too.
+        try db.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS issue_identity_v3
+              ON issue (site, IFNULL(code,''), IFNULL(number,-1), title_folded,
+                        IFNULL(series,''));
+            DROP INDEX IF EXISTS issue_identity_v2;
+            """)
 
         // Libraries that already took the forum's "picture missing" graphic
         // as artwork. Clearing it puts those issues back to having no cover,
@@ -505,17 +556,22 @@ public final class Store: @unchecked Sendable {
         let searchText = Self.searchText(title: parsed.label.title, code: parsed.label.code,
                                          number: parsed.label.number,
                                          series: parsed.label.series, context: context)
+        // `site` is written explicitly rather than left to the column's
+        // default. The default is there to backfill rows that predate the
+        // column; a row being inserted now should say what it is, so that
+        // reading this statement answers the question.
         try db.run("""
             INSERT OR IGNORE INTO issue
               (code, number, number_to, title, title_folded, series, style, source,
-               context, search_text, hero, edition, publisher)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               context, search_text, hero, edition, publisher, site)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [SQLValue(parsed.label.code), SQLValue(parsed.label.number),
                   SQLValue(parsed.label.numberTo),
                   SQLValue(parsed.label.title), .text(folded),
                   SQLValue(parsed.label.series), .text(parsed.style.rawValue),
                   SQLValue(source), .text(context), .text(searchText),
-                  SQLValue(hero), SQLValue(edition), SQLValue(publisher)])
+                  SQLValue(hero), SQLValue(edition), SQLValue(publisher),
+                  .text(IssueSite.stripzona.rawValue)])
 
         if try db.scalarInt("SELECT changes()") > 0 {
             inserted += 1
@@ -532,13 +588,29 @@ public final class Store: @unchecked Sendable {
         return try existingID(parsed, folded: folded)
     }
 
+    /// The row the natural key names.
+    ///
+    /// Must match `issue_identity_v3` term for term, `site` included. A
+    /// lookup narrower than the index it stands for matches a row from the
+    /// other catalogue too, and hands this page's mirrors to whichever the
+    /// scan happened to return last.
+    ///
+    /// No test distinguishes the clause, and it is worth saying why rather
+    /// than leaving someone to discover it: dropping `site` from the WHERE
+    /// still produces the right answer today, because the scan follows the
+    /// index's own (site, ...) order and "retrospec" sorts before
+    /// "stripzona", so the forum's row is always the last one written to the
+    /// result. That is the alphabet being helpful, not the query being
+    /// correct. A third source named after "stripzona", or a query plan that
+    /// returns rows in another order, silently reverses it — so the clause
+    /// stays.
     private func existingID(_ parsed: ParsedIssue, folded: String) throws -> Int64 {
         var id: Int64 = 0
         try db.query("""
             SELECT id FROM issue
-            WHERE IFNULL(code,'') = ? AND IFNULL(number,-1) = ? AND title_folded = ?
-              AND IFNULL(series,'') = ?
-            """, [.text(parsed.label.code ?? ""),
+            WHERE site = ? AND IFNULL(code,'') = ? AND IFNULL(number,-1) = ?
+              AND title_folded = ? AND IFNULL(series,'') = ?
+            """, [.text(IssueSite.stripzona.rawValue), .text(parsed.label.code ?? ""),
                   .int(Int64(parsed.label.number ?? -1)), .text(folded),
                   .text(parsed.label.series ?? "")]) { row in
             id = Int64(row.int(0) ?? 0)
@@ -555,7 +627,8 @@ public final class Store: @unchecked Sendable {
                        editions: Set<String> = [],
                        publishers: Set<String> = [],
                        heroes: Set<String> = [],
-                       states: Set<ReadState> = []) throws -> [StoredIssue] {
+                       states: Set<ReadState> = [],
+                       sites: Set<IssueSite> = []) throws -> [StoredIssue] {
         let tokens = Fold.fold(text).split(separator: " ").filter { !$0.isEmpty }
         guard !tokens.isEmpty else { return [] }
         // Folding leaves only letters, digits and spaces, so no FTS5
@@ -565,7 +638,7 @@ public final class Store: @unchecked Sendable {
         var out: [StoredIssue] = []
         let terms = Self.filterClauses(downloadedOnly: downloadedOnly, editions: editions,
                                        publishers: publishers, heroes: heroes,
-                                       states: states)
+                                       states: states, sites: sites)
         let filter = terms.sql.isEmpty ? "" : "AND " + terms.sql.joined(separator: " AND ")
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
@@ -576,7 +649,8 @@ public final class Store: @unchecked Sendable {
                    i.last_page,
                    i.download_failed_at IS NOT NULL,
                    i.started_at IS NOT NULL,
-                   i.number_to
+                   i.number_to,
+                   i.site
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
@@ -601,7 +675,8 @@ public final class Store: @unchecked Sendable {
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
-                isDownloaded: (row.int(8) ?? 0) == 1))
+                isDownloaded: (row.int(8) ?? 0) == 1,
+                site: IssueSite(rawValue: row.string(17) ?? "") ?? .default))
         }
         return out
     }
@@ -616,14 +691,37 @@ public final class Store: @unchecked Sendable {
     /// Read from the issues themselves rather than a fixed list: the forum
     /// gains editions, and a hard-coded menu would quietly stop matching what
     /// has actually been imported.
-    public func editions() throws -> [String] {
+    ///
+    /// Scoped by source for the same reason: with RetroSpec switched off, its
+    /// nineteen runs must leave the menu too. A hidden source that still fills
+    /// half the Series list with entries that select nothing is worse than
+    /// not hiding it at all.
+    public func editions(sites: Set<IssueSite> = []) throws -> [String] {
+        try distinctColumn("edition", sites: sites)
+    }
+
+    /// One shape for the three menu queries. They differed only in a column
+    /// name, and adding the source scope to each by hand is three chances to
+    /// write it slightly differently.
+    ///
+    /// The column is never caller-supplied — the three names are literals
+    /// below — so interpolating it cannot carry anything from outside.
+    private func distinctColumn(_ column: String,
+                                sites: Set<IssueSite>) throws -> [String] {
         var out: [String] = []
+        var clause = ""
+        var args: [SQLValue] = []
+        if !sites.isEmpty, sites.count < IssueSite.allCases.count {
+            let slots = sites.map { _ in "?" }.joined(separator: ", ")
+            clause = "AND site IN (\(slots))"
+            args = sites.sorted { $0.rawValue < $1.rawValue }.map { SQLValue.text($0.rawValue) }
+        }
         try db.query("""
-            SELECT DISTINCT edition FROM issue
-            WHERE edition IS NOT NULL AND edition <> ''
-            ORDER BY edition COLLATE NOCASE
-            """) { row in
-            if let edition = row.string(0) { out.append(edition) }
+            SELECT DISTINCT \(column) FROM issue
+            WHERE \(column) IS NOT NULL AND \(column) <> '' \(clause)
+            ORDER BY \(column) COLLATE NOCASE
+            """, args) { row in
+            if let value = row.string(0) { out.append(value) }
         }
         return out
     }
@@ -699,29 +797,13 @@ public final class Store: @unchecked Sendable {
     ///
     /// Stored spellings, not display ones: the menu shows "Zagor" but has to
     /// filter on "Zagor Te-Nay", which is what the rows actually hold.
-    public func heroes() throws -> [String] {
-        var out: [String] = []
-        try db.query("""
-            SELECT DISTINCT hero FROM issue
-            WHERE hero IS NOT NULL AND hero <> ''
-            ORDER BY hero COLLATE NOCASE
-            """) { row in
-            if let hero = row.string(0) { out.append(hero) }
-        }
-        return out
+    public func heroes(sites: Set<IssueSite> = []) throws -> [String] {
+        try distinctColumn("hero", sites: sites)
     }
 
     /// Every publisher present in the library, for the filter menu.
-    public func publishers() throws -> [String] {
-        var out: [String] = []
-        try db.query("""
-            SELECT DISTINCT publisher FROM issue
-            WHERE publisher IS NOT NULL AND publisher <> ''
-            ORDER BY publisher COLLATE NOCASE
-            """) { row in
-            if let publisher = row.string(0) { out.append(publisher) }
-        }
-        return out
+    public func publishers(sites: Set<IssueSite> = []) throws -> [String] {
+        try distinctColumn("publisher", sites: sites)
     }
 
     /// The WHERE terms shared by both queries.
@@ -731,11 +813,22 @@ public final class Store: @unchecked Sendable {
     /// could satisfy.
     static func filterClauses(downloadedOnly: Bool, editions: Set<String>,
                               publishers: Set<String>, heroes: Set<String>,
-                              states: Set<ReadState>) -> (sql: [String], args: [SQLValue]) {
+                              states: Set<ReadState>,
+                              sites: Set<IssueSite> = []) -> (sql: [String], args: [SQLValue]) {
         var sql: [String] = []
         var args: [SQLValue] = []
         if downloadedOnly {
             sql.append("EXISTS(SELECT 1 FROM download f WHERE f.issue_id = i.id)")
+        }
+        // Which archives the reader wants to see at all. Same shape as the
+        // read states below: naming every source is the same as naming none,
+        // so neither narrows anything, and an empty set is "no opinion"
+        // rather than "nothing" — a caller that has not been taught about
+        // sources still gets the whole library.
+        if !sites.isEmpty, sites.count < IssueSite.allCases.count {
+            let slots = sites.map { _ in "?" }.joined(separator: ", ")
+            sql.append("i.site IN (\(slots))")
+            args += sites.sorted { $0.rawValue < $1.rawValue }.map { SQLValue.text($0.rawValue) }
         }
         // Bound, never interpolated: these names come out of forum HTML.
         if !editions.isEmpty {
@@ -772,13 +865,14 @@ public final class Store: @unchecked Sendable {
                        editions: Set<String> = [],
                        publishers: Set<String> = [],
                        heroes: Set<String> = [],
-                       states: Set<ReadState> = []) throws -> [StoredIssue] {
+                       states: Set<ReadState> = [],
+                       sites: Set<IssueSite> = []) throws -> [StoredIssue] {
         var out: [StoredIssue] = []
         // Applied in SQL rather than to the results, so a filter cannot be
         // defeated by a cap the caller happens to pass.
         let terms = Self.filterClauses(downloadedOnly: downloadedOnly, editions: editions,
                                        publishers: publishers, heroes: heroes,
-                                       states: states)
+                                       states: states, sites: sites)
         let filter = terms.sql.isEmpty ? "" : "WHERE " + terms.sql.joined(separator: " AND ")
         try db.query("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
@@ -789,7 +883,8 @@ public final class Store: @unchecked Sendable {
                    i.last_page,
                    i.download_failed_at IS NOT NULL,
                    i.started_at IS NOT NULL,
-                   i.number_to
+                   i.number_to,
+                   i.site
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
             """, terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
@@ -805,7 +900,8 @@ public final class Store: @unchecked Sendable {
                 style: LabelStyle(rawValue: row.string(5) ?? "") ?? .inlinePrevLine,
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
-                isDownloaded: (row.int(8) ?? 0) == 1))
+                isDownloaded: (row.int(8) ?? 0) == 1,
+                site: IssueSite(rawValue: row.string(17) ?? "") ?? .default))
         }
         return out
     }
