@@ -230,6 +230,14 @@ struct LibraryView: View {
             // Filled icon when a filter is on, so a narrowed library never
             // looks like a missing one.
             Menu {
+                // Monochrome, deliberately. These matched the shelf's green
+                // tick and yellow dots for a while, by baking the colour into
+                // the symbol and marking it `.alwaysOriginal` — the trick
+                // that works for a `UIAction`. Through SwiftUI's `Label` it
+                // does not: the menu re-tints them and the result was neither
+                // the shelf's colours nor the system's. The shape carries the
+                // meaning here, as it does on the shelf; the colour is the
+                // part the menu will not give up.
                 Toggle(isOn: $model.downloadedOnly) {
                     Label("Downloaded", systemImage: "arrow.down.circle")
                 }
@@ -238,7 +246,12 @@ struct LibraryView: View {
                     Label("Unread", systemImage: "circle")
                 }
                 Toggle(isOn: $model.showReading) {
-                    Label("Reading", systemImage: "book")
+                    // The same three dots in a circle the shelf badge draws,
+                    // which is what a part-read issue looks like there. The
+                    // shelf draws its own because at a quarter of a thumbnail
+                    // the symbol's dots shrink to specks; at menu size the
+                    // symbol is fine.
+                    Label("Reading", systemImage: "ellipsis.circle")
                 }
                 Toggle(isOn: $model.showRead) {
                     Label("Read", systemImage: "checkmark.circle")
@@ -247,18 +260,21 @@ struct LibraryView: View {
                 // Series are built from what has actually been imported, so
                 // the menu never offers an edition the library does not hold.
                 if !model.availableSeries.isEmpty {
-                    Section("Series") {
-                        ForEach(model.availableSeries, id: \.self) { edition in
-                            Toggle(isOn: Binding(
-                                get: { model.selectedSeries.contains(edition) },
-                                set: { _ in model.toggleSeries(edition) }
-                            )) {
-                                // Shown in sentence case: the forum shouts its
-                                // editions, and a menu of LUNOV MAGNUS STRIP
-                                // reads as an error message.
-                                Text(TitleCleaner.normaliseCase(edition))
+                    // One section per source while both are showing, so the
+                    // forum's editions and the nineteen magazine runs are not
+                    // one alphabetical list a reader has to already know their
+                    // way around. With a single source there is nothing to
+                    // tell apart, and a heading naming it would be noise.
+                    if model.seriesBySite.count > 1 {
+                        ForEach(IssueSite.allCases, id: \.self) { site in
+                            if let editions = model.seriesBySite[site], !editions.isEmpty {
+                                Section("\(site.display) series") {
+                                    seriesToggles(editions)
+                                }
                             }
                         }
+                    } else {
+                        Section("Series") { seriesToggles(model.availableSeries) }
                     }
                 }
 
@@ -283,7 +299,13 @@ struct LibraryView: View {
                     // imprint for BONELLI and FIBRA, the authors for
                     // "Magnus - Bunker" or "Hugo Pratt". Naming it for both
                     // beats inventing logic to tell them apart.
-                    Section("Publisher/Creator") {
+                    //
+                    // "/Source" since RetroSpec sits in this list too, and it
+                    // is neither: it is where the issue came from. Worth
+                    // keeping — narrowing to it is a useful filter — so the
+                    // heading grew to admit what is actually in the list
+                    // rather than the entry being dropped for tidiness.
+                    Section("Publisher/Creator/Source") {
                         ForEach(model.availablePublishers, id: \.self) { publisher in
                             Toggle(isOn: Binding(
                                 get: { model.selectedPublishers.contains(publisher) },
@@ -328,6 +350,21 @@ struct LibraryView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(Device.isPhone ? .regular : .large)
+    }
+
+    /// The series rows themselves, shared by the grouped and ungrouped forms
+    /// so the two cannot drift into behaving differently.
+    @ViewBuilder private func seriesToggles(_ editions: [String]) -> some View {
+        ForEach(editions, id: \.self) { edition in
+            Toggle(isOn: Binding(
+                get: { model.selectedSeries.contains(edition) },
+                set: { _ in model.toggleSeries(edition) }
+            )) {
+                // Shown in sentence case: the forum shouts its editions, and
+                // a menu of LUNOV MAGNUS STRIP reads as an error message.
+                Text(TitleCleaner.normaliseCase(edition))
+            }
+        }
     }
 
     // MARK: - Actions

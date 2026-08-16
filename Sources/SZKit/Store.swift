@@ -734,10 +734,19 @@ public final class Store: @unchecked Sendable {
             clause = "AND site IN (\(slots))"
             args = sites.sorted { $0.rawValue < $1.rawValue }.map { SQLValue.text($0.rawValue) }
         }
+        // Grouped without regard to case, because the forum does not agree
+        // with itself: "Lunov magnus strip" and "Lunov Magnus Strip" are one
+        // edition typed two ways, and listing both split a run of several
+        // hundred issues across two menu rows that each found half of it.
+        //
+        // `MIN` picks the representative, which is not arbitrary — capitals
+        // sort before lowercase, so the title-cased spelling wins, and that
+        // is the one worth keeping.
         try db.query("""
-            SELECT DISTINCT \(column) FROM issue
+            SELECT MIN(\(column)) FROM issue
             WHERE \(column) IS NOT NULL AND \(column) <> '' \(clause)
-            ORDER BY \(column) COLLATE NOCASE
+            GROUP BY \(column) COLLATE NOCASE
+            ORDER BY MIN(\(column)) COLLATE NOCASE
             """, args) { row in
             if let value = row.string(0) { out.append(value) }
         }
@@ -849,19 +858,25 @@ public final class Store: @unchecked Sendable {
             args += sites.sorted { $0.rawValue < $1.rawValue }.map { SQLValue.text($0.rawValue) }
         }
         // Bound, never interpolated: these names come out of forum HTML.
+        //
+        // Matched without regard to case, to agree with the menus above.
+        // Those now offer one row per edition however the forum spelled it,
+        // so the one name the reader picked has to find every issue filed
+        // under any casing of it — otherwise choosing "Lunov Magnus Strip"
+        // silently returns half the run.
         if !editions.isEmpty {
             let slots = editions.map { _ in "?" }.joined(separator: ", ")
-            sql.append("i.edition IN (\(slots))")
+            sql.append("i.edition COLLATE NOCASE IN (\(slots))")
             args += editions.sorted().map { SQLValue.text($0) }
         }
         if !publishers.isEmpty {
             let slots = publishers.map { _ in "?" }.joined(separator: ", ")
-            sql.append("i.publisher IN (\(slots))")
+            sql.append("i.publisher COLLATE NOCASE IN (\(slots))")
             args += publishers.sorted().map { SQLValue.text($0) }
         }
         if !heroes.isEmpty {
             let slots = heroes.map { _ in "?" }.joined(separator: ", ")
-            sql.append("i.hero IN (\(slots))")
+            sql.append("i.hero COLLATE NOCASE IN (\(slots))")
             args += heroes.sorted().map { SQLValue.text($0) }
         }
         // Selecting all three is the same as selecting none: both mean the

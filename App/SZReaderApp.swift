@@ -110,6 +110,12 @@ final class AppModel: ObservableObject {
 
     /// Every series in the library, for building the filter menu.
     @Published var availableSeries: [String] = []
+    /// The same series, split by where they came from.
+    ///
+    /// With both sources showing, one alphabetical list runs the forum's
+    /// editions and nineteen ex-Yugoslav magazine runs into each other, and
+    /// the reader has to already know which is which to use it.
+    @Published var seriesBySite: [IssueSite: [String]] = [:]
     /// Every publisher in the library, likewise.
     @Published var availablePublishers: [String] = []
     /// Every hero in the library, in the spelling the rows hold.
@@ -205,11 +211,22 @@ final class AppModel: ObservableObject {
         let sites = visibleSites
         guard !sites.isEmpty else {
             availableSeries = []; availablePublishers = []; availableHeroes = []
+            seriesBySite = [:]
             return
         }
         availableSeries = (try? store?.editions(sites: sites)) ?? []
         availablePublishers = (try? store?.publishers(sites: sites)) ?? []
         availableHeroes = (try? store?.heroes(sites: sites)) ?? []
+        // Asked per source as well as together. The menu needs them grouped
+        // and the filters need them pooled, and deriving one from the other
+        // would mean knowing which source a series name came from — which is
+        // exactly what the second query answers and a name cannot.
+        var grouped: [IssueSite: [String]] = [:]
+        for site in sites {
+            let names = (try? store?.editions(sites: [site])) ?? []
+            if !names.isEmpty { grouped[site] = names }
+        }
+        seriesBySite = grouped
     }
 
     private func pruneHiddenSelections() {

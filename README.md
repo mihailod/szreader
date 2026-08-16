@@ -8,6 +8,7 @@
   comics & magazines reader<br>
   that supports<br>
   StripZona forum<br>
+  and RetroSpec archive<br>
 </th>
 </tr>
 </table>
@@ -18,22 +19,45 @@ iPad shown and recommended (larger screen):
 
 <img src="screenshot.png" alt="Screenshot" width="400" />
 
-For now it only supports [StripZona](https://www.stripzona.com), a Serbian/ex-YU comics fan site. You browse its forum inside the app, import a topic page, and its issues become
-a searchable shelf — covers, series, hero, publisher and issue numbers, all read off the page in a convenient Kindle-style reader. Downloads and reading happen in the app.
+[StripZona](https://www.stripzona.com) is a Serbian/ex-YU comics fan site. You browse its forum
+inside the app, import a topic page, and its issues become a searchable shelf — covers, series,
+hero, publisher and issue numbers, all read off the page in a convenient Kindle-style reader.
+Downloads and reading happen in the app.
+
+## New in 1.1 — RetroSpec
+
+A second source: [RetroSpec](https://retrospec.elite.org/users/tomcat/yu/revije.php), Tomaž Kac's
+archive of scanned ex-Yugoslav computer magazines. **653 issues across 19 runs** — Svet Kompjutera,
+Računari, Galaksija, Moj Mikro (Slovenian and Serbo-Croatian, kept as two separate runs), Svet
+Igara, BIT, Megazin, Club Nintendo, Amiga Style, Warp and more, plus a dozen 1980s computer books.
+1972 to 2001, about 52,000 scanned pages.
+
+Unlike StripZona there is nothing to browse or import: the index is built offline from the site's
+own pages and read straight into the shelf, where it searches, filters and sorts exactly like
+everything else. Issues download individually, on request, from the archive itself.
+
+**Both sources can be switched on and off** in Settings, or from the empty shelf on a first run.
+Switching one off hides it everywhere — shelf, search and filter menus — and never deletes
+anything: what you have read and downloaded is exactly as you left it when you switch it back on.
+RetroSpec starts switched off, so the app opens on an empty shelf and asks rather than arriving
+with six hundred magazines nobody asked for.
 
 ## What it does
 
 - **Imports a saved topic page** and turns its posts into library entries.
   Uploaders on the forum label issues in many ways; the parser learns offline from corpus and tries to
   handle each.
+- **Carries the RetroSpec index** for the ex-Yugoslav computer magazines, built offline
+  rather than imported, with dates, issue numbers, languages and page counts.
 - **Finds cover art** from the page itself, or resolving the name against stripovi.com.
 - **Downloads** from mirrors (MediaFire, Mega, Pixeldrain), including split archives
-  and sets where one archive holds a run of issues.
+  and sets where one archive holds a run of issues, or straight from the RetroSpec archive.
 - **Reads** CBR, CBZ, RAR, ZIP, 7z and PDF. Portrait turns pages like Kindle; landscape is
   one continuous fit to width (for oversized content) scroll with a scrubber down each edge, so it works in either
   hand. It remembers where you stopped reading.
 - **Search, filter, sort** by title, hero, publisher, series or number, with
-  read/redaging/unread and downloaded states.
+  read/redaging/unread and downloaded states — across both sources at once, or
+  either on its own.
 
 ## StripZona Signing in
 
@@ -56,6 +80,11 @@ publishers include Bonelli, Dnevnik, Vjesnik, Politika, Dečje Novine,
 Bookglobe, Slobodna Dalmacija and Fibra.
 
 Cover art is complete for most of these but there are some inevitable gaps / misses.
+
+RetroSpec needs none of this: its index is fixed and built offline against the whole archive, so
+its 19 runs are covered completely. Eight of its 653 archives are missing from the site itself —
+six Moj Mikro issues from 1990-91, one BIT and one Galaksija. They keep their covers and metadata
+and stay on the shelf, because the site may restore them.
 
 ### Will it work for my favorite hero / series?
 
@@ -90,9 +119,23 @@ simulator. `unrar` and the LZMA SDK are vendored under `Sources/CUnrar` and
 `Sources/C7z`.
 
 The test fixtures are saved forum pages in `spike/pages/`, which is gitignored to protect the mirror links.
+RetroSpec's fixtures are committed instead, under `Tests/Fixtures/retrospec/` — they are a public,
+static archive carrying no private links, so those tests run on a fresh clone with no network.
+
+The RetroSpec index is rebuilt by hand when the site changes:
+
+```sh
+swift run retrospec-build   # refetch, rebuild Sources/SZKit/Resources/retrospec-catalog.json
+```
+
+It is a Swift tool rather than a script so that it parses the site with the same code the app runs
+and the tests cover. Everything it fetches is cached under `.retrospec-cache/`, so a rebuild asks
+the site for each page once, and it refuses to write a catalogue that fails its own checks.
 
 ## Licence
 
-Content: the app is just a reader — it hosts nothing and ships no content.
+Content: the app is just a reader — it hosts nothing and ships no content. The RetroSpec index that
+ships with it is metadata only — names, dates, sizes, page counts and links. Cover art is loaded
+from the archive, and issues are downloaded from it on request.
 
 Code: © Mihailo Despotovic, 2026. [PolyForm Noncommercial 1.0.0](LICENSE).
