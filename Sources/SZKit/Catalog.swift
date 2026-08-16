@@ -106,8 +106,50 @@ public enum Catalog {
     /// label silently swallows the rest of the post.
     public static let maxClaim = 4
 
+    /// A post offering a replacement link for something already listed.
+    ///
+    /// "Novi link za obradu: SSB 494 - Timothy Tatcher 02 - Hollywood protiv
+    /// mene" — a re-upload of an issue the topic has already published, added
+    /// months later when the original died. It names the issue by its Super
+    /// Strip Biblioteka number, so the parser read 494 as an issue of its own
+    /// and invented one: a third Timothy Tatcher on a topic that has two, with
+    /// a dead link and a number belonging to another edition entirely.
+    ///
+    /// Dropped whole, the URL with it. Attributing the link to the issue it
+    /// actually replaces would be better, but that means resolving "SSB 494"
+    /// against an issue this topic numbers 02 — and a wrong guess there hands
+    /// a working comic somebody else's download.
+    private static let reupload = Rx(#"(?i)^\s*novi\s+link\b"#)
+
+    /// Everything a re-upload announcement covers: the notice, the line naming
+    /// what it replaces, and the link itself.
+    ///
+    /// Three lines, because that is how the post is written and how
+    /// `plainLines` hands it over — filtering the notice alone leaves the
+    /// name behind, which is the line that became an issue.
+    ///
+    /// Anchored to the start of the line so the phrase has to be the post's
+    /// opening claim. It appears mid-sentence elsewhere on this very page —
+    /// someone asking a colleague to post a new link — and that is prose, not
+    /// an announcement.
+    static func withoutReuploads(_ lines: [String]) -> [String] {
+        var kept: [String] = []
+        var index = 0
+        while index < lines.count {
+            guard reupload.matches(lines[index]) else {
+                kept.append(lines[index]); index += 1; continue
+            }
+            index += 1                                   // the notice
+            if index < lines.count { index += 1 }        // what it replaces
+            // Its links. More than one is a split archive, and dropping half
+            // of one is worse than dropping all of it.
+            while index < lines.count, url.matches(lines[index]) { index += 1 }
+        }
+        return kept
+    }
+
     public static func links(in html: String) -> [LinkRecord] {
-        classify(HTMLText.plainLines(html))
+        classify(withoutReuploads(HTMLText.plainLines(html)))
     }
 
     /// Attribute each download link to the label that owns it.

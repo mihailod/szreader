@@ -190,6 +190,20 @@ public struct PageContext: Equatable, Sendable {
            candidate.count > hero.count {
             candidate = String(candidate.dropFirst(hero.count))
                 .trimmingCharacters(in: .whitespaces)
+
+            // What is left is an edition only if it reads like the name of
+            // one. A topic can just as easily name a single story — "Timothy
+            // Tatcher 02 Hollywood protiv mene (SS 305)" — and stripping the
+            // hero from that leaves "02 Hollywood protiv mene", which is one
+            // issue, not a run. Filed as an edition it became its own shelf
+            // heading, initialled "HPM", with that topic's issues alone under
+            // it.
+            //
+            // The number in front is the tell: an edition is not numbered, an
+            // issue is. Where the topic names an issue there is no edition in
+            // it to find, and the character it belongs to is the truest thing
+            // the title says.
+            if candidate.first?.isNumber == true { return hero }
         }
         candidate = Self.named(candidate)
         return candidate.isEmpty ? nil : candidate
