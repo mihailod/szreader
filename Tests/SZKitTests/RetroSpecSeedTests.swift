@@ -241,6 +241,60 @@ final class RetroSpecSeedTests: XCTestCase {
         XCTAssertEqual(store.issueCount, 0, "a refused catalogue left rows behind")
     }
 
+    /// A corrected catalogue built the same day still reaches the device.
+    ///
+    /// Found the hard way. The stamp used to be `version/generated`, and
+    /// `generated` is a calendar day — so the rebuild that fixed three
+    /// mangled titles carried the same stamp as the build that shipped them,
+    /// and every device that had already seeded would have skipped the
+    /// correction and kept the damage. Stamping by content instead means the
+    /// question asked is "is this the catalogue I have?", which is the
+    /// question that was always meant.
+    func testARebuildOnTheSameDayIsNotMistakenForTheSameCatalogue() throws {
+        let store = try Store()
+        let file = try bundledCatalogue()
+
+        let broken = RetroSpecCatalogFile(
+            version: file.version, generated: file.generated, base: file.base,
+            series: file.series,
+            issues: file.issues.map { issue in
+                issue.id != "Knjige_SP" ? issue : RetroSpecCatalogFile.Issue(
+                    id: issue.id, series: issue.series, number: issue.number,
+                    title: "Spektrum Priru?nik", year: issue.year, month: issue.month,
+                    zip: issue.zip, cover: issue.cover, thumb: issue.thumb,
+                    bytes: issue.bytes, pages: issue.pages, dead: issue.dead)
+            })
+
+        let encoder = RetroSpecCatalogFile.encoder()
+        try store.seed(broken, stamp: Store.digest(try encoder.encode(broken)))
+        XCTAssertEqual(try store.recent(limit: nil)
+            .first { $0.code == "Knjige_SP" }?.title, "Spektrum Priru?nik")
+
+        // The same calendar day, different content.
+        XCTAssertEqual(broken.generated, file.generated)
+        let report = try store.seed(file, stamp: Store.digest(try encoder.encode(file)))
+
+        XCTAssertFalse(report.skipped, "the corrected catalogue was skipped")
+        XCTAssertEqual(try store.recent(limit: nil)
+            .first { $0.code == "Knjige_SP" }?.title, "Spektrum Priručnik")
+    }
+
+    /// The three titles the site's own database has lost characters from.
+    ///
+    /// Two are books, read off the index page instead; one is a month, put
+    /// back from a closed vocabulary. All three were spotted on the iPad.
+    func testNoShippedTitleIsMissingACharacter() throws {
+        let file = try bundledCatalogue()
+        let damaged = file.issues.filter { $0.title.contains("?") }
+        XCTAssertTrue(damaged.isEmpty,
+                      "still mangled: \(damaged.map { "\($0.id): \($0.title)" })")
+
+        let byID = Dictionary(uniqueKeysWithValues: file.issues.map { ($0.id, $0) })
+        XCTAssertEqual(byID["Knjige_SP"]?.title, "Spektrum Priručnik")
+        XCTAssertEqual(byID["Knjige_KUK"]?.title, "Kompjutor u Kući")
+        XCTAssertEqual(byID["Warp_98_02"]?.title, "Veljača/Februar 1998")
+    }
+
     /// The bundled entry point is the one the app calls, so it is worth
     /// checking that the resource resolves from the module bundle at all.
     func testTheBundledCatalogueLoads() throws {

@@ -16,6 +16,13 @@ final class UIWordingTests: XCTestCase {
     /// a phrase away from coming back, and nothing else would notice.
     /// Comments and identifiers are left alone — `ComicDocument` and
     /// `comicID` name types and parameters no reader ever sees.
+    ///
+    /// Naming both kinds together is the exception, and the only one: a
+    /// sentence that says "comics or magazines" is not calling a magazine a
+    /// comic, it is doing exactly what this rule exists to get — describing
+    /// what the two sources actually hold. The failure being guarded against
+    /// is "comic" standing in for every issue on the shelf, so a literal
+    /// still has to fail unless it names magazines in the same breath.
     func testTheUILayerNeverSaysComic() throws {
         let dir = Self.root.appendingPathComponent("App")
         let files = try FileManager.default.contentsOfDirectory(atPath: dir.path)
@@ -25,13 +32,33 @@ final class UIWordingTests: XCTestCase {
         var offenders: [String] = []
         for file in files.sorted() {
             let source = try String(contentsOf: dir.appendingPathComponent(file), encoding: .utf8)
-            for literal in Self.stringLiterals(in: source)
-            where literal.lowercased().contains("comic") {
+            for literal in Self.stringLiterals(in: source) {
+                let text = literal.lowercased()
+                guard text.contains("comic"), !text.contains("magazine") else { continue }
                 offenders.append("\(file): “\(literal)”")
             }
         }
         XCTAssertEqual(offenders, [],
                        "say “issue”, not “comic” — the library holds magazines too")
+    }
+
+    /// The exception above is narrow, and this is what keeps it narrow.
+    ///
+    /// Written because widening a rule to admit today's wording is the way a
+    /// rule quietly stops meaning anything: "comic" alone must still fail,
+    /// and only the paired phrasing may pass.
+    func testTheComicRuleStillCatchesTheThingItIsFor() {
+        let banned = ["Download this comic", "No comics yet", "Reading a comic"]
+        for text in banned {
+            let lowered = text.lowercased()
+            XCTAssertTrue(lowered.contains("comic") && !lowered.contains("magazine"),
+                          "“\(text)” should still be an offence")
+        }
+        for text in ["Comics and magazines you import", "comics or magazines metadata"] {
+            let lowered = text.lowercased()
+            XCTAssertTrue(lowered.contains("magazine"),
+                          "“\(text)” names both, so it is allowed")
+        }
     }
 
     /// Every string literal in a Swift file, with comments left out.

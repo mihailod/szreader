@@ -1,4 +1,5 @@
 import SwiftUI
+import SZKit
 
 /// Settings — for now, what the app is and which build of it this is.
 ///
@@ -7,42 +8,48 @@ import SwiftUI
 /// read from the bundle, so a release bumps it without touching this file.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var model: AppModel
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 18) {
-                Spacer()
-
+            // The scroll view is a safety net for large Dynamic Type, not the
+            // way this screen is meant to be read: everything below is sized
+            // to fit a sheet on the smallest phone without moving, because a
+            // settings pane whose last row is only reachable by scrolling
+            // reads as a settings pane with nothing below the fold.
+            ScrollView {
+            VStack(spacing: 10) {
                 if let icon = AppInfo.icon {
                     Image(uiImage: icon)
                         .resizable()
                         .interpolation(.high)
-                        .frame(width: AppInfo.iconPointSize,
-                               height: AppInfo.iconPointSize)
+                        .frame(width: Self.iconSize, height: Self.iconSize)
                         // iOS masks the icon itself; the file inside the
                         // bundle is a plain square.
                         // Roughly iOS's own corner ratio, so it reads as an
                         // app icon at whatever size it ends up.
-                        .clipShape(RoundedRectangle(cornerRadius: AppInfo.iconPointSize * 0.22,
+                        .clipShape(RoundedRectangle(cornerRadius: Self.iconSize * 0.22,
                                                     style: .continuous))
-                        .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                        .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                        .padding(.top, 8)
                 }
 
                 Text(AppInfo.name)
-                    .font(.system(size: 40, weight: .bold))
+                    .font(.system(size: Device.isPhone ? 26 : 30, weight: .bold))
 
                 // The build number alongside the version: it is the number
                 // that tells two submissions of "1.0" apart, and the only
                 // place a reader can be asked to read it back.
                 Text("Version \(AppInfo.versionAndBuild)")
-                    .font(.title3)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                 Text(AppInfo.copyright)
-                    .font(.body)
+                    .font(.footnote)
                     .foregroundStyle(.tertiary)
 
-                Spacer()
+                sources
+                    .padding(.top, 8)
 
                 // Not decoration: UnRAR's licence requires its second clause
                 // to appear in the licence or documentation of anything that
@@ -54,10 +61,12 @@ struct SettingsView: View {
                     Text("Acknowledgements")
                         .font(.callout)
                 }
-                .padding(.bottom, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 16)
             }
             .frame(maxWidth: .infinity)
             .multilineTextAlignment(.center)
+            }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -66,6 +75,63 @@ struct SettingsView: View {
                 }
             }
         }
+        // The same notice the shelf shows, because a source can be switched
+        // on from either place and the answer to "where did six hundred
+        // magazines come from" should not depend on which.
+        .alert("RetroSpec", isPresented: Binding(
+            get: { model.sourceNotice != nil },
+            set: { if !$0 { model.sourceNotice = nil } }
+        )) {
+            Button("OK", role: .cancel) { model.sourceNotice = nil }
+        } message: {
+            Text(model.sourceNotice ?? "")
+        }
+    }
+
+    /// Which archives the shelf draws from.
+    ///
+    /// Switching one off hides it everywhere — the shelf, the search and the
+    /// filter menus — and never deletes anything, so what has been read and
+    /// downloaded is exactly as it was when it comes back.
+    private var sources: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("SOURCES")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+
+            VStack(spacing: 0) {
+                ForEach(IssueSite.allCases, id: \.self) { site in
+                    SourceToggle(site: site, model: model)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    if site != IssueSite.allCases.last {
+                        Divider().padding(.leading, 16)
+                    }
+                }
+            }
+            .background(Color(.secondarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Text("Hiding a source keeps everything you have read and downloaded.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+        }
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: 560)
+    }
+
+    /// Smaller than the icon's own pixels allow, and deliberately.
+    ///
+    /// `AppInfo.iconPointSize` draws it at up to 128pt, which is right for a
+    /// screen that has nothing else on it. This one now carries the source
+    /// switches too, and on a small phone the icon at that size is what
+    /// pushed the last row under the fold.
+    private static var iconSize: CGFloat {
+        min(AppInfo.iconPointSize, Device.isPhone ? 60 : 76)
     }
 }
 

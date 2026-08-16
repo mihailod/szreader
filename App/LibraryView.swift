@@ -65,6 +65,9 @@ struct LibraryView: View {
     @State private var selected: StoredIssue?
     @State private var showingImport = false
     @State private var showingSettings = false
+    /// Set when Import was tapped with StripZona hidden, so the reader is
+    /// asked before importing into a source they cannot see.
+    @State private var confirmingStripZona = false
     @AppStorage("libraryLayout") private var layoutRaw = LibraryLayout.grid.rawValue
     @State private var pending: PendingAction?
 
@@ -115,7 +118,33 @@ struct LibraryView: View {
         .fullScreenCover(isPresented: $showingImport) {
             ImportView { html in try model.importPage(html: html) }
         }
-        .sheet(isPresented: $showingSettings) { SettingsView() }
+        .sheet(isPresented: $showingSettings) { SettingsView(model: model) }
+        // Importing into a hidden source would land a page of comics nowhere
+        // a reader can see them — the shelf would be exactly as empty
+        // afterwards, and nothing on screen would say why. Asked rather than
+        // switched on silently: the switch is theirs, and an import is not a
+        // reason to overrule it without saying so.
+        .alert("Enable StripZona?", isPresented: $confirmingStripZona) {
+            Button("Yes") {
+                model.setSource(.stripzona, enabled: true)
+                showingImport = true
+            }
+            Button("No", role: .cancel) { }
+        } message: {
+            Text("StripZona is switched off, so anything you import will be "
+                 + "hidden. Switch it back on and import?")
+        }
+        // Shown wherever the switch was thrown. The empty shelf carries the
+        // same switches, so a reader can enable a source without ever opening
+        // Settings — and then needs telling what just arrived.
+        .alert("RetroSpec", isPresented: Binding(
+            get: { model.sourceNotice != nil && !showingSettings },
+            set: { if !$0 { model.sourceNotice = nil } }
+        )) {
+            Button("OK", role: .cancel) { model.sourceNotice = nil }
+        } message: {
+            Text(model.sourceNotice ?? "")
+        }
     }
 
     // MARK: - Header
@@ -288,7 +317,7 @@ struct LibraryView: View {
             // came to about 420pt against a 6.1" screen's 393, and Import —
             // the one button the first screen exists for — was what ran off
             // the edge. The word alone is unambiguous; the icon was decoration.
-            Button { showingImport = true } label: {
+            Button { beginImport() } label: {
                 if Device.isPhone {
                     Text("Import")
                         .font(.headline).padding(.horizontal, 4).frame(height: 36)
@@ -302,6 +331,18 @@ struct LibraryView: View {
     }
 
     // MARK: - Actions
+
+    /// Import stays available whether or not StripZona is showing — it is the
+    /// button the first screen exists for, and disabling it would leave a
+    /// reader who has switched the source off with no way back in except a
+    /// settings screen they have no reason to open.
+    private func beginImport() {
+        if model.showStripZona {
+            showingImport = true
+        } else {
+            confirmingStripZona = true
+        }
+    }
 
     /// One menu for both layouts — long-pressing cover art behaves identically
     /// in grid and list, so there is only one thing to learn.
@@ -835,17 +876,28 @@ struct LibraryView: View {
 
     /// Three distinct empty cases, because "nothing here" for three different
     /// reasons needs three different next steps.
+    /// Every source is switched off, so the shelf is blank by instruction
+    /// rather than because the library is empty. Checked before everything
+    /// else: with nothing switched on there is no library to describe.
+    private var allSourcesOff: Bool { model.visibleSites.isEmpty }
+
     private var emptyIcon: String {
+        if allSourcesOff { return "eye.slash" }
         if nothingDownloaded { return "arrow.down.circle" }
         return model.issueCount == 0 ? "books.vertical" : "magnifyingglass"
     }
 
     private var emptyTitle: String {
+        if allSourcesOff { return "Nothing switched on" }
         if nothingDownloaded { return "No downloaded issues yet" }
-        return model.issueCount == 0 ? "No imported issues yet" : "No match"
+        return model.issueCount == 0 ? "Your library is empty" : "No match"
     }
 
     private var emptyDetail: String {
+        if allSourcesOff {
+            return "Both sources are switched off. Switch one back on below, "
+                 + "or in Settings, to see your issues again."
+        }
         if nothingDownloaded {
             return "Turn off the Downloaded filter and download some issues!"
         }
@@ -854,9 +906,20 @@ struct LibraryView: View {
         // — a series with nothing downloaded in it, say — rendered as
         // “Nothing in your 192 imported issues matches “”.”
         return model.issueCount == 0
-            ? "Tap Import, login to StripZona (if needed), browse and like a post "
-              + "with the issues you want to read and then import that page."
+            ? "Tap Import to bring comics or magazines metadata from StripZona "
+              + "forum or switch on RetroSpec to enable ex-Yugoslav retro "
+              + "computer magazines and books index."
             : "Nothing in your library matches that search / filter."
+    }
+
+    /// Whether the empty screen should carry the source switches.
+    ///
+    /// Only where they are the way out of it. A reader whose search matched
+    /// nothing does not need to be offered a second library — they need to
+    /// clear the search — and putting the switches under every empty shelf
+    /// would make them look like part of the search UI.
+    private var offersSourceSwitches: Bool {
+        allSourcesOff || (model.issueCount == 0 && !nothingDownloaded)
     }
 
     private var emptyState: some View {
@@ -865,14 +928,35 @@ struct LibraryView: View {
                 .font(.system(size: 96)).foregroundStyle(.tertiary)
             Text(emptyTitle)
                 .font(.system(size: 44, weight: .bold))
+                .multilineTextAlignment(.center)
             Text(emptyDetail)
                 .font(.system(size: 26, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 760)
+            // The switches, on the one screen where a reader has no other way
+            // to find them. Settings is a gear in the corner of a shelf that
+            // is currently blank, which is a poor place to discover that the
+            // app has a second library in it at all.
+            if offersSourceSwitches { sourceSwitches }
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var sourceSwitches: some View {
+        VStack(spacing: 0) {
+            ForEach(IssueSite.allCases, id: \.self) { site in
+                SourceToggle(site: site, model: model)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                if site != IssueSite.allCases.last { Divider().padding(.leading, 20) }
+            }
+        }
+        .frame(maxWidth: 520)
+        .background(Color(.secondarySystemBackground),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.top, 8)
     }
 
     private var summaryLine: String {
@@ -1003,6 +1087,9 @@ private struct CoverImage: View {
     var awaitingDownload = true
 
     @State private var image: UIImage?
+    /// Set once asking for the cover has come back empty, which is what tells
+    /// "still arriving" apart from "not coming".
+    @State private var fetchFailed = false
 
     init(url: String?, number: Int?, grayscale: Bool, awaitingDownload: Bool = true) {
         self.url = url
@@ -1015,7 +1102,33 @@ private struct CoverImage: View {
     var body: some View {
         Group {
             if let image {
-                Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+                // Filled, except when the artwork is wider than it is tall.
+                //
+                // Every cover was portrait until the RetroSpec catalogue
+                // arrived, and three of its books are scanned landscape — the
+                // "Uvod u rad i programiranje" manuals. Filling a portrait
+                // frame with a landscape scan crops it to a magnified strip
+                // out of the middle, which is not a cover. Fitting instead
+                // caps it on width and leaves a bar above and below, which is
+                // the honest shape of the thing.
+                //
+                // Conditional rather than fitting everything: a portrait cover
+                // very slightly off 2:3 would gain hairline bars, and the
+                // iPad shelf as shipped is full-bleed.
+                if image.size.width > image.size.height {
+                    // The frame is what it should fill. Fitting alone sizes
+                    // the image from its own ideal dimensions, which left
+                    // these sitting at about a third of the cell with the
+                    // caption stretching well past them; claiming the frame
+                    // first makes "fit" mean fit *this*, so the scan spans
+                    // the full width and the bars fall above and below.
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+                }
             } else {
                 placeholder
             }
@@ -1025,11 +1138,17 @@ private struct CoverImage: View {
         // cover turns colour immediately. It must NOT bail on a non-nil image:
         // that is exactly the case where a grey one is already showing.
         .task(id: (url ?? "") + (grayscale ? "#gray" : "")) {
+            // Cleared per cover, not once: this view is recycled down a
+            // scrolling grid, and a failure carried over from the tile that
+            // used it last would label a perfectly good cover as missing.
+            fetchFailed = false
             if let hit = CoverStore.shared.cached(url, grayscale: grayscale) {
                 image = hit          // both variants are cached, so this is instant
                 return
             }
-            image = await CoverStore.shared.image(url, grayscale: grayscale)
+            let fetched = await CoverStore.shared.image(url, grayscale: grayscale)
+            image = fetched
+            fetchFailed = fetched == nil
         }
     }
 
@@ -1038,11 +1157,34 @@ private struct CoverImage: View {
     /// An issue number in an empty frame says only what the caption below
     /// already says. Once the comic is here its own first page becomes the
     /// cover, so the frame can say what to do about it instead.
+    /// Whether artwork is on its way.
+    ///
+    /// True from the moment a cover with a URL is asked for until it either
+    /// arrives or fails. There is nothing to wait for when the issue has no
+    /// cover reference at all — that artwork does not exist yet and will not
+    /// until the archive is here and its first page becomes the cover.
+    private var fetching: Bool { url != nil && !fetchFailed }
+
     private var placeholder: some View {
         ZStack {
             Color(.tertiarySystemFill)
             VStack(spacing: 6) {
-                if awaitingDownload {
+                if fetching {
+                    // A cover that is merely late is not a cover that is
+                    // missing. Six hundred RetroSpec covers come off a web
+                    // server one at a time, and telling a reader to download
+                    // the issue to see artwork that is already on its way
+                    // sends them to do work they do not need to do.
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title2)
+                    Text("Fetching\nthe cover")
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                } else if awaitingDownload {
+                    // Nothing to fetch: either the issue carries no cover
+                    // reference, or asking for it failed. Both are answered
+                    // the same way, because in both the artwork only appears
+                    // once the archive is here and its first page stands in.
                     Image(systemName: "arrow.down.circle")
                         .font(.title2)
                     Text("Download to\nsee the cover")

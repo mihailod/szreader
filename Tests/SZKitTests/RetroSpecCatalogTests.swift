@@ -307,6 +307,46 @@ final class RetroSpecCatalogTests: XCTestCase {
         XCTAssertEqual(RetroSpecSeriesTable.series(forKey: "MR")?.name, "Mala Računala")
     }
 
+    /// A month the site's database has lost a character from is put back.
+    ///
+    /// `Warp_98_02` is served as "Velja?a/Februar 1998" — a `?` byte where
+    /// the `č` belongs, in every encoding. Found on the iPad, in the one
+    /// Croatian February the whole archive contains.
+    func testALostMonthCharacterIsRestored() throws {
+        XCTAssertEqual(RetroSpecCatalog.repaired("Velja?a/Februar"), "Veljača/Februar")
+        XCTAssertEqual(RetroSpecCatalog.repaired("Sije?anj"), "Siječanj")
+        // Compounds keep their shape.
+        XCTAssertEqual(RetroSpecCatalog.repaired("Svibanj-Maj"), "Svibanj-Maj")
+        // Anything without the fault is returned untouched — including the
+        // diacritics the database did keep.
+        XCTAssertEqual(RetroSpecCatalog.repaired("Oktobar"), "Oktobar")
+        XCTAssertEqual(RetroSpecCatalog.repaired("Održavanje"), "Održavanje")
+
+        let warp = try XCTUnwrap(RetroSpecCatalog.info(in: try magshow("Warp_98_02")))
+        XCTAssertEqual(warp.monthText, "Veljača/Februar")
+    }
+
+    /// The books' titles come off the index page, which is not broken.
+    ///
+    /// `magshow.php` offers the same strings from the database that lost the
+    /// characters — "Spektrum Priru?nik", "Kompjutor u Ku?i". A month can be
+    /// repaired against a closed vocabulary of twelve names; an arbitrary
+    /// book title cannot, so the fix is to read the source that has them.
+    func testBookTitlesAreIntactOnTheIndexPage() throws {
+        let books = RetroSpecCatalog.entries(in: try page("indexKnjige"))
+        let labels = Dictionary(uniqueKeysWithValues: books.map { ($0.id, $0.label) })
+        XCTAssertEqual(labels["Knjige_SP"], "Spektrum Priručnik")
+        XCTAssertEqual(labels["Knjige_KUK"], "Kompjutor u Kući")
+        // The database's version of the same two, for contrast.
+        let broken = try XCTUnwrap(RetroSpecCatalog.info(in: try magshow("Knjige_SP")))
+        XCTAssertEqual(broken.seriesName, "Spektrum Priru?nik",
+                       "the site really does serve this")
+        // And no book label is missing a character.
+        for book in books {
+            XCTAssertFalse(book.label.contains("?"), "\(book.id): \(book.label)")
+        }
+    }
+
     /// Every run's name in the table is one a real page confirms, so a typo
     /// in the table cannot pass unnoticed.
     func testTableNamesMatchTheSiteWhereTheyShould() throws {

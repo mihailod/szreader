@@ -21,11 +21,13 @@
 		95E0C572BF4994B77DDB41B0 /* CoverStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */; };
 		A0542A495542645E1D9C357D /* ReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A12CF237924287D34868EA /* ReaderView.swift */; };
 		C60D7220DE77EEC3D2B69C65 /* AppInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98B96100C7CD082FD8703855 /* AppInfo.swift */; };
+		F3E6287092C23A79A5D74554 /* SourceToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 289683A4600939769465C523 /* SourceToggle.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0DA4EDA742DCFD028234085B /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
 		10A12CF237924287D34868EA /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
+		289683A4600939769465C523 /* SourceToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceToggle.swift; sourceTree = "<group>"; };
 		29AF759576024F9476C06792 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeReader.swift; sourceTree = "<group>"; };
 		3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverStore.swift; sourceTree = "<group>"; };
@@ -77,6 +79,7 @@
 				897256247FA21EB8FD55169C /* PrivacyInfo.xcprivacy */,
 				10A12CF237924287D34868EA /* ReaderView.swift */,
 				29AF759576024F9476C06792 /* SettingsView.swift */,
+				289683A4600939769465C523 /* SourceToggle.swift */,
 				C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */,
 			);
 			path = App;
@@ -186,6 +189,7 @@
 				A0542A495542645E1D9C357D /* ReaderView.swift in Sources */,
 				94082F888333404B61A3C818 /* SZReaderApp.swift in Sources */,
 				8BAE8FA4A68B422E6C8F6C61 /* SettingsView.swift in Sources */,
+				F3E6287092C23A79A5D74554 /* SourceToggle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

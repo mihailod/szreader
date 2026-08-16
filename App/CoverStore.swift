@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import ImageIO
 import SZKit
 import UIKit
 
@@ -78,9 +79,18 @@ final class CoverStore: @unchecked Sendable {
         }
         lock.unlock()
 
-        _ = await task.value
+        let produced = await task.value
         lock.lock(); inFlight[url] = nil; lock.unlock()
-        return cached(url, grayscale: grayscale)
+        if let hit = cached(url, grayscale: grayscale) { return hit }
+
+        // Storing is not keeping. `NSCache` evicts whenever it likes, so
+        // asking it for something put there a moment ago can come back empty
+        // — and this used to return that as the answer, which reads as "there
+        // is no cover" when it means "the cache dropped it". A caller that
+        // tells those apart on screen would call a perfectly good cover
+        // missing, so the decoded image is the fallback.
+        guard let produced else { return nil }
+        return grayscale ? (desaturate(produced) ?? produced) : produced
     }
 
     // MARK: - Loading
@@ -135,7 +145,7 @@ final class CoverStore: @unchecked Sendable {
             data = try? await session.data(from: remote).0
             if let data { try? data.write(to: file, options: .atomic) }
         }
-        guard let data, let color = UIImage(data: data) else { return nil }
+        guard let data, let color = Self.decode(data) else { return nil }
 
         // Force the decode now, off the main thread, rather than lazily at
         // draw time on the first scroll.
@@ -143,6 +153,46 @@ final class CoverStore: @unchecked Sendable {
         store(decoded, url: url, grayscale: false)
         if let gray = desaturate(decoded) { store(gray, url: url, grayscale: true) }
         return decoded
+    }
+
+    /// The largest a cover is ever drawn.
+    ///
+    /// A grid tile is about 150–220pt wide, so 600px covers the tallest of
+    /// them at 3x with room over. Matches what `Library.captureCover` writes
+    /// for a cover taken from a comic's own first page, so both routes to a
+    /// cover produce artwork of the same order.
+    private static let maxCoverPixels = 600
+
+    /// Decodes a cover no larger than it will ever be drawn.
+    ///
+    /// The forum's covers are thumbnails already, and the cache was sized for
+    /// them: the note above `countLimit` reckons 240 KB for both variants of
+    /// one cover. RetroSpec's are the issue's own first page at 1024x1447,
+    /// which is 5.9 MB decoded and 11.8 MB for the pair — so eight of them
+    /// filled a cache meant to hold hundreds, and it spent the whole scroll
+    /// evicting. Downsampling at decode time puts them back inside the
+    /// assumption instead of raising a limit to accommodate artwork nothing
+    /// ever draws at that size.
+    ///
+    /// Only ever downwards: a source smaller than the cap is decoded as-is,
+    /// so the forum's covers are untouched by this.
+    static func decode(_ data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil)
+        else { return UIImage(data: data) }
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let width = properties?[kCGImagePropertyPixelWidth] as? Int ?? 0
+        let height = properties?[kCGImagePropertyPixelHeight] as? Int ?? 0
+        guard max(width, height) > maxCoverPixels else { return UIImage(data: data) }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxCoverPixels,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        else { return UIImage(data: data) }
+        return UIImage(cgImage: cg)
     }
 
     /// Computed once per cover and cached, instead of a live GPU filter on

@@ -30,8 +30,22 @@ public extension Store {
                                           withExtension: "json") else {
             throw SeedError.catalogueMissing
         }
-        let file = try RetroSpecCatalogFile.decode(try Data(contentsOf: url))
-        return try seed(file)
+        let data = try Data(contentsOf: url)
+        // Stamped by content, not by the date inside it. `generated` is a
+        // calendar day, so two builds on one day are indistinguishable — and
+        // the build that fixed three broken titles was the same day as the
+        // build that introduced them. Every device that had already seeded
+        // would have skipped the correction and kept the damage.
+        return try seed(try RetroSpecCatalogFile.decode(data), stamp: Self.digest(data))
+    }
+
+    /// A stable fingerprint of the shipped file.
+    ///
+    /// Stable across launches is the whole requirement, which rules out
+    /// `Hasher` — Swift seeds it randomly per process, so it would re-seed
+    /// the catalogue on every single launch.
+    static func digest(_ data: Data) -> String {
+        SHA256.hex(data)
     }
 
     /// Applies a catalogue, skipping the work when this exact build of it is
@@ -41,11 +55,12 @@ public extension Store {
     /// tests, which need to prove that a second pass over the same data
     /// changes nothing, and the stamp would otherwise make that vacuous.
     @discardableResult
-    func seed(_ file: RetroSpecCatalogFile, force: Bool = false) throws -> SeedReport {
+    func seed(_ file: RetroSpecCatalogFile, force: Bool = false,
+              stamp: String? = nil) throws -> SeedReport {
         guard file.version <= RetroSpecCatalogFile.currentVersion else {
             throw SeedError.tooNew(file.version)
         }
-        let stamp = "\(file.version)/\(file.generated)"
+        let stamp = stamp ?? "\(file.version)/\(file.generated)"
         if !force, try meta(Self.catalogueStamp) == stamp { return .alreadyCurrent }
 
         let series = Dictionary(uniqueKeysWithValues: file.series.map { ($0.key, $0) })
@@ -169,6 +184,17 @@ public extension Store {
         // checked against a stale number.
         try db.run("UPDATE mirror SET filename = ?, size = ? WHERE url = ?",
                    [SQLValue(filename), SQLValue(issue.bytes.map(Int.init)), .text(url)])
+    }
+
+    /// Whether this library already holds the catalogue.
+    ///
+    /// Asked once by a build that introduces the source switch, to tell a
+    /// reader who already has these magazines from one meeting them for the
+    /// first time. The rows are the evidence rather than the stamp: a row is
+    /// what a reader would notice going missing.
+    func hasSeededRetroSpec() throws -> Bool {
+        try db.scalarInt("SELECT EXISTS(SELECT 1 FROM issue WHERE site = ?)",
+                         [.text(IssueSite.retrospec.rawValue)]) == 1
     }
 
     // MARK: - Stamp

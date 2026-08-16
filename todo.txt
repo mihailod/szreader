@@ -1,1 +1,5 @@
+- add a-profy and amiga bilten from my archive.org 
 
+- implant the page review picker between read and page reader. it will start on the page picked. see: https://retrospec.elite.org/users/tomcat/yu/magshow.php?all=MMS_85_05
+
+see how the pages are in the grid so it is easy to see what's inside the magazine. i think these are prerendered and we can fetch them on demand 

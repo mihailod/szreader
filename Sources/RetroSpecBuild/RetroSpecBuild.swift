@@ -161,9 +161,17 @@ struct RetroSpecBuild {
     ///
     /// Books have no date at all; their title is the whole identity, and the
     /// site files it where a magazine's series name goes.
+    ///
+    /// A book is titled from the index page rather than from `magshow.php`,
+    /// even though both carry the same string. The index page is served as
+    /// windows-1250 and has the characters; the database behind `magshow`
+    /// has lost some of them, so it offers "Spektrum Priru?nik" where the
+    /// page says "Spektrum Priručnik". For a month that loss is repairable
+    /// from a closed vocabulary of twelve names — for a book title it is not,
+    /// so the fix is to read the source that is not broken.
     static func title(for entry: RetroSpecEntry, info: RetroSpecIssueInfo?) -> String {
         guard let info else { return entry.label }
-        guard let year = info.year else { return info.seriesName }
+        guard let year = info.year else { return entry.label }
         guard let month = info.monthText, !month.isEmpty else { return String(year) }
         return "\(month) \(year)"
     }

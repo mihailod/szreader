@@ -124,6 +124,99 @@ final class AppModel: ObservableObject {
     @AppStorage("downloadedOnly") var downloadedOnly = false {
         didSet { search(query) }
     }
+
+    // MARK: - Sources
+
+    /// Whether the forum's issues are shown. On by default: importing a page
+    /// is the app's original purpose, and a reader who has imported one
+    /// should see it without being sent to a settings screen first.
+    @AppStorage("showStripZona") var showStripZona = true {
+        didSet { sourcesChanged(enabled: showStripZona, site: .stripzona) }
+    }
+
+    /// Whether the shipped RetroSpec catalogue is shown.
+    ///
+    /// Off by default, and the catalogue is not even loaded until it is
+    /// switched on. Six hundred magazines nobody asked for is not a first
+    /// launch — it is a shelf someone has to work out how to empty.
+    @AppStorage("showRetroSpec") var showRetroSpec = false {
+        didSet { sourcesChanged(enabled: showRetroSpec, site: .retrospec) }
+    }
+
+    /// Sources the reader has switched on. Empty is a real answer — it means
+    /// the shelf is deliberately blank — which is why nothing here hands an
+    /// empty set to the store, where empty means "no opinion, show all".
+    var visibleSites: Set<IssueSite> {
+        var sites: Set<IssueSite> = []
+        if showStripZona { sites.insert(.stripzona) }
+        if showRetroSpec { sites.insert(.retrospec) }
+        return sites
+    }
+
+    /// Told to the reader after switching a source on, so a shelf that just
+    /// grew by six hundred says where they came from and how to undo it.
+    @Published var sourceNotice: String?
+
+    func setSource(_ site: IssueSite, enabled: Bool) {
+        switch site {
+        case .stripzona: showStripZona = enabled
+        case .retrospec: showRetroSpec = enabled
+        }
+    }
+
+    func isEnabled(_ site: IssueSite) -> Bool {
+        switch site {
+        case .stripzona: return showStripZona
+        case .retrospec: return showRetroSpec
+        }
+    }
+
+    /// Loads the catalogue the first time its source is switched on, then
+    /// rebuilds the shelf around whatever is now visible.
+    ///
+    /// Switching a source off never deletes anything. What has been read,
+    /// where reading stopped and which archives are on disk all belong to the
+    /// reader; hiding a source is a view, not a purge, and switching it back
+    /// on returns exactly what was there.
+    private func sourcesChanged(enabled: Bool, site: IssueSite) {
+        if enabled, site == .retrospec, let store {
+            do {
+                let report = try store.seedRetroSpecCatalogue()
+                if report.inserted > 0 {
+                    sourceNotice = "\(report.inserted) RetroSpec magazines are now in "
+                                 + "your library. You can hide them again in Settings."
+                }
+            } catch {
+                status = "RetroSpec catalogue unavailable: \(Library.reason(error))"
+            }
+        }
+        // A filter naming a series from a source that is now hidden matches
+        // nothing, and an empty shelf with no visible reason is the most
+        // baffling state the app has. Dropping those selections keeps the
+        // shelf explainable by what is actually on screen.
+        refreshSourceMenus()
+        pruneHiddenSelections()
+        issueCount = store?.issueCount ?? 0
+        downloadedCount = store?.downloadedCount ?? 0
+        search(query)
+    }
+
+    private func refreshSourceMenus() {
+        let sites = visibleSites
+        guard !sites.isEmpty else {
+            availableSeries = []; availablePublishers = []; availableHeroes = []
+            return
+        }
+        availableSeries = (try? store?.editions(sites: sites)) ?? []
+        availablePublishers = (try? store?.publishers(sites: sites)) ?? []
+        availableHeroes = (try? store?.heroes(sites: sites)) ?? []
+    }
+
+    private func pruneHiddenSelections() {
+        selectedSeries = selectedSeries.intersection(availableSeries)
+        selectedPublishers = selectedPublishers.intersection(availablePublishers)
+        selectedHeroes = selectedHeroes.intersection(availableHeroes)
+    }
     /// A failure worth interrupting for. The status line is too easy to miss,
     /// and a download that silently does nothing looks like a broken app.
     @Published var failure: String?
@@ -179,22 +272,30 @@ final class AppModel: ObservableObject {
                               transport: transport,
                               downloader: URLSessionDownloader())
 
-            // The RetroSpec catalogue, which ships with the app rather than
-            // being imported from anywhere. Synchronous, and deliberately:
-            // the first launch pays one transaction of 653 rows, and every
-            // launch after it reads a single stamp row and stops. Doing it
-            // here rather than in a task keeps the shelf from being built
-            // twice — once empty, then again once the rows land.
+            // A library that already holds the catalogue keeps showing it.
+            //
+            // The switch defaults to off, which is right for someone opening
+            // the app for the first time and wrong for someone who already
+            // has these magazines — downloaded, part-read — and would find
+            // them gone after an update. Asked once, before the switch is
+            // ever read, so a deliberate switch-off is never undone by it.
+            if !UserDefaults.standard.bool(forKey: "retroSpecDefaultResolved") {
+                UserDefaults.standard.set(true, forKey: "retroSpecDefaultResolved")
+                if (try? store.hasSeededRetroSpec()) == true { showRetroSpec = true }
+            }
+
+            // The catalogue ships with the app but is not loaded until its
+            // source is switched on, so an untouched install really is empty
+            // rather than empty-looking with 653 rows hidden behind a filter.
             //
             // A failure is not fatal. The forum library is the app's original
             // reason to exist and works with or without this.
-            do {
-                let report = try store.seedRetroSpecCatalogue()
-                if report.inserted > 0 {
-                    status = "added \(report.inserted) RetroSpec issues"
+            if showRetroSpec {
+                do {
+                    try store.seedRetroSpecCatalogue()
+                } catch {
+                    status = "RetroSpec catalogue unavailable: \(Library.reason(error))"
                 }
-            } catch {
-                status = "RetroSpec catalogue unavailable: \(Library.reason(error))"
             }
 
             #if DEBUG
@@ -205,9 +306,7 @@ final class AppModel: ObservableObject {
             downloadedCount = store.downloadedCount
             diskUsage = library?.diskUsage ?? 0
             freeSpace = Self.freeSpace()
-            availableSeries = (try? store.editions()) ?? []
-            availablePublishers = (try? store.publishers()) ?? []
-            availableHeroes = (try? store.heroes()) ?? []
+            refreshSourceMenus()
             search("")
             resolveTitles()
         } catch {
@@ -218,6 +317,15 @@ final class AppModel: ObservableObject {
     func search(_ text: String) {
         guard let store else { return }
         query = text
+        // Every source switched off means an empty shelf, and it has to be
+        // answered here rather than by the query: the store reads an empty
+        // set of sources as "no preference" and returns the whole library,
+        // which is the right default for a caller that has no opinion and the
+        // exact opposite of what this one is saying.
+        guard !visibleSites.isEmpty else {
+            results = []
+            return
+        }
         do {
             // Empty query lists the start of the library rather than nothing,
             // so the shelf is never blank on launch.
@@ -229,12 +337,12 @@ final class AppModel: ObservableObject {
                                    editions: selectedSeries,
                                    publishers: selectedPublishers,
                                    heroes: selectedHeroes,
-                                   states: readStates)
+                                   states: readStates, sites: visibleSites)
                 : try store.search(text, limit: nil, downloadedOnly: downloadedOnly,
                                    editions: selectedSeries,
                                    publishers: selectedPublishers,
                                    heroes: selectedHeroes,
-                                   states: readStates)
+                                   states: readStates, sites: visibleSites)
             // Applied on top of the query, so the default costs nothing and
             // leaves insertion order when browsing and relevance when
             // searching — each view's own answer to what it was asked.
@@ -780,9 +888,7 @@ final class AppModel: ObservableObject {
         diskUsage = library?.diskUsage ?? 0
         freeSpace = Self.freeSpace()
         // A newly imported page can bring a series the menu has not offered.
-        availableSeries = (try? store?.editions()) ?? []
-        availablePublishers = (try? store?.publishers()) ?? []
-        availableHeroes = (try? store?.heroes()) ?? []
+        refreshSourceMenus()
         search(query)
         status = note
     }

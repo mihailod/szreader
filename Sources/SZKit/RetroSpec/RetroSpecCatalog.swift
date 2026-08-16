@@ -226,6 +226,34 @@ public enum RetroSpecCatalog {
     // "1984 Oktobar #1", "1985  #1", "1988 Jul-SpecijalniBroj #0".
     private static let dateLine = Rx(#"^(\d{4})\s*(.*?)\s*#(\d+)$"#)
 
+    /// Month names the site's database has lost a character from.
+    ///
+    /// The same fault as "Ra?unari" in `RetroSpecSeriesTable`: a `?` byte
+    /// where a `č` or `ć` belongs, in every encoding the page is served in.
+    /// It has clearly been through a conversion that could not represent
+    /// them — `ž` and `š` come through intact, which is why "Održavanje" and
+    /// "vaš" are fine and only these two are not.
+    ///
+    /// A closed vocabulary, and complete: of the twelve Croatian month names
+    /// only *siječanj* and *veljača* contain either character, and neither
+    /// Serbian nor Slovenian month names contain any diacritic at all. Plain
+    /// substring replacement rather than whole-token matching, because the
+    /// month can be a compound — "Julij/Avgust", "Svibanj-Maj".
+    static let lostCharacters = [
+        "Sije?anj": "Siječanj",
+        "Velja?a": "Veljača",
+    ]
+
+    /// The month as it was actually printed, undoing the database's loss.
+    static func repaired(_ text: String) -> String {
+        guard text.contains("?") else { return text }
+        var out = text
+        for (broken, whole) in lostCharacters {
+            out = out.replacingOccurrences(of: broken, with: whole)
+        }
+        return out
+    }
+
     /// What one issue's `magshow.php` page says about it.
     ///
     /// This is where the real series names live. The index pages head each
@@ -239,7 +267,7 @@ public enum RetroSpecCatalog {
         if let printed = infoDate.firstGroups(html)?.capture(1).nonEmpty.map(text(of:)),
            let parts = dateLine.firstGroups(printed) {
             year = Int(parts.capture(1))
-            monthText = parts.capture(2).nonEmpty
+            monthText = parts.capture(2).nonEmpty.map(repaired)
             number = Int(parts.capture(3))
         }
 

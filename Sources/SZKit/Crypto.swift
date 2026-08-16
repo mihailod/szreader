@@ -106,6 +106,21 @@ enum CryptoError: Error, CustomStringConvertible {
     }
 }
 
+/// A content fingerprint that survives a relaunch.
+///
+/// Not `Hasher`: Swift seeds it randomly per process, so a value stored on one
+/// launch never matches the same bytes on the next. Anything comparing a
+/// remembered digest against a fresh one needs this instead.
+enum SHA256 {
+    static func hex(_ data: Data) -> String {
+        var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        data.withUnsafeBytes { bytes in
+            _ = CC_SHA256(bytes.baseAddress, CC_LONG(data.count), &digest)
+        }
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+}
+
 enum Base64URL {
     static func decode(_ s: String) -> Data? {
         var t = s.replacingOccurrences(of: "-", with: "+")
