@@ -63,7 +63,13 @@ public enum HostError: Error, CustomStringConvertible {
 public struct HostRegistry: Sendable {
     public let hosts: [FileHost]
 
-    public init(hosts: [FileHost] = [MediaFireHost(), MegaHost(), PixeldrainHost()]) {
+    /// `DirectHost` sits last, though the order does not actually matter:
+    /// it claims only the archive the shipped catalogue points at, and the
+    /// other three claim only their own domains, so no URL is contested.
+    /// Last is where a fallback belongs regardless, in case it is ever
+    /// widened.
+    public init(hosts: [FileHost] = [MediaFireHost(), MegaHost(), PixeldrainHost(),
+                                     DirectHost()]) {
         self.hosts = hosts
     }
 
