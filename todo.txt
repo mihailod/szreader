@@ -1,3 +1,1 @@
-- zoom is weird -- always zooms the center. should zoom what i pinched.
-
 - add a-profy and amiga bilten from my archive.org 

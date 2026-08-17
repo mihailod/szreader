@@ -109,3 +109,59 @@ final class ZoomPanTests: XCTestCase {
         XCTAssertEqual(ZoomPan.widthFillZoom(image: .zero, box: Self.landscape), 1)
     }
 }
+
+/// Zooming about the fingers rather than about the middle of the page.
+final class ZoomFocusTests: XCTestCase {
+
+    /// Big enough that a zoom of two has slack to pan into on both axes.
+    private let page = CGSize(width: 1000, height: 1500)
+    private let screen = CGSize(width: 800, height: 1000)
+
+    /// The point under the fingers is the one that must not move. Pinching
+    /// out at a panel to the right of centre has to bring the page left by as
+    /// much as that panel would otherwise have run outwards.
+    func testThePinchedPointStaysUnderTheFingers() {
+        let pinch = CGSize(width: 200, height: 0)
+        let moved = ZoomPan.focused(.zero, pinch: pinch, from: 1, to: 2,
+                                    image: page, box: screen)
+        XCTAssertEqual(moved.width, -200, accuracy: 0.001)
+        XCTAssertEqual(moved.height, 0, accuracy: 0.001)
+    }
+
+    /// Pinching the middle is the old behaviour, and still right.
+    func testPinchingTheMiddleDoesNotPan() {
+        let moved = ZoomPan.focused(.zero, pinch: .zero, from: 1, to: 2,
+                                    image: page, box: screen)
+        XCTAssertEqual(moved.width, 0, accuracy: 0.001)
+        XCTAssertEqual(moved.height, 0, accuracy: 0.001)
+    }
+
+    /// Zooming back out walks the page towards the middle again, ending where
+    /// it started rather than stranded off to one side.
+    func testZoomingBackOutUndoesIt() {
+        let pinch = CGSize(width: 200, height: -120)
+        let out = ZoomPan.focused(.zero, pinch: pinch, from: 1, to: 2,
+                                  image: page, box: screen)
+        let back = ZoomPan.focused(out, pinch: pinch, from: 2, to: 1,
+                                   image: page, box: screen)
+        XCTAssertEqual(back.width, 0, accuracy: 0.001)
+        XCTAssertEqual(back.height, 0, accuracy: 0.001)
+    }
+
+    /// A pinch near the edge cannot drag the page off its own edge: the same
+    /// limit that governs a pan governs this.
+    func testItCannotPullThePageOffItsEdge() {
+        let pinch = CGSize(width: 5000, height: 0)
+        let moved = ZoomPan.focused(.zero, pinch: pinch, from: 1, to: 2,
+                                    image: page, box: screen)
+        let limit = ZoomPan.maxOffset(image: page, box: screen, zoom: 2)
+        XCTAssertEqual(moved.width, -limit.width, accuracy: 0.001)
+    }
+
+    /// Nonsense in, no crash out: a zoom of zero has no ratio to work from.
+    func testAZoomOfNothingIsSafe() {
+        let moved = ZoomPan.focused(.zero, pinch: CGSize(width: 100, height: 0),
+                                    from: 0, to: 2, image: page, box: screen)
+        XCTAssertEqual(moved.width, 0, accuracy: 0.001)
+    }
+}

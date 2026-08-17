@@ -46,4 +46,29 @@ public enum ZoomPan {
         return CGSize(width: min(max(offset.width, -limit.width), limit.width),
                       height: min(max(offset.height, -limit.height), limit.height))
     }
+
+    /// Where the page must sit for the point under a pinch to stay under it.
+    ///
+    /// The page is scaled about its own middle, so a zoom on its own always
+    /// pulls the middle of the page towards the reader — pinch a panel in the
+    /// corner and the corner runs away off the screen, which is what made
+    /// zooming feel like it was ignoring where your fingers were.
+    ///
+    /// `pinch` is where the fingers are, measured from the middle of the box.
+    /// A point sits on screen at `middle + content × zoom + offset`, so
+    /// holding it still across a change of zoom means
+    ///
+    ///     offset' = offset × k + pinch × (1 − k),  k = new ÷ old
+    ///
+    /// which is a pan towards whatever is being pulled apart. Clamped like any
+    /// other pan, so the page still cannot be dragged away from its own edges.
+    public static func focused(_ offset: CGSize, pinch: CGSize,
+                               from: CGFloat, to: CGFloat,
+                               image: CGSize, box: CGSize) -> CGSize {
+        guard from > 0 else { return clamp(offset, image: image, box: box, zoom: to) }
+        let k = to / from
+        let moved = CGSize(width: offset.width * k + pinch.width * (1 - k),
+                           height: offset.height * k + pinch.height * (1 - k))
+        return clamp(moved, image: image, box: box, zoom: to)
+    }
 }
