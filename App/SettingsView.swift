@@ -19,34 +19,8 @@ struct SettingsView: View {
             // reads as a settings pane with nothing below the fold.
             ScrollView {
             VStack(spacing: 10) {
-                if let icon = AppInfo.icon {
-                    Image(uiImage: icon)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: Self.iconSize, height: Self.iconSize)
-                        // iOS masks the icon itself; the file inside the
-                        // bundle is a plain square.
-                        // Roughly iOS's own corner ratio, so it reads as an
-                        // app icon at whatever size it ends up.
-                        .clipShape(RoundedRectangle(cornerRadius: Self.iconSize * 0.22,
-                                                    style: .continuous))
-                        .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
-                        .padding(.top, 8)
-                }
-
-                Text(AppInfo.name)
-                    .font(.system(size: Device.isPhone ? 26 : 30, weight: .bold))
-
-                // The build number alongside the version: it is the number
-                // that tells two submissions of "1.0" apart, and the only
-                // place a reader can be asked to read it back.
-                Text("Version \(AppInfo.versionAndBuild)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Text(AppInfo.copyright)
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
+                header
+                    .padding(.top, 8)
 
                 sources
                     .padding(.top, 8)
@@ -61,11 +35,15 @@ struct SettingsView: View {
                     Text("Acknowledgements")
                         .font(.callout)
                 }
+                // Down the same left edge as the icon, the name and the source
+                // rows: with the header no longer centred, this was the one
+                // thing left floating in the middle of the sheet.
+                .padding(.horizontal, 16)
+                .frame(maxWidth: 560, alignment: .leading)
                 .padding(.top, 6)
                 .padding(.bottom, 16)
             }
             .frame(maxWidth: .infinity)
-            .multilineTextAlignment(.center)
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -86,6 +64,53 @@ struct SettingsView: View {
         } message: {
             Text(model.sourceNotice ?? "")
         }
+    }
+
+    /// What the app is: the icon, and beside it the three lines that name it.
+    ///
+    /// A row rather than a column. Nothing here ever changes between launches,
+    /// and stacked it took the top of the sheet for four fixed things while the
+    /// part that grows — the sources — started below the middle of a phone
+    /// screen. Side by side the whole lot costs one icon's height, and every
+    /// row that height frees goes to the list underneath.
+    private var header: some View {
+        HStack(spacing: 14) {
+            if let icon = AppInfo.icon {
+                Image(uiImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: Self.iconSize, height: Self.iconSize)
+                    // iOS masks the icon itself; the file inside the
+                    // bundle is a plain square.
+                    // Roughly iOS's own corner ratio, so it reads as an
+                    // app icon at whatever size it ends up.
+                    .clipShape(RoundedRectangle(cornerRadius: Self.iconSize * 0.22,
+                                                style: .continuous))
+                    .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(AppInfo.name)
+                    .font(.system(size: Device.isPhone ? 24 : 28, weight: .bold))
+
+                // The build number alongside the version: it is the number
+                // that tells two submissions of "1.0" apart, and the only
+                // place a reader can be asked to read it back.
+                Text("Version \(AppInfo.versionAndBuild)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Text(AppInfo.copyright)
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+            }
+            // Left-aligned against the icon at every width: without this the
+            // pair floats to the middle of the sheet on an iPad and stops
+            // lining up with the sources card below it.
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: 560)
     }
 
     /// Which archives the shelf draws from.
@@ -127,11 +152,11 @@ struct SettingsView: View {
     /// Smaller than the icon's own pixels allow, and deliberately.
     ///
     /// `AppInfo.iconPointSize` draws it at up to 128pt, which is right for a
-    /// screen that has nothing else on it. This one now carries the source
-    /// switches too, and on a small phone the icon at that size is what
-    /// pushed the last row under the fold.
+    /// screen that has nothing else on it. Here it sits beside three lines of
+    /// text and is sized to stand about as tall as they do, so the pair reads
+    /// as one block rather than as a picture with a caption.
     private static var iconSize: CGFloat {
-        min(AppInfo.iconPointSize, Device.isPhone ? 60 : 76)
+        min(AppInfo.iconPointSize, Device.isPhone ? 64 : 76)
     }
 }
 
