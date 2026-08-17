@@ -1,5 +1,11 @@
 - add a-profy and amiga bilten from my archive.org 
 
-- implant the page review picker between read and page reader. it will start on the page picked. see: https://retrospec.elite.org/users/tomcat/yu/magshow.php?all=MMS_85_05
+-----
 
-see how the pages are in the grid so it is easy to see what's inside the magazine. i think these are prerendered and we can fetch them on demand 
+- implement the page review scrollable grid picker made of all pages of a magazine between read and page reader. reading should start on the page picked. see rendering of: https://retrospec.elite.org/users/tomcat/yu/magshow.php?all=MMS_85_05
+
+see how the pages are in the grid so it is easy to see what's inside the magazine visually. this is important for magazines. i think these are prerendered in low-res and we can fetch them on demand and cache. but if it is easier to render them from the downloaded content then do that.
+
+this should be a feature turned on on Retrospec by default and turned off on StripZona by default. these switches should be added to settings for each source below the on/off content visibility switches
+
+think about this and let me know your plan before doing any changes first

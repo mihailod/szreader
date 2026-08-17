@@ -203,11 +203,45 @@ enum Labels {
         return (first, second)
     }
 
+    /// A number in another edition's numbering, given in passing:
+    /// "01 (SS 173) Johnny Logan 001 - Crni tigrovi",
+    /// "Timothy Tatcher 02 Hollywood protiv mene (SS 305)".
+    ///
+    /// Shouted letters, a number, and nothing else inside the bracket. That is
+    /// deliberately narrow, because these posts bracket a great deal else —
+    /// dates "(02.01.1980.)", scanner credits "(enwil-rescan 2014)", sizes —
+    /// and a looser reading would file artwork under one of those. Measured
+    /// across the corpus it fires on two topics, Johnny Logan's reprints and
+    /// Timothy Tatcher, which are precisely the ones whose covers are named
+    /// after the other number.
+    ///
+    /// The space is optional, and that is not a loosening for its own sake:
+    /// the two Timothy Tatcher topics are written by different hands, one
+    /// "(SS 305)" and the other "(SS301)(Sabko-BDS)", and requiring the space
+    /// resolved the first and left the second showing no artwork. Checked
+    /// against every saved page: making it optional matches nothing the strict
+    /// form did not already match.
+    ///
+    /// No slash inside, so a compound reference "(SSB 089/001)" is refused: it
+    /// names no single cover and its leading number would pick one at random.
+    /// This is the same rule `Catalog.crossReference` reads within a page.
+    static let catalogueReference = Rx(#"\(\s*([A-ZČĆŠŽĐ]{2,5})\s*(\d{1,5})\s*\)"#)
+
+    static func catalogueRef(in text: String) -> CatalogueRef? {
+        guard let g = catalogueReference.firstGroups(text),
+              let number = Int(g[2]), number > 0 else { return nil }
+        return CatalogueRef(code: g[1], number: number)
+    }
+
     /// A label written after its link.
     ///
     /// Nil for anything that is not clearly one issue: a bundle covering a
     /// range, or text with no number in it at all.
     static func trailingLabel(_ text: String) -> IssueLabel? {
+        trailingLabelText(text)?.reading(text)
+    }
+
+    private static func trailingLabelText(_ text: String) -> IssueLabel? {
         if let label = doubleTrailingLabel(text) { return label }
         guard !numericRange.matches(text) else { return nil }
         if let g = code.firstGroups(text) {

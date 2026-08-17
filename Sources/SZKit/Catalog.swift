@@ -1,5 +1,26 @@
 import Foundation
 
+/// The number another edition files this issue under, mentioned in passing.
+///
+/// A reprint topic numbers its issues from one and names the original beside
+/// each: "01 (SS 173) Johnny Logan 001 - Crni tigrovi" is issue 1 here and
+/// Super Strip 173 there. A topic carrying a single issue says it in its own
+/// heading: "Timothy Tatcher 02 Hollywood protiv mene (SS 305)".
+///
+/// Worth keeping rather than reading and dropping, because the catalogue's
+/// artwork is named after *this* number — `TT_SS_305.jpg` — while the number
+/// the row carries names nothing there.
+public struct CatalogueRef: Equatable, Sendable {
+    /// The other edition, as the label shouts it: "SS".
+    public let code: String
+    /// Its number for this issue: 305.
+    public let number: Int
+
+    public init(code: String, number: Int) {
+        self.code = code; self.number = number
+    }
+}
+
 /// What a label tells us about an issue. Which fields are populated depends on
 /// the convention: `labeledBlock` gives a code and number but no title,
 /// the inline styles give a number and title, `nameFirst` adds the series name
@@ -12,11 +33,26 @@ public struct IssueLabel: Equatable, Sendable {
     public let numberTo: Int?
     public let title: String?
     public let series: String?    // "Kolorka", "Alef"
+    /// Where another edition files the same issue, where the label says.
+    public let catalogue: CatalogueRef?
 
     public init(code: String? = nil, number: Int? = nil, numberTo: Int? = nil,
-                title: String? = nil, series: String? = nil) {
+                title: String? = nil, series: String? = nil,
+                catalogue: CatalogueRef? = nil) {
         self.code = code; self.number = number; self.numberTo = numberTo
         self.title = title; self.series = series
+        self.catalogue = catalogue
+    }
+
+    /// The same label, carrying the catalogue reference its own text gives.
+    ///
+    /// Applied where the label is built rather than inside each parse, because
+    /// every style strips the bracket on its way to a title and only the line
+    /// it came from still has it.
+    func reading(_ text: String) -> IssueLabel {
+        guard catalogue == nil, let ref = Labels.catalogueRef(in: text) else { return self }
+        return IssueLabel(code: code, number: number, numberTo: numberTo,
+                          title: title, series: series, catalogue: ref)
     }
 
     /// Whether a number is the only thing identifying this issue.
@@ -36,7 +72,7 @@ public struct IssueLabel: Equatable, Sendable {
     func qualified(by edition: String?) -> IssueLabel {
         guard isBareNumber, let edition, !edition.isEmpty else { return self }
         return IssueLabel(code: code, number: number, numberTo: numberTo,
-                          title: title, series: edition)
+                          title: title, series: edition, catalogue: catalogue)
     }
 }
 
@@ -205,11 +241,13 @@ public enum Catalog {
                     let named = g.capture(3).isEmpty ? nil : TitleCleaner.tidyInline(g.capture(3))
                     style = .labeledInline
                     label = IssueLabel(code: g[1], number: Int(g[2]), title: named)
+                        .reading(before)
                     stamp = instance
                 } else if !before.isEmpty, let g = Labels.num.firstGroups(before) {
                     instance += 1
                     style = .inlineSameLine
                     label = IssueLabel(number: Int(g[1]), title: TitleCleaner.tidyInline(g[2]))
+                        .reading(before)
                     stamp = instance
                 } else if !before.isEmpty, let g = Labels.bareNumber.firstGroups(before),
                           let n = Int(g[1]), n > 0 {
@@ -261,7 +299,8 @@ public enum Catalog {
                 // Some topics write the title beside the code rather than
                 // leaving the issue nameless: "ZS_85 - Komadant Mark".
                 let named = g.capture(3).isEmpty ? nil : TitleCleaner.tidyInline(g.capture(3))
-                pendingCode = (IssueLabel(code: g[1], number: Int(g[2]), title: named), instance)
+                pendingCode = (IssueLabel(code: g[1], number: Int(g[2]), title: named)
+                                .reading(line), instance)
                 pendingNum = nil
                 continue
             }
@@ -275,14 +314,15 @@ public enum Catalog {
                g[2].count > 2, !g[2].lowercased().hasPrefix("http") {
                 instance += 1
                 pendingNum = (IssueLabel(number: Int(g[1]),
-                                         title: TitleCleaner.tidyInline(g[2])), instance)
+                                         title: TitleCleaner.tidyInline(g[2]))
+                                .reading(line), instance)
                 pendingCode = nil
                 continue
             }
             if let nn = Labels.matchNameFirst(line) {
                 instance += 1
                 pendingNum = (IssueLabel(number: Int(nn.number), title: nn.title,
-                                         series: nn.name), instance)
+                                         series: nn.name).reading(line), instance)
                 pendingCode = nil
             }
         }

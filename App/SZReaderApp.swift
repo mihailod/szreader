@@ -284,6 +284,13 @@ final class AppModel: ObservableObject {
             // Covers taken from a comic's own first page live under the
             // library, so whoever loads covers needs to know where that is.
             CoverStore.libraryPaths = paths
+            // And a cover that fails to load is worth writing down: the shelf
+            // is where a dead image host is discovered, and the library is
+            // where that has to be recorded for anything to be done about it.
+            // Safe from any thread — `Store` serialises its statements.
+            CoverStore.reportDeadCover = { [weak store] url in
+                try? store?.markCoverDead(url: url)
+            }
             library = Library(store: store,
                               paths: paths,
                               transport: transport,
@@ -671,7 +678,7 @@ final class AppModel: ObservableObject {
 
         while true {
             guard let batch = try? await store.backfillCovers(via: transport, limit: 5),
-                  batch.asked > 0 else { break }
+                  batch.considered > 0 else { break }
             found += batch.found
             status = "Looking for covers: \(total - store.coverlessIssueCount)/\(total)"
             search(query)

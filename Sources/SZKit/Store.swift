@@ -264,6 +264,20 @@ public final class Store: @unchecked Sendable {
         // How many scanned pages the archive holds, where the source says so.
         // Nil for everything imported from the forum, which never states it.
         try? db.execute("ALTER TABLE issue ADD COLUMN page_count INTEGER")
+        // Where another edition files the same issue: "(SS 305)" on a topic
+        // that numbers it 02. Deliberately *not* part of the natural key —
+        // it describes the issue rather than identifying it, and putting it
+        // in the key would make every row that gains one a new row.
+        try? db.execute("ALTER TABLE issue ADD COLUMN catalogue_code TEXT")
+        try? db.execute("ALTER TABLE issue ADD COLUMN catalogue_number INTEGER")
+        // When a cover URL was found to lead nowhere.
+        //
+        // A cover that 404s is not a cover, but it is not nothing either: the
+        // row still holds the URL, so every "does this issue need artwork"
+        // question answered "no" and the issue sat there showing an empty
+        // frame for good. The URL is kept rather than cleared — re-importing
+        // the page would only write it back — and this marks it as spent.
+        try? db.execute("ALTER TABLE issue ADD COLUMN cover_dead_at REAL")
 
         // Small facts about the library itself rather than about any issue —
         // currently just which build of the shipped catalogue has been
@@ -294,6 +308,8 @@ public final class Store: @unchecked Sendable {
                         IFNULL(series,''));
             DROP INDEX IF EXISTS issue_identity_v2;
             """)
+
+        for change in Self.coverQuestions { try? reopenCoverQuestion(change) }
 
         // Libraries that already took the forum's "picture missing" graphic
         // as artwork. Clearing it puts those issues back to having no cover,
@@ -366,6 +382,39 @@ public final class Store: @unchecked Sendable {
         if try db.scalarInt("SELECT COUNT(*) FROM issue WHERE search_text IS NULL") > 0 {
             try rebuildSearchIndex()
         }
+    }
+
+    /// Changes that make "the catalogue has been asked about this issue" a
+    /// stale answer, newest last.
+    ///
+    /// A miss is deliberately never retried — that is what `cover_asked_at` is
+    /// for. But twice now the question itself has changed underneath the
+    /// answer: first when a cover that leads nowhere started counting as a
+    /// missing one, then when the parser learned to read "(SS301)" as well as
+    /// "(SS 305)". An issue asked under the old question would otherwise keep
+    /// its "nothing found" for good — Timothy Tatcher 01 did, on the iPad,
+    /// after the very fix that could have answered it.
+    private static let coverQuestions = [
+        "cover-question-dead-counts-as-missing",
+        "cover-question-reference-without-space",
+    ]
+
+    /// Puts one of those questions again, exactly once per library.
+    ///
+    /// The mark in `meta` is what makes it once rather than on every launch —
+    /// and re-asking on every launch would be the same as never recording the
+    /// answer at all, which is the behaviour this column exists to prevent.
+    private func reopenCoverQuestion(_ change: String) throws {
+        let asked = try db.scalarInt("SELECT COUNT(*) FROM meta WHERE key = ?",
+                                     [.text(change)])
+        guard asked == 0 else { return }
+        try db.run("""
+            UPDATE issue SET cover_asked_at = NULL
+            WHERE cover_asked_at IS NOT NULL
+              AND (cover_url IS NULL OR cover_dead_at IS NOT NULL)
+            """)
+        try db.run("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                   [.text(change), .text("\(Date().timeIntervalSince1970)")])
     }
 
     /// Recomputes every row's search text and repopulates FTS.
@@ -446,15 +495,32 @@ public final class Store: @unchecked Sendable {
                 // Fills these in for rows created before the columns existed,
                 // so a re-import upgrades an old library rather than only
                 // helping new arrivals.
+                // A catalogue reference arriving for a row that had none is
+                // new evidence, and `cover_asked_at` records a question asked
+                // without it. Timothy Tatcher 01 is the case: the topic writes
+                // "(SS301)" where its sibling writes "(SS 305)", so the first
+                // import read one and not the other, marked the issue asked,
+                // and would have gone on showing no artwork for ever after the
+                // parser learned to read it. Cleared only where the reference
+                // is genuinely new, so re-importing an unchanged page still
+                // asks nothing twice.
                 try db.run("""
                     UPDATE issue SET hero = COALESCE(hero, ?),
                                      edition = COALESCE(edition, ?),
-                                     publisher = COALESCE(publisher, ?)
+                                     publisher = COALESCE(publisher, ?),
+                                     cover_asked_at = CASE
+                                         WHEN catalogue_code IS NULL AND ? IS NOT NULL
+                                         THEN NULL ELSE cover_asked_at END,
+                                     catalogue_code = COALESCE(catalogue_code, ?),
+                                     catalogue_number = COALESCE(catalogue_number, ?)
                     WHERE id = ?
                     """, [SQLValue(pageContext.hero),
                           SQLValue(Self.edition(of: parsed.label.series,
                                                 under: pageContext.edition)),
-                          SQLValue(pageContext.publisher), .int(id)])
+                          SQLValue(pageContext.publisher),
+                          SQLValue(parsed.label.catalogue?.code),
+                          SQLValue(parsed.label.catalogue?.code),
+                          SQLValue(parsed.label.catalogue?.number), .int(id)])
                 if let number = parsed.label.number, let cover = covers[number] {
                     try db.run("UPDATE issue SET cover_url = ? WHERE id = ? AND cover_url IS NULL",
                                [.text(cover), .int(id)])
@@ -580,15 +646,18 @@ public final class Store: @unchecked Sendable {
         try db.run("""
             INSERT OR IGNORE INTO issue
               (code, number, number_to, title, title_folded, series, style, source,
-               context, search_text, hero, edition, publisher, site)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               context, search_text, hero, edition, publisher, site,
+               catalogue_code, catalogue_number)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [SQLValue(parsed.label.code), SQLValue(parsed.label.number),
                   SQLValue(parsed.label.numberTo),
                   SQLValue(parsed.label.title), .text(folded),
                   SQLValue(parsed.label.series), .text(parsed.style.rawValue),
                   SQLValue(source), .text(context), .text(searchText),
                   SQLValue(hero), SQLValue(edition), SQLValue(publisher),
-                  .text(IssueSite.stripzona.rawValue)])
+                  .text(IssueSite.stripzona.rawValue),
+                  SQLValue(parsed.label.catalogue?.code),
+                  SQLValue(parsed.label.catalogue?.number)])
 
         if try db.scalarInt("SELECT changes()") > 0 {
             inserted += 1
@@ -657,9 +726,9 @@ public final class Store: @unchecked Sendable {
                                        publishers: publishers, heroes: heroes,
                                        states: states, sites: sites)
         let filter = terms.sql.isEmpty ? "" : "AND " + terms.sql.joined(separator: " AND ")
-        try db.query("""
+        try db.query(Self.liveCover("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
-                   (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
+                   (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), %@,
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
                    i.hero, i.edition, i.publisher,
                    i.read_at IS NOT NULL,
@@ -674,7 +743,7 @@ public final class Store: @unchecked Sendable {
             \(filter)
             ORDER BY rank
             \(limit == nil ? "" : "LIMIT ?")
-            """, [.text(match)] + terms.args
+            """, table: "i"), [.text(match)] + terms.args
                   + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
                 id: row.int(0) ?? 0,
@@ -801,18 +870,50 @@ public final class Store: @unchecked Sendable {
     }
 
     /// The artwork reference recorded for an issue, if any.
+    ///
+    /// A cover known to lead nowhere answers nil, which is the truth as far as
+    /// any caller is concerned: the shelf draws its placeholder, and the
+    /// download path puts the comic's own first page there instead of finding
+    /// a URL in the way.
     public func coverURL(forIssue issueID: Int) throws -> String? {
         var out: String?
-        try db.query("SELECT cover_url FROM issue WHERE id = ?",
+        try db.query(Self.liveCover("SELECT %@ FROM issue WHERE id = ?"),
                      [.int(Int64(issueID))]) { row in out = row.string(0) }
         return out
     }
 
+    /// The cover column as every reader of it should see it: nil once the
+    /// artwork has been found to be gone.
+    ///
+    /// A format rather than a plain string so the three queries that select it
+    /// cannot drift apart — a shelf that shows a dead cover while the backfill
+    /// treats it as missing is two answers to one question.
+    static func liveCover(_ sql: String, table: String = "issue") -> String {
+        sql.replacingOccurrences(
+            of: "%@",
+            with: "CASE WHEN \(table).cover_dead_at IS NULL THEN \(table).cover_url END")
+    }
+
     /// Records artwork for an issue. Used for covers taken from a downloaded
     /// comic's own first page, which the forum page did not provide.
+    ///
+    /// Clears any death mark: this is new artwork, and the mark belongs to the
+    /// URL it replaced.
     public func setCoverURL(_ url: String, issueID: Int) throws {
-        try db.run("UPDATE issue SET cover_url = ? WHERE id = ?",
+        try db.run("UPDATE issue SET cover_url = ?, cover_dead_at = NULL WHERE id = ?",
                    [.text(url), .int(Int64(issueID))])
+    }
+
+    /// Records that a cover URL leads nowhere.
+    ///
+    /// Keyed on the URL rather than the issue, and matching tile references
+    /// too: a contact sheet is one image shared by up to six issues, stored as
+    /// `<sheet>#tile=k/6`, and a sheet that has gone has gone for all of them.
+    public func markCoverDead(url: String) throws {
+        try db.run("""
+            UPDATE issue SET cover_dead_at = strftime('%s', 'now')
+            WHERE cover_dead_at IS NULL AND (cover_url = ? OR cover_url LIKE ? || '#%')
+            """, [.text(url), .text(url)])
     }
 
     public func lastPage(forIssue issueID: Int) throws -> Int {
@@ -907,9 +1008,9 @@ public final class Store: @unchecked Sendable {
                                        publishers: publishers, heroes: heroes,
                                        states: states, sites: sites)
         let filter = terms.sql.isEmpty ? "" : "WHERE " + terms.sql.joined(separator: " AND ")
-        try db.query("""
+        try db.query(Self.liveCover("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
-                   (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), i.cover_url,
+                   (SELECT COUNT(*) FROM mirror m WHERE m.issue_id = i.id), %@,
                    EXISTS(SELECT 1 FROM download d WHERE d.issue_id = i.id),
                    i.hero, i.edition, i.publisher,
                    i.read_at IS NOT NULL,
@@ -919,7 +1020,7 @@ public final class Store: @unchecked Sendable {
                    i.number_to,
                    i.site, i.page_count
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
-            """, terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
+            """, table: "i"), terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
                 id: row.int(0) ?? 0, code: row.string(1), number: row.int(2),
                 title: row.string(3), series: row.string(4),

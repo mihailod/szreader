@@ -27,6 +27,18 @@ final class CoverStore: @unchecked Sendable {
     /// across launches.
     nonisolated(unsafe) static var libraryPaths: LibraryPaths?
 
+    /// Told about a cover URL that turned out not to be a cover.
+    ///
+    /// The shelf is the only place that ever finds this out, and it finds out
+    /// for free: it fetches every cover it draws, so a host that has dropped
+    /// the image answers here first. Reporting it is what lets the library
+    /// stop treating the issue as one that already has artwork — otherwise the
+    /// empty frame is permanent, because every query that looks for work to do
+    /// sees a URL and moves on.
+    ///
+    /// Set when the library opens, alongside `libraryPaths`.
+    nonisolated(unsafe) static var reportDeadCover: (@Sendable (String) -> Void)?
+
     private let memory = NSCache<NSString, UIImage>()
     private let directory: URL
     private let session: URLSession
@@ -140,10 +152,19 @@ final class CoverStore: @unchecked Sendable {
 
         let file = directory.appendingPathComponent(digest(url))
 
+        // Anything cached that no longer decodes is thrown away rather than
+        // served: earlier builds wrote whatever came back to this directory,
+        // status and all, so a library that has been running a while has
+        // "not found" pages sitting in it under a cover's name. Kept, they
+        // would answer the question for ever and the fetch below — the only
+        // thing that can tell the shelf the cover is gone — would never run.
         var data = try? Data(contentsOf: file)
+        if let cached = data, Self.decode(cached) == nil {
+            try? FileManager.default.removeItem(at: file)
+            data = nil
+        }
         if data == nil, let remote = URL(string: url) {
-            data = try? await session.data(from: remote).0
-            if let data { try? data.write(to: file, options: .atomic) }
+            data = await fetch(remote, to: file, reportingAs: url)
         }
         guard let data, let color = Self.decode(data) else { return nil }
 
@@ -153,6 +174,29 @@ final class CoverStore: @unchecked Sendable {
         store(decoded, url: url, grayscale: false)
         if let gray = desaturate(decoded) { store(gray, url: url, grayscale: true) }
         return decoded
+    }
+
+    /// Fetches a cover, and says so when what came back is not one.
+    ///
+    /// The status used to be ignored entirely: `data(from:)` hands back a
+    /// "not found" page as contentedly as a JPEG, and that page was then
+    /// written into the cache as though it were artwork. `CoverGuess.isImage`
+    /// is the same test the catalogue backfill applies to a guessed URL, which
+    /// is the right one here too — the question is identical.
+    /// `reportingAs` is the string the library stores, which is what it has to
+    /// be told — `URL` round-trips most of them unchanged and would quietly
+    /// re-encode the rest into something no row holds.
+    private func fetch(_ remote: URL, to file: URL, reportingAs key: String) async -> Data? {
+        guard let (data, response) = try? await session.data(from: remote) else { return nil }
+        let http = response as? HTTPURLResponse
+        guard CoverGuess.isImage(status: http?.statusCode ?? 200,
+                                 contentType: http?.value(forHTTPHeaderField: "Content-Type"),
+                                 body: data) else {
+            Self.reportDeadCover?(key)
+            return nil
+        }
+        try? data.write(to: file, options: .atomic)
+        return data
     }
 
     /// The largest a cover is ever drawn.
