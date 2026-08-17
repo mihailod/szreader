@@ -153,24 +153,38 @@ final class AppModel: ObservableObject {
         didSet { sourcesChanged(enabled: showRetroSpec, site: .retrospec) }
     }
 
+    /// Whether the shipped archive.org catalogue is shown. Off by default for
+    /// the same reason, though this one is four issues rather than six hundred.
+    @AppStorage("showArchive") var showArchive = false {
+        didSet { sourcesChanged(enabled: showArchive, site: .archive) }
+    }
+
     /// Sources the reader has switched on. Empty is a real answer — it means
     /// the shelf is deliberately blank — which is why nothing here hands an
     /// empty set to the store, where empty means "no opinion, show all".
     var visibleSites: Set<IssueSite> {
-        var sites: Set<IssueSite> = []
-        if showStripZona { sites.insert(.stripzona) }
-        if showRetroSpec { sites.insert(.retrospec) }
-        return sites
+        Set(IssueSite.allCases.filter(isEnabled))
     }
 
     /// Told to the reader after switching a source on, so a shelf that just
-    /// grew by six hundred says where they came from and how to undo it.
-    @Published var sourceNotice: String?
+    /// grew says where the issues came from and how to undo it.
+    @Published var sourceNotice: SourceNotice?
+
+    /// One switch-on, in the words shown to whoever threw the switch.
+    ///
+    /// Carries the source as well as the sentence: both places that show this
+    /// are alerts, and an alert titled "RetroSpec" over a message about
+    /// archive.org is worse than no title at all.
+    struct SourceNotice: Equatable {
+        let site: IssueSite
+        let message: String
+    }
 
     func setSource(_ site: IssueSite, enabled: Bool) {
         switch site {
         case .stripzona: showStripZona = enabled
         case .retrospec: showRetroSpec = enabled
+        case .archive:   showArchive = enabled
         }
     }
 
@@ -178,6 +192,7 @@ final class AppModel: ObservableObject {
         switch site {
         case .stripzona: return showStripZona
         case .retrospec: return showRetroSpec
+        case .archive:   return showArchive
         }
     }
 
@@ -189,15 +204,19 @@ final class AppModel: ObservableObject {
     /// reader; hiding a source is a view, not a purge, and switching it back
     /// on returns exactly what was there.
     private func sourcesChanged(enabled: Bool, site: IssueSite) {
-        if enabled, site == .retrospec, let store {
+        if enabled, site.catalogueResource != nil, let store {
             do {
-                let report = try store.seedRetroSpecCatalogue()
+                let report = try store.seedCatalogue(for: site)
                 if report.inserted > 0 {
-                    sourceNotice = "\(report.inserted) RetroSpec magazines are now in "
-                                 + "your library. You can hide them again in Settings."
+                    // "issues", never "comics": these two catalogues are
+                    // magazines, and the word has to be true of both.
+                    sourceNotice = SourceNotice(
+                        site: site,
+                        message: "\(report.inserted) \(site.display) issues are now in "
+                               + "your library. You can hide them again in Settings.")
                 }
             } catch {
-                status = "RetroSpec catalogue unavailable: \(Library.reason(error))"
+                status = "\(site.display) catalogue unavailable: \(Library.reason(error))"
             }
         }
         // A filter naming a series from a source that is now hidden matches
@@ -320,20 +339,21 @@ final class AppModel: ObservableObject {
             // ever read, so a deliberate switch-off is never undone by it.
             if !UserDefaults.standard.bool(forKey: "retroSpecDefaultResolved") {
                 UserDefaults.standard.set(true, forKey: "retroSpecDefaultResolved")
-                if (try? store.hasSeededRetroSpec()) == true { showRetroSpec = true }
+                if (try? store.hasSeeded(.retrospec)) == true { showRetroSpec = true }
             }
 
-            // The catalogue ships with the app but is not loaded until its
+            // A catalogue ships with the app but is not loaded until its
             // source is switched on, so an untouched install really is empty
             // rather than empty-looking with 653 rows hidden behind a filter.
             //
             // A failure is not fatal. The forum library is the app's original
-            // reason to exist and works with or without this.
-            if showRetroSpec {
+            // reason to exist and works with or without either of these.
+            for site in IssueSite.allCases
+            where site.catalogueResource != nil && isEnabled(site) {
                 do {
-                    try store.seedRetroSpecCatalogue()
+                    try store.seedCatalogue(for: site)
                 } catch {
-                    status = "RetroSpec catalogue unavailable: \(Library.reason(error))"
+                    status = "\(site.display) catalogue unavailable: \(Library.reason(error))"
                 }
             }
 

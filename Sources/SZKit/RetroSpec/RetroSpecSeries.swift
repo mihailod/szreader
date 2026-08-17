@@ -1,33 +1,5 @@
 import Foundation
 
-/// What language an issue was published in.
-///
-/// Worth carrying because it is the only thing separating two of the series:
-/// Moj Mikro ran in Slovenian and in Serbo-Croatian, and the site files them
-/// as two independent runs, each numbering from one.
-public enum RetroSpecLanguage: String, Equatable, Sendable, CaseIterable {
-    case serbian, croatian, slovenian
-
-    /// The word the site prints on `magshow.php`, which is what a parse of
-    /// that page has to match.
-    init?(siteWord: String) {
-        switch siteWord.trimmingCharacters(in: .whitespaces).lowercased() {
-        case "srpski":                 self = .serbian
-        case "hrvatski", "srbohrvaški": self = .croatian
-        case "slovenski", "slovenščina": self = .slovenian
-        default: return nil
-        }
-    }
-
-    public var display: String {
-        switch self {
-        case .serbian:   return "Serbian"
-        case .croatian:  return "Croatian"
-        case .slovenian: return "Slovenian"
-        }
-    }
-}
-
 /// One magazine run on RetroSpec.
 ///
 /// The site has no series field: what identifies a run is the prefix of the
@@ -45,9 +17,9 @@ public struct RetroSpecSeries: Equatable, Sendable {
     public let code: String
     /// Nil for the books, which are not a periodical and carry no language
     /// on their pages.
-    public let language: RetroSpecLanguage?
+    public let language: Language?
 
-    public init(key: String, name: String, code: String, language: RetroSpecLanguage?) {
+    public init(key: String, name: String, code: String, language: Language?) {
         self.key = key; self.name = name; self.code = code; self.language = language
     }
 }

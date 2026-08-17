@@ -7,20 +7,20 @@ import XCTest
 /// proves the file built from it is the file in the bundle. They are separate
 /// failures: a parser can be perfect and the committed catalogue still be six
 /// months stale, and nothing else would notice.
-final class RetroSpecCatalogFileTests: XCTestCase {
+final class ShippedRetroSpecCatalogTests: XCTestCase {
 
-    private static var shipped: RetroSpecCatalogFile = {
+    private static var shipped: ShippedCatalog = {
         guard let url = Bundle.module.url(forResource: "retrospec-catalog",
                                           withExtension: "json"),
               let data = try? Data(contentsOf: url),
-              let file = try? RetroSpecCatalogFile.decode(data) else {
+              let file = try? ShippedCatalog.decode(data) else {
             fatalError("the catalogue is missing from the bundle — "
                        + "run `swift run retrospec-build`")
         }
         return file
     }()
 
-    private var catalogue: RetroSpecCatalogFile { Self.shipped }
+    private var catalogue: ShippedCatalog { Self.shipped }
 
     private static var fixtures: URL {
         URL(fileURLWithPath: #filePath)
@@ -32,7 +32,7 @@ final class RetroSpecCatalogFileTests: XCTestCase {
     // MARK: - Shape
 
     func testCatalogueIsTheVersionThisBuildUnderstands() {
-        XCTAssertEqual(catalogue.version, RetroSpecCatalogFile.currentVersion)
+        XCTAssertEqual(catalogue.version, ShippedCatalog.currentVersion)
         XCTAssertEqual(catalogue.base, "https://retrospec.elite.org/pcsux/")
         XCTAssertFalse(catalogue.generated.isEmpty)
     }

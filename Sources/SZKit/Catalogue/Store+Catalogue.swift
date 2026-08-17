@@ -14,21 +14,28 @@ public struct SeedReport: Equatable, Sendable {
 
 public extension Store {
 
-    /// Which build of the shipped catalogue this library has taken.
-    static let catalogueStamp = "retrospec_catalogue"
+    /// Which build of a shipped catalogue this library has taken.
+    ///
+    /// One key per source, so the two catalogues cannot skip each other:
+    /// RetroSpec keeps the key it has always written, which is why this is
+    /// spelled out rather than interpolated from the raw value alone.
+    static func catalogueStamp(for site: IssueSite) -> String {
+        "\(site.rawValue)_catalogue"
+    }
 
     // MARK: - Entry points
 
-    /// Applies the catalogue that shipped in the bundle, unless it has
+    /// Applies the catalogue this source ships in the bundle, unless it has
     /// already been applied.
     ///
-    /// Called on every launch. The common case is the second one — the stamp
-    /// matches, nothing is decoded, and the whole thing costs one row read.
+    /// Called on every launch for every source that is switched on. The common
+    /// case is the second one — the stamp matches, nothing is decoded, and the
+    /// whole thing costs one row read.
     @discardableResult
-    func seedRetroSpecCatalogue() throws -> SeedReport {
-        guard let url = Bundle.module.url(forResource: "retrospec-catalog",
-                                          withExtension: "json") else {
-            throw SeedError.catalogueMissing
+    func seedCatalogue(for site: IssueSite) throws -> SeedReport {
+        guard let resource = site.catalogueResource,
+              let url = Bundle.module.url(forResource: resource, withExtension: "json") else {
+            throw SeedError.catalogueMissing(site)
         }
         let data = try Data(contentsOf: url)
         // Stamped by content, not by the date inside it. `generated` is a
@@ -36,7 +43,8 @@ public extension Store {
         // the build that fixed three broken titles was the same day as the
         // build that introduced them. Every device that had already seeded
         // would have skipped the correction and kept the damage.
-        return try seed(try RetroSpecCatalogFile.decode(data), stamp: Self.digest(data))
+        return try seed(try ShippedCatalog.decode(data), site: site,
+                        stamp: Self.digest(data))
     }
 
     /// A stable fingerprint of the shipped file.
@@ -55,46 +63,52 @@ public extension Store {
     /// tests, which need to prove that a second pass over the same data
     /// changes nothing, and the stamp would otherwise make that vacuous.
     @discardableResult
-    func seed(_ file: RetroSpecCatalogFile, force: Bool = false,
-              stamp: String? = nil) throws -> SeedReport {
-        guard file.version <= RetroSpecCatalogFile.currentVersion else {
+    func seed(_ file: ShippedCatalog, site: IssueSite = .retrospec,
+              force: Bool = false, stamp: String? = nil) throws -> SeedReport {
+        guard file.version <= ShippedCatalog.currentVersion else {
             throw SeedError.tooNew(file.version)
         }
         let stamp = stamp ?? "\(file.version)/\(file.generated)"
-        if !force, try meta(Self.catalogueStamp) == stamp { return .alreadyCurrent }
+        let key = Self.catalogueStamp(for: site)
+        if !force, try meta(key) == stamp { return .alreadyCurrent }
 
         let series = Dictionary(uniqueKeysWithValues: file.series.map { ($0.key, $0) })
         var inserted = 0, updated = 0
 
-        // One transaction for all 653. Six hundred separate commits on a
-        // phone's flash is the difference between a launch that pauses and
-        // one that does not.
+        // One transaction for the whole catalogue. RetroSpec's is 653 issues,
+        // and six hundred separate commits on a phone's flash is the
+        // difference between a launch that pauses and one that does not.
         try db.transaction {
             for issue in file.issues {
                 guard let run = series[issue.series] else { continue }
-                let existing = try retroSpecID(code: issue.id)
-                let id = try writeRetroSpec(issue, run: run, base: file.base, existing: existing)
+                let existing = try catalogueID(site: site, code: issue.id)
+                let id = try writeCatalogued(issue, run: run, site: site,
+                                             base: file.base, existing: existing)
                 if existing == nil { inserted += 1 } else { updated += 1 }
-                try writeRetroSpecMirror(issue, base: file.base, issueID: id)
+                try writeCatalogueMirror(issue, base: file.base, issueID: id)
             }
-            try setMeta(Self.catalogueStamp, stamp)
+            try setMeta(key, stamp)
         }
         return SeedReport(inserted: inserted, updated: updated, skipped: false)
     }
 
     // MARK: - Rows
 
-    /// Looked up by the site's own id rather than by the natural key.
+    /// Looked up by the source's own id rather than by the natural key.
     ///
     /// The natural key includes `title_folded`, and a rebuilt catalogue can
     /// legitimately change a title — a month's spelling corrected upstream.
     /// Keying the seed on it would make that arrive as a *second* row rather
     /// than an edit, which is the identity bug the forum importer already
-    /// carries healing code for. The site's id never changes; it is the id.
-    private func retroSpecID(code: String) throws -> Int64? {
+    /// carries healing code for. The source's id never changes; it is the id.
+    ///
+    /// Scoped by site as well, because an id is only unique within its own
+    /// catalogue: two sources are two namespaces, exactly as the natural key
+    /// itself says.
+    private func catalogueID(site: IssueSite, code: String) throws -> Int64? {
         var found: Int64?
         try db.query("SELECT id FROM issue WHERE site = ? AND code = ?",
-                     [.text(IssueSite.retrospec.rawValue), .text(code)]) { row in
+                     [.text(site.rawValue), .text(code)]) { row in
             found = Int64(row.int(0) ?? 0)
         }
         return found
@@ -106,14 +120,14 @@ public extension Store {
     /// `read_at`, `started_at`, `last_page` and the download rows belong to
     /// the person using the app: a corrected title must not mark a finished
     /// magazine unread.
-    private func writeRetroSpec(_ issue: RetroSpecCatalogFile.Issue,
-                                run: RetroSpecCatalogFile.Series,
-                                base: String, existing: Int64?) throws -> Int64 {
+    private func writeCatalogued(_ issue: ShippedCatalog.Issue,
+                                 run: ShippedCatalog.Series, site: IssueSite,
+                                 base: String, existing: Int64?) throws -> Int64 {
         let folded = Fold.fold(issue.title)
         // The run's name goes in the searchable context so that typing
         // "svet kompjutera" finds an issue titled only "Oktobar 1984", and
         // the source's name so that "retrospec" finds the lot.
-        let context = "\(run.name) \(IssueSite.retrospec.display)"
+        let context = "\(run.name) \(site.display)"
         let search = Self.searchText(title: issue.title, code: issue.id,
                                      number: issue.number, series: run.name,
                                      context: context)
@@ -121,7 +135,7 @@ public extension Store {
         let values: [SQLValue] = [
             .text(issue.id), .int(Int64(issue.number)), .text(issue.title),
             .text(folded), .text(run.name), .text(run.name),
-            .text(IssueSite.retrospec.display),
+            .text(site.display),
             SQLValue(issue.coverURL(base: base)),
             .text(context), .text(search),
             SQLValue(issue.pages),
@@ -145,9 +159,9 @@ public extension Store {
                   (code, number, title, title_folded, series, edition, publisher,
                    cover_url, context, search_text, page_count, site, style, source)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, values + [.text(IssueSite.retrospec.rawValue),
+                """, values + [.text(site.rawValue),
                                .text(LabelStyle.labeledBlock.rawValue),
-                               .text("retrospec catalogue")])
+                               .text("\(site.rawValue) catalogue")])
         }
 
         // FTS is maintained by hand and keyed on rowid; deleting first is
@@ -169,11 +183,16 @@ public extension Store {
     /// restore them, and nothing in the app ever clears that flag; letting
     /// the download discover a 404 and record it keeps the answer current
     /// instead of freezing today's.
-    private func writeRetroSpecMirror(_ issue: RetroSpecCatalogFile.Issue,
+    private func writeCatalogueMirror(_ issue: ShippedCatalog.Issue,
                                       base: String, issueID: Int64) throws {
         let url = issue.zipURL(base: base)
-        let host = URL(string: url)?.host ?? "retrospec"
-        let filename = url.split(separator: "/").last.map(String.init)
+        let host = URL(string: url)?.host ?? "catalogue"
+        // Decoded, because this is the name the downloaded file is given.
+        // archive.org's paths carry the scan's real name with its spaces
+        // escaped, and a file called "Amiga%20Bilten%201.pdf" on disk is the
+        // escaping leaking out of the URL into the library.
+        let filename = url.split(separator: "/").last
+            .map { $0.removingPercentEncoding ?? String($0) }
         try db.run("""
             INSERT OR IGNORE INTO mirror (issue_id, url, host, ordinal, filename, size)
             VALUES (?, ?, ?, 0, ?, ?)
@@ -186,15 +205,15 @@ public extension Store {
                    [SQLValue(filename), SQLValue(issue.bytes.map(Int.init)), .text(url)])
     }
 
-    /// Whether this library already holds the catalogue.
+    /// Whether this library already holds a source's catalogue.
     ///
     /// Asked once by a build that introduces the source switch, to tell a
     /// reader who already has these magazines from one meeting them for the
     /// first time. The rows are the evidence rather than the stamp: a row is
     /// what a reader would notice going missing.
-    func hasSeededRetroSpec() throws -> Bool {
+    func hasSeeded(_ site: IssueSite) throws -> Bool {
         try db.scalarInt("SELECT EXISTS(SELECT 1 FROM issue WHERE site = ?)",
-                         [.text(IssueSite.retrospec.rawValue)]) == 1
+                         [.text(site.rawValue)]) == 1
     }
 
     // MARK: - Stamp
@@ -214,15 +233,15 @@ public extension Store {
 }
 
 public enum SeedError: Error, CustomStringConvertible {
-    case catalogueMissing
+    case catalogueMissing(IssueSite)
     case tooNew(Int)
 
     public var description: String {
         switch self {
-        case .catalogueMissing:
-            return "the RetroSpec catalogue is missing from the bundle"
+        case .catalogueMissing(let site):
+            return "the \(site.display) catalogue is missing from the bundle"
         case .tooNew(let version):
-            return "the RetroSpec catalogue is version \(version), which this build "
+            return "the catalogue is version \(version), which this build "
                  + "does not understand"
         }
     }

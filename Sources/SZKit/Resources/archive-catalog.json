@@ -1,0 +1,73 @@
+{
+  "base" : "https://archive.org/download/",
+  "generated" : "2026-08-17",
+  "issues" : [
+    {
+      "bytes" : 6105503,
+      "cover" : "a-profy-yugoslav-amiga-fanzine-1-july-1990/page/n0_w1024.jpg",
+      "id" : "a-profy-yugoslav-amiga-fanzine-1-july-1990",
+      "month" : 7,
+      "number" : 1,
+      "pages" : 20,
+      "series" : "a-profy",
+      "thumb" : "a-profy-yugoslav-amiga-fanzine-1-july-1990/__ia_thumb.jpg",
+      "title" : "Jul 1990",
+      "year" : 1990,
+      "zip" : "a-profy-yugoslav-amiga-fanzine-1-july-1990/A-Profy%20Yugoslav%20Amiga%20Fanzine%201%20July%201990.pdf"
+    },
+    {
+      "bytes" : 7095211,
+      "cover" : "a-profy-yugoslav-amiga-fanzine-2-august-1990/page/n0_w1024.jpg",
+      "id" : "a-profy-yugoslav-amiga-fanzine-2-august-1990",
+      "month" : 8,
+      "number" : 2,
+      "pages" : 19,
+      "series" : "a-profy",
+      "thumb" : "a-profy-yugoslav-amiga-fanzine-2-august-1990/__ia_thumb.jpg",
+      "title" : "Avgust 1990",
+      "year" : 1990,
+      "zip" : "a-profy-yugoslav-amiga-fanzine-2-august-1990/A-Profy%20Yugoslav%20Amiga%20Fanzine%202%20August%201990.pdf"
+    },
+    {
+      "bytes" : 7174738,
+      "cover" : "amiga-bilten-1/page/n0_w1024.jpg",
+      "id" : "amiga-bilten-1",
+      "month" : 9,
+      "number" : 1,
+      "pages" : 18,
+      "series" : "amiga-bilten",
+      "thumb" : "amiga-bilten-1/__ia_thumb.jpg",
+      "title" : "Septembar 1988",
+      "year" : 1988,
+      "zip" : "amiga-bilten-1/Amiga%20Bilten%201.pdf"
+    },
+    {
+      "bytes" : 7122104,
+      "cover" : "amiga-bilten-2/page/n0_w1024.jpg",
+      "id" : "amiga-bilten-2",
+      "month" : 10,
+      "number" : 2,
+      "pages" : 19,
+      "series" : "amiga-bilten",
+      "thumb" : "amiga-bilten-2/__ia_thumb.jpg",
+      "title" : "Oktobar 1988",
+      "year" : 1988,
+      "zip" : "amiga-bilten-2/Amiga%20Bilten%202.pdf"
+    }
+  ],
+  "series" : [
+    {
+      "code" : "AP",
+      "key" : "a-profy",
+      "language" : "serbian",
+      "name" : "A-Profy"
+    },
+    {
+      "code" : "AB",
+      "key" : "amiga-bilten",
+      "language" : "bosnian",
+      "name" : "Amiga Bilten"
+    }
+  ],
+  "version" : 1
+}

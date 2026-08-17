@@ -19,7 +19,7 @@ struct SourceToggle: View {
             set: { model.setSource(site, enabled: $0) }
         )) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(site.display).font(.headline)
+                Text(title).font(.headline)
                 Text(detail)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -28,18 +28,40 @@ struct SourceToggle: View {
         }
     }
 
+    /// What the switch is called.
+    ///
+    /// `site.display` everywhere except StripZona, which says here that an
+    /// account is needed — the one source that can be switched on and still
+    /// show nothing, because its links stay hidden until you are signed in.
+    /// The condition is on the switch rather than in `IssueSite.display`,
+    /// which is stored: it is written into the publisher column and the search
+    /// index of every seeded row, and a caveat belongs on a control, not in a
+    /// database.
+    private var title: String {
+        switch site {
+        case .stripzona: return "\(site.display) (free account needed)"
+        case .retrospec, .archive: return site.display
+        }
+    }
+
     /// What the reader is switching on, in the terms they would describe it.
     ///
-    /// Says where the issues come from, because the two sources behave
-    /// nothing alike: one is a forum you import pages from and the other is
-    /// a fixed catalogue that is simply there.
+    /// Says where the issues come from, because the sources behave nothing
+    /// alike: one is a forum you import pages from, the other two are fixed
+    /// catalogues that are simply there.
     private var detail: String {
         switch site {
         case .stripzona:
-            return "Comics and magazines you import from the StripZona forum."
+            return "Ex-Yugoslav, etc. comics and magazines you import from the StripZona forum."
         case .retrospec:
             return "Ex-Yugoslav computer magazines and books — Svet Kompjutera, "
                  + "Računari, Moj Mikro and more."
+        case .archive:
+            // Named rather than counted: four issues is a number that dates
+            // the sentence the moment a fifth is added, and the two runs are
+            // what someone would recognise.
+            return "Ex-Yugoslav Amiga fanzines scanned on the Internet Archive — "
+                 + "A-Profy and Amiga Bilten."
         }
     }
 }

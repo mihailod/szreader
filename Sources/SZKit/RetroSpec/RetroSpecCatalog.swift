@@ -55,12 +55,12 @@ public struct RetroSpecIssueInfo: Equatable, Sendable {
     /// The issue's number within its year, which is how the site counts.
     /// Zero marks a special that sits outside the numbering.
     public let numberInYear: Int?
-    public let language: RetroSpecLanguage?
+    public let language: Language?
     /// How many scanned pages the archive holds.
     public let pageCount: Int?
 
     public init(seriesName: String, year: Int?, monthText: String?,
-                numberInYear: Int?, language: RetroSpecLanguage?, pageCount: Int?) {
+                numberInYear: Int?, language: Language?, pageCount: Int?) {
         self.seriesName = seriesName; self.year = year; self.monthText = monthText
         self.numberInYear = numberInYear; self.language = language; self.pageCount = pageCount
     }
@@ -280,7 +280,7 @@ public enum RetroSpecCatalog {
             seriesName: seriesName,
             year: year, monthText: monthText, numberInYear: number,
             language: infoLanguage.firstGroups(html)?.capture(1)
-                .nonEmpty.flatMap(RetroSpecLanguage.init(siteWord:)),
+                .nonEmpty.flatMap(Language.init(siteWord:)),
             pageCount: pages.max())
     }
 }

@@ -2,10 +2,10 @@ import Foundation
 
 /// Which archive an issue came from.
 ///
-/// The two are nothing alike as sources — one is a forum whose topics are
-/// imported by hand and whose links point at third-party file hosts, the
-/// other a static index shipped with the app that downloads from one server —
-/// but they land in the same table on purpose.
+/// The three are nothing alike as sources — one is a forum whose topics are
+/// imported by hand and whose links point at third-party file hosts, the other
+/// two are static indexes shipped with the app that download from one server
+/// each — but they land in the same table on purpose.
 ///
 /// Everything downstream of an issue is keyed on `issue.id` as a globally
 /// unique number: the download folder is `comics/<id>`, the captured cover is
@@ -17,12 +17,28 @@ import Foundation
 public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     case stripzona
     case retrospec
+    case archive
 
     /// How the source is spelled in front of a reader.
     public var display: String {
         switch self {
         case .stripzona: return "StripZona"
         case .retrospec: return "RetroSpec"
+        case .archive:   return "Archive.org"
+        }
+    }
+
+    /// The catalogue shipped in the bundle for this source, if it has one.
+    ///
+    /// What makes a source seedable: the app switches one on, hands the name
+    /// to `seedCatalogue(for:)` and is done. StripZona has none — its issues
+    /// arrive by importing a forum page — and returning nil here is what says
+    /// so, rather than a `switch` in the app repeating the same fact.
+    public var catalogueResource: String? {
+        switch self {
+        case .stripzona: return nil
+        case .retrospec: return "retrospec-catalog"
+        case .archive:   return "archive-catalog"
         }
     }
 

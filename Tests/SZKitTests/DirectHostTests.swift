@@ -141,6 +141,36 @@ final class DirectHostTests: XCTestCase {
         XCTAssertEqual(document.pageCount, 1)
     }
 
+    /// A server having a moment is asked again, rather than reported to the
+    /// reader as a download that failed.
+    ///
+    /// This is archive.org, measured: the same URL answered 500 to three of
+    /// eight requests and served the file on the other five. An issue there
+    /// has one mirror and nothing to fall back to, so without this a third of
+    /// downloads ended in "every mirror failed: HTTP 500".
+    func testAServerErrorIsRetried() async throws {
+        let body = try zipOfOnePage(named: "sk19841001.png")
+        let server = try TinyHTTPServer(routes: ["/pcsux/SKH/ZIP/1984_10.zip": body],
+                                        failFirst: 2)
+        defer { server.stop() }
+
+        let store = try Store()
+        let issueID = try seedOneIssue(into: store, base: server.base + "/pcsux/")
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let library = Library(store: store, paths: LibraryPaths(root: root),
+                              transport: StubTransport { _ in .init(status: 500) },
+                              downloader: URLSessionDownloader(),
+                              registry: HostRegistry(hosts: [DirectHost(hosts: ["127.0.0.1"])]))
+
+        let outcome = try await library.fetch(issueID: issueID)
+        XCTAssertEqual(outcome.bytes, Int64(body.count))
+        XCTAssertEqual(server.requested.count, 3, "the two 500s should have been retried")
+    }
+
     /// A missing archive fails by saying so, and the issue is marked rather
     /// than silently looking untouched.
     ///
@@ -174,8 +204,8 @@ final class DirectHostTests: XCTestCase {
 
     /// One issue from a catalogue pointed at the test server.
     private func seedOneIssue(into store: Store, base: String) throws -> Int {
-        let file = RetroSpecCatalogFile(
-            version: RetroSpecCatalogFile.currentVersion,
+        let file = ShippedCatalog(
+            version: ShippedCatalog.currentVersion,
             generated: "2026-01-01", base: base,
             series: [.init(key: "SK", name: "Svet Kompjutera", code: "SK",
                            language: "serbian")],

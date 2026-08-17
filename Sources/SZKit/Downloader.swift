@@ -54,6 +54,19 @@ extension DownloadError {
         if case .insufficientSpace = self { return true }
         return false
     }
+
+    /// A status that says the server is having a moment rather than that the
+    /// file is gone.
+    ///
+    /// Worth telling apart because only one of them is worth trying again.
+    /// archive.org's item servers answer 500 to roughly one request in three —
+    /// measured against a single URL that served fine on the attempts either
+    /// side of each failure — and an issue there has exactly one mirror, so
+    /// without a second try a third of downloads fail outright.
+    var isServerError: Bool {
+        if case .badStatus(let code) = self { return (500..<600).contains(code) }
+        return false
+    }
 }
 
 public final class URLSessionDownloader: NSObject, FileDownloader, @unchecked Sendable {

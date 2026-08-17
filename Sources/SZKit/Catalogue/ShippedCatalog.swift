@@ -1,18 +1,21 @@
 import Foundation
 
-/// The shipped RetroSpec catalogue.
+/// A catalogue that ships inside the app: everything one source holds, minus
+/// the scans themselves.
 ///
-/// One definition, written by `retrospec-build` and read by the seed, so the
-/// generator and the consumer cannot drift apart. JSON rather than a prebuilt
+/// One shape for every such source — `retrospec-catalog.json` built by
+/// `retrospec-build`, `archive-catalog.json` built by `archive-build` — read
+/// by one seed, so a generator and the consumer cannot drift apart and a third
+/// source is a file rather than a code path. JSON rather than a prebuilt
 /// SQLite file: it diffs in git, so a rebuild shows exactly which issues the
-/// site gained or lost, and it carries no coupling to the SQLite version the
+/// source gained or lost, and it carries no coupling to the SQLite version the
 /// phone happens to have.
 ///
 /// The whole file is metadata — names, dates, sizes and URLs. No artwork and
 /// no scans are shipped; the covers are hotlinked and the archives are
 /// downloaded on request, which is what keeps the app free of content it has
 /// no right to redistribute.
-public struct RetroSpecCatalogFile: Codable, Equatable, Sendable {
+public struct ShippedCatalog: Codable, Equatable, Sendable {
 
     /// Bumped when the *shape* of this file changes, so a seed written for an
     /// older layout refuses a newer file instead of misreading it.
@@ -40,7 +43,8 @@ public struct RetroSpecCatalogFile: Codable, Equatable, Sendable {
     }
 
     public struct Issue: Codable, Equatable, Sendable {
-        /// The site's id — "SK_84_10". Half of the natural key.
+        /// The source's own id — "SK_84_10", or an archive.org identifier.
+        /// Half of the natural key.
         public let id: String
         /// Which run it belongs to; the other half.
         public let series: String
@@ -50,9 +54,16 @@ public struct RetroSpecCatalogFile: Codable, Equatable, Sendable {
         public let title: String
         public let year: Int?
         public let month: Int?
+        /// The one file that is the issue, relative to `base`.
+        ///
+        /// Named for what RetroSpec serves, which is a zip of scans. It is
+        /// whatever container the source publishes — archive.org's items are a
+        /// single PDF — and nothing downstream cares: the download sniffs the
+        /// magic bytes and the reader opens what it finds.
         public let zip: String
         public let cover: String?
-        /// The 68x93 grid thumbnail. Unused today — covers are hotlinked at
+        /// A small stand-in for the cover: RetroSpec's 68x93 grid thumbnail,
+        /// archive.org's item tile. Unused today — covers are hotlinked at
         /// full size — but recorded so that showing something instantly while
         /// the real cover loads stays a UI change rather than a rebuild.
         public let thumb: String?
@@ -97,7 +108,7 @@ public struct RetroSpecCatalogFile: Codable, Equatable, Sendable {
         return encoder
     }
 
-    public static func decode(_ data: Data) throws -> RetroSpecCatalogFile {
-        try JSONDecoder().decode(RetroSpecCatalogFile.self, from: data)
+    public static func decode(_ data: Data) throws -> ShippedCatalog {
+        try JSONDecoder().decode(ShippedCatalog.self, from: data)
     }
 }

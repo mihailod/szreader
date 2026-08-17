@@ -8,13 +8,13 @@ import XCTest
 /// that no pass ever touches what the reader owns.
 final class RetroSpecSeedTests: XCTestCase {
 
-    private func bundledCatalogue() throws -> RetroSpecCatalogFile {
+    private func bundledCatalogue() throws -> ShippedCatalog {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "retrospec-catalog",
                                                   withExtension: "json"))
-        return try RetroSpecCatalogFile.decode(try Data(contentsOf: url))
+        return try ShippedCatalog.decode(try Data(contentsOf: url))
     }
 
-    private func seededStore() throws -> (Store, RetroSpecCatalogFile) {
+    private func seededStore() throws -> (Store, ShippedCatalog) {
         let store = try Store()
         let file = try bundledCatalogue()
         try store.seed(file)
@@ -153,11 +153,11 @@ final class RetroSpecSeedTests: XCTestCase {
     func testACorrectedTitleUpdatesTheRowInPlace() throws {
         let (store, file) = try seededStore()
 
-        let revised = RetroSpecCatalogFile(
+        let revised = ShippedCatalog(
             version: file.version, generated: "2099-01-01", base: file.base,
             series: file.series,
             issues: file.issues.map { issue in
-                issue.id != "SK_84_10" ? issue : RetroSpecCatalogFile.Issue(
+                issue.id != "SK_84_10" ? issue : ShippedCatalog.Issue(
                     id: issue.id, series: issue.series, number: issue.number,
                     title: "Listopad 1984", year: issue.year, month: issue.month,
                     zip: issue.zip, cover: issue.cover, thumb: issue.thumb,
@@ -228,8 +228,8 @@ final class RetroSpecSeedTests: XCTestCase {
     func testACatalogueFromANewerBuildIsRefused() throws {
         let store = try Store()
         let file = try bundledCatalogue()
-        let future = RetroSpecCatalogFile(
-            version: RetroSpecCatalogFile.currentVersion + 1,
+        let future = ShippedCatalog(
+            version: ShippedCatalog.currentVersion + 1,
             generated: file.generated, base: file.base,
             series: file.series, issues: file.issues)
 
@@ -254,18 +254,18 @@ final class RetroSpecSeedTests: XCTestCase {
         let store = try Store()
         let file = try bundledCatalogue()
 
-        let broken = RetroSpecCatalogFile(
+        let broken = ShippedCatalog(
             version: file.version, generated: file.generated, base: file.base,
             series: file.series,
             issues: file.issues.map { issue in
-                issue.id != "Knjige_SP" ? issue : RetroSpecCatalogFile.Issue(
+                issue.id != "Knjige_SP" ? issue : ShippedCatalog.Issue(
                     id: issue.id, series: issue.series, number: issue.number,
                     title: "Spektrum Priru?nik", year: issue.year, month: issue.month,
                     zip: issue.zip, cover: issue.cover, thumb: issue.thumb,
                     bytes: issue.bytes, pages: issue.pages, dead: issue.dead)
             })
 
-        let encoder = RetroSpecCatalogFile.encoder()
+        let encoder = ShippedCatalog.encoder()
         try store.seed(broken, stamp: Store.digest(try encoder.encode(broken)))
         XCTAssertEqual(try store.recent(limit: nil)
             .first { $0.code == "Knjige_SP" }?.title, "Spektrum Priru?nik")
@@ -299,10 +299,10 @@ final class RetroSpecSeedTests: XCTestCase {
     /// checking that the resource resolves from the module bundle at all.
     func testTheBundledCatalogueLoads() throws {
         let store = try Store()
-        let report = try store.seedRetroSpecCatalogue()
+        let report = try store.seedCatalogue(for: .retrospec)
         XCTAssertEqual(report.inserted, 653)
         XCTAssertFalse(report.skipped)
         // And the stamp took, so the next launch does nothing.
-        XCTAssertTrue(try store.seedRetroSpecCatalogue().skipped)
+        XCTAssertTrue(try store.seedCatalogue(for: .retrospec).skipped)
     }
 }

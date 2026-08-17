@@ -121,6 +121,10 @@ public final class Library {
         case let e as HostError:      return e.description
         case let e as ArchiveError:   return e.description
         case let e as TransportError: return e.description
+        // Without this a missing catalogue reads as "The operation couldn't be
+        // completed. (SZKit.SeedError error 0.)" in the status line — which is
+        // exactly the sentence that hid a catalogue left out of the app bundle.
+        case let e as SeedError:      return e.description
         // Without this a database failure renders as "SZKit.SQLiteError error
         // 1" — the code with the message thrown away, which says nothing about
         // what actually went wrong.
@@ -622,11 +626,42 @@ public final class Library {
         return outcome
     }
 
+    /// How many times one mirror is asked, when what it answers is a 5xx.
+    ///
+    /// Three tries two seconds apart, which turns archive.org's roughly
+    /// one-in-three 500 into about one download in thirty needing the reader
+    /// to tap again. Only 5xx: a 404 is an answer, and asking again is how a
+    /// dead link becomes six seconds of waiting before the same message.
+    private static let serverErrorAttempts = 3
+    private static let serverErrorPause: UInt64 = 2_000_000_000
+
     private func attempt(mirror: MirrorLink, url: URL, issueID: Int,
                          into directory: URL,
                          filename explicitName: String? = nil,
                          sniff: Bool = true,
                          progress: (@Sendable (DownloadProgress) -> Void)?)
+        async throws -> DownloadOutcome {
+
+        var last: Error?
+        for round in 1...Self.serverErrorAttempts {
+            if round > 1 { try await Task.sleep(nanoseconds: Self.serverErrorPause) }
+            do {
+                return try await transfer(mirror: mirror, url: url, issueID: issueID,
+                                          into: directory, filename: explicitName,
+                                          sniff: sniff, progress: progress)
+            } catch let error as DownloadError where error.isServerError {
+                last = error
+            }
+        }
+        throw last ?? DownloadError.badStatus(500)
+    }
+
+    /// One pass at one mirror: resolve, fetch, and check what arrived.
+    private func transfer(mirror: MirrorLink, url: URL, issueID: Int,
+                          into directory: URL,
+                          filename explicitName: String?,
+                          sniff: Bool,
+                          progress: (@Sendable (DownloadProgress) -> Void)?)
         async throws -> DownloadOutcome {
 
         // Resolved immediately before use: these tokens expire in minutes, so

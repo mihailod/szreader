@@ -89,7 +89,7 @@ struct RetroSpecBuild {
         let file = catalogue(from: entries, info: info, sizes: sizes)
         try validate(file)
 
-        let data = try RetroSpecCatalogFile.encoder().encode(file)
+        let data = try ShippedCatalog.encoder().encode(file)
         try FileManager.default.createDirectory(
             at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: output, options: .atomic)
@@ -101,9 +101,9 @@ struct RetroSpecBuild {
 
     static func catalogue(from entries: [RetroSpecEntry],
                           info: [String: RetroSpecIssueInfo],
-                          sizes: [String: Fetcher.Probe]) -> RetroSpecCatalogFile {
+                          sizes: [String: Fetcher.Probe]) -> ShippedCatalog {
         let base = RetroSpecCatalog.base
-        var issues: [RetroSpecCatalogFile.Issue] = []
+        var issues: [ShippedCatalog.Issue] = []
 
         for series in RetroSpecSeriesTable.all {
             let mine = entries.enumerated().filter { $0.element.seriesKey == series.key }
@@ -122,7 +122,7 @@ struct RetroSpecBuild {
                 let entry = item.element
                 let probe = sizes[entry.id]
                 let alive = probe?.status == 200
-                issues.append(RetroSpecCatalogFile.Issue(
+                issues.append(ShippedCatalog.Issue(
                     id: entry.id,
                     series: series.key,
                     number: rank + 1,
@@ -139,8 +139,8 @@ struct RetroSpecBuild {
 
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
-        return RetroSpecCatalogFile(
-            version: RetroSpecCatalogFile.currentVersion,
+        return ShippedCatalog(
+            version: ShippedCatalog.currentVersion,
             generated: formatter.string(from: Date()),
             base: base,
             series: RetroSpecSeriesTable.all.map {
@@ -187,7 +187,7 @@ struct RetroSpecBuild {
     /// A build tool that silently emits a half-parsed file is worse than one
     /// that fails: the damage shows up much later, as issues missing from a
     /// shelf nobody is counting.
-    static func validate(_ file: RetroSpecCatalogFile) throws {
+    static func validate(_ file: ShippedCatalog) throws {
         guard file.issues.count == 653 else {
             throw Failure("expected 653 issues, built \(file.issues.count)")
         }

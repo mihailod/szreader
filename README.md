@@ -7,8 +7,9 @@
   StreamZine for iOS<br>
   comics & magazines reader<br>
   that supports<br>
-  StripZona forum<br>
-  and RetroSpec archive<br>
+  StripZona forum,<br>
+  RetroSpec archive<br>
+  and Archive.org<br>
 </th>
 </tr>
 </table>
@@ -36,22 +37,28 @@ Unlike StripZona there is nothing to browse or import: the index is built offlin
 own pages and read straight into the shelf, where it searches, filters and sorts exactly like
 everything else. Issues download individually, on request, from the archive itself.
 
-**Both sources can be switched on and off** in Settings, or from the empty shelf on a first run.
+A third: **Archive.org**, the Internet Archive. Hand-picked items rather than a whole site — for
+now the two ex-Yugoslav Amiga fanzines that survive in full, [A-Profy](https://archive.org/details/a-profy-yugoslav-amiga-fanzine-1-july-1990)
+(July and August 1990) and [Amiga Bilten](https://archive.org/details/amiga-bilten-1) (September and
+October 1988). Same shape as RetroSpec: the index is built offline from the archive's own metadata,
+each issue's cover is its first page, and the scan is downloaded from archive.org on request.
+
+**Every source can be switched on and off** in Settings, or from the empty shelf on a first run.
 Switching one off hides it everywhere — shelf, search and filter menus — and never deletes
 anything: what you have read and downloaded is exactly as you left it when you switch it back on.
-RetroSpec starts switched off, so the app opens on an empty shelf and asks rather than arriving
-with six hundred magazines nobody asked for.
+RetroSpec and Archive.org start switched off, so the app opens on an empty shelf and asks rather
+than arriving with six hundred magazines nobody asked for.
 
 ## What it does
 
 - **Imports a saved topic page** and turns its posts into library entries.
   Uploaders on the forum label issues in many ways; the parser learns offline from corpus and tries to
   handle each.
-- **Carries the RetroSpec index** for the ex-Yugoslav computer magazines, built offline
-  rather than imported, with dates, issue numbers, languages and page counts.
+- **Carries the RetroSpec and Archive.org indexes** for the ex-Yugoslav computer magazines and
+  fanzines, built offline rather than imported, with dates, issue numbers, languages and page counts.
 - **Finds cover art** from the page itself, or resolving the name against stripovi.com.
 - **Downloads** from mirrors (MediaFire, Mega, Pixeldrain), including split archives
-  and sets where one archive holds a run of issues, or straight from the RetroSpec archive.
+  and sets where one archive holds a run of issues, or straight from RetroSpec or archive.org.
 - **Reads** CBR, CBZ, RAR, ZIP, 7z and PDF. Portrait turns pages like Kindle; landscape is
   one continuous fit to width (for oversized content) scroll with a scrubber down each edge, so it works in either
   hand. It remembers where you stopped reading.
@@ -122,20 +129,28 @@ The test fixtures are saved forum pages in `spike/pages/`, which is gitignored t
 RetroSpec's fixtures are committed instead, under `Tests/Fixtures/retrospec/` — they are a public,
 static archive carrying no private links, so those tests run on a fresh clone with no network.
 
-The RetroSpec index is rebuilt by hand when the site changes:
+Both shipped indexes are rebuilt by hand — RetroSpec's when the site changes, Archive.org's when an
+item is added to the list in `ArchiveOrgLibrary`:
 
 ```sh
 swift run retrospec-build   # refetch, rebuild Sources/SZKit/Resources/retrospec-catalog.json
+swift run archive-build     # refetch, rebuild Sources/SZKit/Resources/archive-catalog.json
 ```
 
-It is a Swift tool rather than a script so that it parses the site with the same code the app runs
-and the tests cover. Everything it fetches is cached under `.retrospec-cache/`, so a rebuild asks
-the site for each page once, and it refuses to write a catalogue that fails its own checks.
+They are Swift tools rather than scripts so that they use the same code the app runs and the tests
+cover, and both refuse to write a catalogue that fails their own checks. `retrospec-build` caches
+everything it fetches under `.retrospec-cache/`, so a rebuild asks the site for each of its ~1300
+pages once; `archive-build` makes a dozen requests to archive.org's metadata API and caches nothing.
+
+Adding an issue from archive.org is a line in `ArchiveOrgLibrary.series` — its identifier, in the
+run it belongs to — and another `swift run archive-build`. Everything else (the scan's name and
+size, the page count, the cover, the title's month and year) comes from the item's own metadata.
 
 ## Licence
 
-Content: the app is just a reader — it hosts nothing and ships no content. The RetroSpec index that
-ships with it is metadata only — names, dates, sizes, page counts and links. Cover art is loaded
-from the archive, and issues are downloaded from it on request.
+Content: the app is just a reader — it hosts nothing and ships no content. The RetroSpec and
+Archive.org indexes that ship with it are metadata only — names, dates, sizes, page counts and
+links. Cover art is loaded from each archive, and issues are downloaded from it on request. This
+reader is not affiliated with or endorsed by the Internet Archive.
 
 Code: © Mihailo Despotovic, 2026. [PolyForm Noncommercial 1.0.0](LICENSE).

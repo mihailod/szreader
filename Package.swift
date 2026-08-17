@@ -120,17 +120,21 @@ let package = Package(
             publicHeadersPath: "include",
             cSettings: [.headerSearchPath("lzma")]
         ),
-        // The RetroSpec catalogue is a resource rather than a file in the app
-        // target, so `Bundle.module` finds it from both the app and `swift
+        // The shipped catalogues are resources rather than files in the app
+        // target, so `Bundle.module` finds them from both the app and `swift
         // test` — a seed the tests cannot load is a seed nothing checks.
         .target(name: "SZKit", dependencies: ["CUnrar", "C7z"],
                 resources: [.process("Resources")],
                 swiftSettings: [.swiftLanguageMode(.v6)]),
-        // Builds that catalogue. Not shipped and not linked by the app: it is
-        // run by hand, and it exists so the file the app reads is produced by
-        // the same parser the tests cover rather than by a script beside it.
+        // Builds those catalogues. Neither is shipped or linked by the app:
+        // they are run by hand, and they exist so the files the app reads are
+        // produced by the same types the tests cover rather than by a script
+        // beside them.
         .executableTarget(name: "retrospec-build", dependencies: ["SZKit"],
                           path: "Sources/RetroSpecBuild",
+                          swiftSettings: [.swiftLanguageMode(.v6)]),
+        .executableTarget(name: "archive-build", dependencies: ["SZKit"],
+                          path: "Sources/ArchiveBuild",
                           swiftSettings: [.swiftLanguageMode(.v6)]),
         // Still v5: the concurrency tests deliberately share one Store across
         // threads to prove the locking works, which mode 6 cannot see is safe.

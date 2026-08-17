@@ -18,15 +18,24 @@ final class TinyHTTPServer: @unchecked Sendable {
     private let listener: NWListener
     private let queue = DispatchQueue(label: "tiny-http")
     private let routes: [String: Data]
+    /// How many of the first requests to answer with a 500 before serving.
+    ///
+    /// Not a fault-injection framework — one counter, because one archive
+    /// really does behave this way: archive.org's item servers answer 500 to
+    /// roughly a third of requests for a file they then serve fine.
+    private let failFirst: Int
     private(set) var port: UInt16 = 0
     /// Paths that were actually requested, in order.
     private(set) var requested: [String] = []
     private let lock = NSLock()
 
-    /// - Parameter routes: path (with leading slash) to body. Anything not
-    ///   listed is a 404, which is what the eight dead archives look like.
-    init(routes: [String: Data]) throws {
+    /// - Parameters:
+    ///   - routes: path (with leading slash) to body. Anything not listed is a
+    ///     404, which is what the eight dead archives look like.
+    ///   - failFirst: answer this many requests with 500 first.
+    init(routes: [String: Data], failFirst: Int = 0) throws {
         self.routes = routes
+        self.failFirst = failFirst
         listener = try NWListener(using: .tcp, on: .any)
 
         let ready = DispatchSemaphore(value: 0)
@@ -63,10 +72,16 @@ final class TinyHTTPServer: @unchecked Sendable {
             let request = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
             let path = Self.path(ofRequest: request)
 
-            self.lock.lock(); self.requested.append(path); self.lock.unlock()
+            self.lock.lock()
+            self.requested.append(path)
+            let sulk = self.requested.count <= self.failFirst
+            self.lock.unlock()
 
             let response: Data
-            if let body = self.routes[path] {
+            if sulk {
+                response = Self.reply(status: "500 Internal Server Error",
+                                      body: Data("later".utf8))
+            } else if let body = self.routes[path] {
                 response = Self.reply(status: "200 OK", body: body)
             } else {
                 response = Self.reply(status: "404 Not Found", body: Data("no".utf8))

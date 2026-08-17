@@ -136,13 +136,13 @@ struct LibraryView: View {
         // Shown wherever the switch was thrown. The empty shelf carries the
         // same switches, so a reader can enable a source without ever opening
         // Settings — and then needs telling what just arrived.
-        .alert("RetroSpec", isPresented: Binding(
+        .alert(model.sourceNotice?.site.display ?? "", isPresented: Binding(
             get: { model.sourceNotice != nil && !showingSettings },
             set: { if !$0 { model.sourceNotice = nil } }
         )) {
             Button("OK", role: .cancel) { model.sourceNotice = nil }
         } message: {
-            Text(model.sourceNotice ?? "")
+            Text(model.sourceNotice?.message ?? "")
         }
     }
 
@@ -931,7 +931,7 @@ struct LibraryView: View {
 
     private var emptyDetail: String {
         if allSourcesOff {
-            return "Both sources are switched off. Switch one back on below, "
+            return "Every source is switched off. Switch one back on below, "
                  + "or in Settings, to see your issues again."
         }
         if nothingDownloaded {

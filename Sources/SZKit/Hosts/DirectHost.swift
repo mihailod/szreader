@@ -4,9 +4,16 @@ import Foundation
 ///
 /// The other three hosts exist because a MediaFire or Mega link is not a file
 /// — it is a page, or an API, that has to be talked into yielding a signed URL
-/// that expires in minutes. RetroSpec has none of that: the catalogue records
-/// `https://retrospec.elite.org/pcsux/SKH/ZIP/1984_10.zip`, and that is the
-/// archive. So this host resolves nothing and asks nothing.
+/// that expires in minutes. The shipped catalogues have none of that: they
+/// record `https://retrospec.elite.org/pcsux/SKH/ZIP/1984_10.zip` and
+/// `https://archive.org/download/amiga-bilten-1/Amiga%20Bilten%201.pdf`, and
+/// those *are* the files. So this host resolves nothing and asks nothing.
+///
+/// archive.org answers with a redirect to whichever of its servers holds the
+/// item — `dn721609.ca.archive.org` today, something else next year. Nothing
+/// here has to know that: the redirect is followed by URLSession inside the
+/// download, and it is exactly why the catalogue records the `/download/`
+/// address rather than the node the metadata happens to name.
 ///
 /// Scoped to named hosts rather than claiming every URL nobody else wants.
 /// As a catch-all it would swallow the unrecognised links on a forum page —
@@ -20,10 +27,10 @@ public struct DirectHost: FileHost {
     /// Hosts whose files may be fetched by URL alone.
     public let hosts: Set<String>
 
-    /// Defaults to the archive the shipped catalogue points at. Taken as a
-    /// parameter so a test can stand up its own server, and so the archive
+    /// Defaults to the archives the shipped catalogues point at. Taken as a
+    /// parameter so a test can stand up its own server, and so an archive
     /// moving is a one-line change rather than a new host implementation.
-    public init(hosts: Set<String> = ["retrospec.elite.org"]) {
+    public init(hosts: Set<String> = ["retrospec.elite.org", "archive.org"]) {
         self.hosts = Set(hosts.map { $0.lowercased() })
     }
 
