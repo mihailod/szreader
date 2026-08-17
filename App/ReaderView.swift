@@ -191,6 +191,17 @@ struct ReaderView: View {
                 Spacer()
                 Text(pageCount > 0 ? "\(index + 1) / \(pageCount)" : "…")
                     .font(.subheadline.monospacedDigit())
+                // Back to the grid, from wherever you have got to. Only worth
+                // offering for something with pages to look through, and only
+                // here — in the chrome, where Close and the scrubber already
+                // are — so nothing new appears over the page itself.
+                if pageCount > 1 {
+                    Button { model.browsePages(from: index) } label: {
+                        Label("Pages", systemImage: "square.grid.2x2.fill").font(.title3)
+                    }
+                    .labelStyle(.iconOnly)
+                    .padding(.leading, 4)
+                }
             }
             .padding()
             .background(.ultraThinMaterial)

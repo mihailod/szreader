@@ -39,7 +39,11 @@ struct ContinuousPages: View {
     /// Set once the strip has been scrolled to the resumed page. Until then
     /// the strip sits at the top and must not report page 1 as the place the
     /// reader has got to — that would overwrite where they actually were.
-    @State private var ready = false
+    @State private var placed = false
+    /// Whatever slot currently claims the middle of the screen. Kept even
+    /// while the strip is being placed, because that is what the walk needs to
+    /// know where it is setting off from.
+    @State private var centred: Int?
 
     var body: some View {
         GeometryReader { geo in
@@ -65,9 +69,14 @@ struct ContinuousPages: View {
                     .onTapGesture { onTap() }
                 }
                 .onPreferenceChange(CentrePageKey.self) { page in
+                    if let page { centred = page }
                     report(page)
                 }
-                .onAppear { open(with: proxy) }
+                .onAppear { if !placed { place(openAt, with: proxy) } }
+                // Every slot just changed height, so the strip is no longer
+                // showing what it was: put it back on the same page. Without
+                // an animation, because the reader did not ask to move.
+                .onChange(of: aspect) { _ in place(currentPage, with: proxy) }
                 .onChange(of: seek) { wanted in
                     guard let wanted else { return }
                     withAnimation(.easeOut(duration: 0.25)) {
@@ -120,30 +129,52 @@ struct ContinuousPages: View {
         }
     }
 
-    /// Puts the reader back where they stopped.
-    private func open(with proxy: ScrollViewProxy) {
-        guard !ready, pageCount > 0 else { return }
-        loadAround(openAt)
-        // A frame later: the strip does not exist to be scrolled until it has
-        // been laid out once.
+    /// Puts the strip on a page.
+    ///
+    /// A frame later, because the strip does not exist to be scrolled until it
+    /// has been laid out once, and then once more after that: the first scroll
+    /// realises the slots around the target, the second lands on it now that
+    /// its true position is known. Never animated — the reader did not ask to
+    /// move, they turned the iPad.
+    private func place(_ page: Int, with proxy: ScrollViewProxy) {
+        guard pageCount > 0 else { return }
+        let target = min(max(page, 0), pageCount - 1)
+        loadAround(target)
         DispatchQueue.main.async {
-            proxy.scrollTo(openAt, anchor: .top)
-            ready = true
+            proxy.scrollTo(target, anchor: .top)
+            DispatchQueue.main.async {
+                proxy.scrollTo(target, anchor: .top)
+                placed = true
+            }
         }
     }
 
+    /// Takes the shape of the pages from the first one that looks like a page.
+    ///
+    /// Not simply the first one to decode: an archive holds things that are not
+    /// pages, and this one takes the shape of the whole strip — see
+    /// `PageRenderer.isPageShaped`, which is where that story is written down.
+    ///
+    /// The height change is published on the next turn of the runloop rather
+    /// than here. This runs from a slot's `onAppear`, and resizing every slot
+    /// in the strip from inside the layout pass that is placing them is a
+    /// change made to something while it is being read.
     private func adopt(_ decoded: CGImage) {
         guard !aspectKnown, decoded.width > 0, decoded.height > 0 else { return }
-        aspectKnown = true
-        aspect = CGFloat(decoded.height) / CGFloat(decoded.width)
-        // Every slot just changed height, so the strip is no longer showing
-        // what it was. Put it back on the same page.
-        seek = currentPage
+        let shape = CGFloat(decoded.height) / CGFloat(decoded.width)
+        // Not a page: leave `aspectKnown` alone so the next one is considered.
+        guard PageRenderer.isPageShaped(width: decoded.width, height: decoded.height)
+        else { return }
+        DispatchQueue.main.async {
+            guard !aspectKnown else { return }
+            aspectKnown = true
+            aspect = shape
+        }
     }
 
     /// Whatever is halfway down the screen is what is being read.
     private func report(_ page: Int?) {
-        guard ready, let page, page != currentPage else { return }
+        guard placed, let page, page != currentPage else { return }
         currentPage = min(max(page, 0), max(pageCount - 1, 0))
     }
 

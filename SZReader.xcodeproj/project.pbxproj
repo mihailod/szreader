@@ -20,11 +20,13 @@
 		94082F888333404B61A3C818 /* SZReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */; };
 		95E0C572BF4994B77DDB41B0 /* CoverStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */; };
 		A0542A495542645E1D9C357D /* ReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A12CF237924287D34868EA /* ReaderView.swift */; };
+		BA4BB5AAC4C822A2A670E4E6 /* PagePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09747345D1188621DE903027 /* PagePickerView.swift */; };
 		C60D7220DE77EEC3D2B69C65 /* AppInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98B96100C7CD082FD8703855 /* AppInfo.swift */; };
 		F3E6287092C23A79A5D74554 /* SourceToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 289683A4600939769465C523 /* SourceToggle.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		09747345D1188621DE903027 /* PagePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PagePickerView.swift; sourceTree = "<group>"; };
 		0DA4EDA742DCFD028234085B /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
 		10A12CF237924287D34868EA /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
 		289683A4600939769465C523 /* SourceToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceToggle.swift; sourceTree = "<group>"; };
@@ -76,6 +78,7 @@
 				640135922A53F0FDE2BFEDE9 /* ImportView.swift */,
 				34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */,
 				B0919F3692489FEBE9A67D8D /* LibraryView.swift */,
+				09747345D1188621DE903027 /* PagePickerView.swift */,
 				897256247FA21EB8FD55169C /* PrivacyInfo.xcprivacy */,
 				10A12CF237924287D34868EA /* ReaderView.swift */,
 				29AF759576024F9476C06792 /* SettingsView.swift */,
@@ -186,6 +189,7 @@
 				0AAA7ACFD7935BADE0E1AC10 /* ImportView.swift in Sources */,
 				1BAD08BEBBFB9D7731135C47 /* LandscapeReader.swift in Sources */,
 				13A8C6AB3E55AC67FEC8D747 /* LibraryView.swift in Sources */,
+				BA4BB5AAC4C822A2A670E4E6 /* PagePickerView.swift in Sources */,
 				A0542A495542645E1D9C357D /* ReaderView.swift in Sources */,
 				94082F888333404B61A3C818 /* SZReaderApp.swift in Sources */,
 				8BAE8FA4A68B422E6C8F6C61 /* SettingsView.swift in Sources */,

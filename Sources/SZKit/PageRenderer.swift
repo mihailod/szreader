@@ -50,6 +50,29 @@ public enum PageRenderer {
 
     /// Whether the bytes decode as an image at all — a page that fails this is
     /// a corrupt entry rather than a page.
+    /// What a scanned page can plausibly be shaped like, as height ÷ width.
+    ///
+    /// Wide enough for a double-page spread at one end and a tall album page
+    /// at the other.
+    public static let pageShapes: ClosedRange<Double> = 0.4...2.5
+
+    /// Whether an image is shaped like a page of the comic rather than
+    /// something else the scanner put in the archive.
+    ///
+    /// Scans are not only pages. The fourth image in Alan Ford's "Grupa TNT"
+    /// is the book's spine: 69 by 2107, thirty times taller than it is wide.
+    /// The landscape reader sizes every slot in its strip from the first page
+    /// it decodes, and taking that one made each of the hundred and thirty-five
+    /// slots forty-two thousand points tall — the page then drew as a band
+    /// near the top of one and the reader was left looking at the empty rest
+    /// of it. A black screen, with a correct page number and working
+    /// scrubbers, which read as a comic that had failed to load rather than a
+    /// layout that had gone wrong.
+    public static func isPageShaped(width: Int, height: Int) -> Bool {
+        guard width > 0, height > 0 else { return false }
+        return pageShapes.contains(Double(height) / Double(width))
+    }
+
     public static func isDecodable(_ data: Data) -> Bool {
         pixelSize(of: data) != nil
     }

@@ -41,6 +41,31 @@ public struct LibraryPaths: Sendable {
         try? FileManager.default.createDirectory(at: covers, withIntermediateDirectories: true)
         return covers.appendingPathComponent("\(id).jpg")
     }
+
+    /// Small renderings of an issue's pages, for the grid a page is picked
+    /// from.
+    ///
+    /// Emphatically *not* inside the issue's own folder. Once a download is
+    /// unpacked that folder is the comic — `ComicDocument(unpackedAt:)` reads
+    /// every image in it as a page — so a thumbnail written there would turn
+    /// up in the middle of the magazine, at a fifth of the size of everything
+    /// around it. `discardUnwrapped` would delete it too.
+    ///
+    /// Zero-padded so the directory lists in reading order, which is worth a
+    /// great deal the first time you go looking in it.
+    public func pageThumbnails(forIssue id: Int) -> URL {
+        root.appendingPathComponent("thumbs/\(id)", isDirectory: true)
+    }
+
+    public func pageThumbnail(forIssue id: Int, page: Int) -> URL {
+        pageThumbnails(forIssue: id)
+            .appendingPathComponent(String(format: "%04d.jpg", page))
+    }
+
+    /// Every issue's thumbnails at once.
+    public var allPageThumbnails: URL {
+        root.appendingPathComponent("thumbs", isDirectory: true)
+    }
 }
 
 public struct DownloadOutcome: Equatable, Sendable {
@@ -282,6 +307,49 @@ public final class Library {
             throw DownloadError.notAnArchive("cover could not be written")
         }
         return Self.coverReference(issueID: issueID)
+    }
+
+    /// How wide a page thumbnail is rendered.
+    ///
+    /// Drawn at around 120pt in the grid, so this is the 2x size and no more:
+    /// a 300-page magazine is 300 of these, and the point of the grid is to
+    /// recognise a page at a glance rather than to read it.
+    public static let thumbnailPixels = 240
+
+    /// A small rendering of one page, made once and kept.
+    ///
+    /// Nil rather than throwing: a page that will not decode is one blank
+    /// square in a grid of hundreds, and there is nothing the reader could do
+    /// about it. Every other tile still draws.
+    ///
+    /// Pass the open document to have a missing thumbnail rendered; without
+    /// one this answers only from what is already on disk, which is what makes
+    /// re-opening the grid a handful of file reads rather than a second pass
+    /// over the whole magazine.
+    public func pageThumbnail(_ page: Int, ofIssue issueID: Int,
+                              renderingFrom document: ComicDocument? = nil) -> URL? {
+        let file = paths.pageThumbnail(forIssue: issueID, page: page)
+        if FileManager.default.fileExists(atPath: file.path) { return file }
+        guard let document, page >= 0, page < document.pageCount,
+              let image = (try? document.page(page, maxPixelSize: Self.thumbnailPixels)) ?? nil
+        else { return nil }
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        return PageRenderer.writeJPEG(image, to: file) ? file : nil
+    }
+
+    /// Throws away one issue's thumbnails.
+    ///
+    /// Called when its download goes: the pages they were made from are gone,
+    /// so the grid has nothing to show and the files are only taking up room.
+    /// They cost a re-render if the issue is downloaded again, which is the
+    /// same price as the first time.
+    public func discardPageThumbnails(forIssue issueID: Int) {
+        try? FileManager.default.removeItem(at: paths.pageThumbnails(forIssue: issueID))
+    }
+
+    public func discardAllPageThumbnails() {
+        try? FileManager.default.removeItem(at: paths.allPageThumbnails)
     }
 
     /// Drops what is left over from unwrapping an inner archive.

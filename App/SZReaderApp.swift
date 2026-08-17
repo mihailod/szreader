@@ -258,7 +258,9 @@ final class AppModel: ObservableObject {
     @Published var downloading: Set<Int> = []
 
     private var store: Store?
-    private var library: Library?
+    /// Readable so the page grid can render thumbnails from the pages already
+    /// on disk; only this model ever sets it.
+    private(set) var library: Library?
 
     init() { start() }
 
@@ -446,8 +448,27 @@ final class AppModel: ObservableObject {
         let id: Int
         var document: ComicDocument?
         let title: String
-        /// Where the reader stopped last time.
-        let startPage: Int
+        /// Where the reader is, or was left last time. Zero means it never
+        /// started. Moves when the grid is opened from the reader, so going
+        /// back to the grid marks the page you are on rather than the one you
+        /// arrived at.
+        var atPage: Int
+        /// Pages, where the source states them — so the grid can lay itself
+        /// out while the archive is still being opened. Nil for anything from
+        /// the forum, which never says.
+        let pageCount: Int?
+        /// Which of the two screens is up.
+        var stage: Stage
+
+        /// An issue always opens in the reader, where it left off. The grid is
+        /// somewhere the reader goes from there — never something put in front
+        /// of them on the way in.
+        enum Stage: Equatable {
+            /// The reader, open here.
+            case reading(from: Int)
+            /// The grid of pages.
+            case picking
+        }
     }
 
     enum ImportFailure: Error, CustomStringConvertible {
@@ -501,7 +522,8 @@ final class AppModel: ObservableObject {
 
         // On screen straight away, holding nothing but a title and a place.
         // The reader shows its own progress until the pages arrive.
-        reading = OpenComic(id: issue.id, document: nil, title: name, startPage: resumeAt)
+        reading = OpenComic(id: issue.id, document: nil, title: name, atPage: resumeAt,
+                            pageCount: issue.pageCount, stage: .reading(from: resumeAt))
 
         Task { @MainActor [weak self] in
             do {
@@ -518,6 +540,29 @@ final class AppModel: ObservableObject {
                 self.failure = "“\(name)” could not be opened.\n\n" + Library.reason(error)
             }
         }
+    }
+
+    /// Look through the pages first.
+    ///
+    /// `from` is where the reader has got to, when the grid is opened from
+    /// inside it. Without that the grid would mark and scroll to the page the
+    /// issue was opened at, which after twenty minutes of reading is nowhere
+    /// near where you are.
+    func browsePages(from page: Int? = nil) {
+        if let page { reading?.atPage = page }
+        reading?.stage = .picking
+    }
+
+    /// Back to the page the grid was opened from.
+    func backToReading() {
+        guard let open = reading else { return }
+        reading?.stage = .reading(from: open.atPage)
+    }
+
+    /// Start reading at the page picked out of the grid.
+    func read(page: Int) {
+        reading?.atPage = page
+        reading?.stage = .reading(from: page)
     }
 
     /// Turns one series on or off. Series are additive: several selected means
@@ -798,6 +843,8 @@ final class AppModel: ObservableObject {
                 return
             }
             removeFromDisk(try store.deleteDownload(issueID: issue.id))
+            // The pages they were rendered from have gone with it.
+            library?.discardPageThumbnails(forIssue: issue.id)
             refresh(note: "removed download for “\(issue.title ?? issue.code ?? "issue")”")
         } catch {
             status = "delete failed: \(error)"
@@ -810,6 +857,7 @@ final class AppModel: ObservableObject {
         do {
             let orphan = try store.delete(issueID: issue.id)
             removeFromDisk(orphan)
+            library?.discardPageThumbnails(forIssue: issue.id)
             refresh(note: "deleted “\(issue.title ?? issue.code ?? "issue")”")
         } catch {
             status = "delete failed: \(error)"
@@ -823,6 +871,7 @@ final class AppModel: ObservableObject {
         do {
             let files = try store.deleteAllDownloads()
             for file in files { removeFromDisk(file) }
+            library?.discardAllPageThumbnails()
             refresh(note: "removed \(files.count) download\(files.count == 1 ? "" : "s")")
         } catch {
             status = "remove failed: \(error)"
@@ -861,6 +910,7 @@ final class AppModel: ObservableObject {
                     continue
                 }
                 removeFromDisk(try store.deleteDownload(issueID: issue.id))
+                library?.discardPageThumbnails(forIssue: issue.id)
                 removed += 1
             }
             refresh(note: "removed \(removed) download\(removed == 1 ? "" : "s")")
@@ -879,6 +929,7 @@ final class AppModel: ObservableObject {
             let doomed = results
             for issue in doomed {
                 removeFromDisk(try store.delete(issueID: issue.id))
+                library?.discardPageThumbnails(forIssue: issue.id)
             }
             refresh(note: "deleted \(doomed.count) issue\(doomed.count == 1 ? "" : "s")")
         } catch {
@@ -891,6 +942,7 @@ final class AppModel: ObservableObject {
         do {
             let count = store.issueCount
             for file in try store.deleteAll() { removeFromDisk(file) }
+            library?.discardAllPageThumbnails()
             refresh(note: "deleted all \(count) issues")
         } catch {
             status = "delete failed: \(error)"
