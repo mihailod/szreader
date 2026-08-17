@@ -177,6 +177,53 @@ final class ArchiveCatalogTests: XCTestCase {
         XCTAssertTrue(try store.seedCatalogue(for: .archive).skipped)
     }
 
+    /// The name RetroSpec's stamp has always been written under.
+    ///
+    /// Spelled out here because every shipped device holds a row under this
+    /// exact key. Renaming it — tidying it into the site's display name, say —
+    /// would make every one of those libraries re-seed 653 issues on the first
+    /// launch after the update, which is the slow launch this stamp exists to
+    /// prevent.
+    func testTheStampKeepsTheNameTheShippedBuildWrote() {
+        XCTAssertEqual(Store.catalogueStamp(for: .retrospec), "retrospec_catalogue")
+        XCTAssertEqual(Store.catalogueStamp(for: .archive), "archive_catalogue")
+    }
+
+    /// An update finds the library exactly as the previous build left it.
+    ///
+    /// The realistic shape of it: a library seeded and read on one build, then
+    /// reopened by the next. Nothing about the catalogue has changed, so the
+    /// stamp matches, nothing is re-read, and neither the reading state nor
+    /// the second source's absence is disturbed by the launch.
+    func testAnUpdateReopensTheLibraryUntouched() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("upgrade-\(UUID().uuidString).sqlite").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        let readID: Int
+        do {   // the build the reader already has
+            let store = try Store(path: path)
+            try store.seedCatalogue(for: .retrospec)
+            try store.seedCatalogue(for: .archive)
+            let issue = try XCTUnwrap(try store.recent(limit: nil, sites: [.archive])
+                .first { $0.code == "amiga-bilten-1" })
+            readID = issue.id
+            try store.setRead(true, issueID: issue.id)
+            try store.setLastPage(9, issueID: issue.id)
+        }
+
+        // the build that replaces it
+        let store = try Store(path: path)
+        XCTAssertTrue(try store.seedCatalogue(for: .retrospec).skipped)
+        XCTAssertTrue(try store.seedCatalogue(for: .archive).skipped)
+        XCTAssertEqual(store.issueCount, 657)
+
+        let after = try XCTUnwrap(try store.recent(limit: nil)
+            .first { $0.id == readID })
+        XCTAssertEqual(after.readState, .read)
+        XCTAssertEqual(after.lastPage, 9)
+    }
+
     /// The filter menus keep the two apart, which is what a reader uses to
     /// find one run among nineteen others.
     func testTheMenusKeepTheSourcesApart() throws {

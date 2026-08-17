@@ -941,10 +941,13 @@ struct LibraryView: View {
         // was only ever right when there was one: a filter with no search text
         // — a series with nothing downloaded in it, say — rendered as
         // “Nothing in your 192 imported issues matches “”.”
+        // Every source named, because this is the one screen that says the app
+        // has more than one library in it, and the switches are right below.
+        // "Issues" throughout: two of the three sources are magazines.
         return model.issueCount == 0
-            ? "Tap Import to bring comics or magazines metadata from StripZona "
-              + "forum or switch on RetroSpec to enable ex-Yugoslav retro "
-              + "computer magazines and books index."
+            ? "Tap Import to bring issues in from the StripZona forum — or "
+              + "switch on RetroSpec for ex-Yugoslav computer magazines and "
+              + "books, or Archive.org for ex-Yugoslav Amiga fanzines and more."
             : "Nothing in your library matches that search / filter."
     }
 
