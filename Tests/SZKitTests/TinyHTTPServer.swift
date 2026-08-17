@@ -24,6 +24,8 @@ final class TinyHTTPServer: @unchecked Sendable {
     /// really does behave this way: archive.org's item servers answer 500 to
     /// roughly a third of requests for a file they then serve fine.
     private let failFirst: Int
+    /// When set, every request is refused with 429 and this `Retry-After`.
+    private let refuseWith: String?
     private(set) var port: UInt16 = 0
     /// Paths that were actually requested, in order.
     private(set) var requested: [String] = []
@@ -33,9 +35,11 @@ final class TinyHTTPServer: @unchecked Sendable {
     ///   - routes: path (with leading slash) to body. Anything not listed is a
     ///     404, which is what the eight dead archives look like.
     ///   - failFirst: answer this many requests with 500 first.
-    init(routes: [String: Data], failFirst: Int = 0) throws {
+    ///   - refuseWith: answer every request 429 with this `Retry-After` value.
+    init(routes: [String: Data], failFirst: Int = 0, refuseWith: String? = nil) throws {
         self.routes = routes
         self.failFirst = failFirst
+        self.refuseWith = refuseWith
         listener = try NWListener(using: .tcp, on: .any)
 
         let ready = DispatchSemaphore(value: 0)
@@ -78,7 +82,11 @@ final class TinyHTTPServer: @unchecked Sendable {
             self.lock.unlock()
 
             let response: Data
-            if sulk {
+            if let after = self.refuseWith {
+                response = Self.reply(status: "429 Too Many Requests",
+                                      body: Data("slow down".utf8),
+                                      headers: ["Retry-After": after])
+            } else if sulk {
                 response = Self.reply(status: "500 Internal Server Error",
                                       body: Data("later".utf8))
             } else if let body = self.routes[path] {
@@ -98,12 +106,14 @@ final class TinyHTTPServer: @unchecked Sendable {
         return parts.count >= 2 ? String(parts[1]) : ""
     }
 
-    private static func reply(status: String, body: Data) -> Data {
+    private static func reply(status: String, body: Data,
+                              headers: [String: String] = [:]) -> Data {
+        let extra = headers.map { "\($0.key): \($0.value)\r\n" }.joined()
         var out = Data("""
             HTTP/1.0 \(status)\r
             Content-Type: application/zip\r
             Content-Length: \(body.count)\r
-            Connection: close\r
+            \(extra)Connection: close\r
             \r\n
             """.utf8)
         out.append(body)

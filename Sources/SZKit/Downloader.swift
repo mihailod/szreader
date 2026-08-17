@@ -35,6 +35,8 @@ public enum DownloadError: Error, CustomStringConvertible {
     case emptyFile
     case notAnArchive(String)
     case insufficientSpace(required: Int64, available: Int64)
+    /// The server asked to be left alone for a while, and said so.
+    case rateLimited(host: String, retryAfter: TimeInterval?)
 
     public var description: String {
         switch self {
@@ -45,6 +47,16 @@ public enum DownloadError: Error, CustomStringConvertible {
         case .notAnArchive(let m): return "not a CBZ/CBR archive: \(m)"
         case .insufficientSpace:
             return "No free space on device — make room or remove some downloads"
+        case .rateLimited(let host, let wait):
+            // Written to be read by whoever tapped Download, because that is
+            // who has to act on it: the answer is to wait, and the only useful
+            // thing this can say is how long.
+            guard let wait, wait > 0 else {
+                return "\(host) is asking for a pause — too many requests. "
+                     + "Wait a few minutes before trying again."
+            }
+            return "\(host) is asking for a pause — too many requests. "
+                 + "Wait \(RetryAfter.phrase(wait)) before trying again."
         }
     }
 }
@@ -52,6 +64,18 @@ public enum DownloadError: Error, CustomStringConvertible {
 extension DownloadError {
     var isInsufficientSpace: Bool {
         if case .insufficientSpace = self { return true }
+        return false
+    }
+
+    /// Whether this is the server asking to be left alone.
+    ///
+    /// Its own question because it is the one failure that must not be
+    /// retried, must not be blamed on the mirror, and must not mark the issue
+    /// as failed on the shelf: nothing is wrong with the link. Public because
+    /// the last of those three is the app's call, not the library's — the
+    /// shelf mark and the alert both live up there.
+    public var isRateLimited: Bool {
+        if case .rateLimited = self { return true }
         return false
     }
 
@@ -69,6 +93,70 @@ extension DownloadError {
     }
 }
 
+/// `Retry-After`, which is two headers wearing one name.
+///
+/// RFC 9110 allows either a number of seconds or an HTTP date, and the hosts
+/// here use both — a CDN in front of an archive tends to send seconds, an
+/// origin under load tends to send a date. Reading only one of them would turn
+/// half of all rate limits into an unexplained failure.
+public enum RetryAfter {
+
+    /// How long the server asked for, or nil if it did not say.
+    ///
+    /// A date in the past — a clock skewed, or a response that sat in a queue —
+    /// is nil rather than a negative wait, because "wait -4 seconds" is not
+    /// something to put in front of a reader.
+    public static func seconds(_ header: String?, now: Date = Date()) -> TimeInterval? {
+        guard let header = header?.trimmingCharacters(in: .whitespaces), !header.isEmpty
+        else { return nil }
+        if let delta = TimeInterval(header) { return delta > 0 ? delta : nil }
+        guard let date = httpDate.date(from: header) else { return nil }
+        let wait = date.timeIntervalSince(now)
+        return wait > 0 ? wait : nil
+    }
+
+    /// "4 minutes", "30 seconds" — a wait as someone would say it.
+    ///
+    /// Rounded up, never down: a message that says one minute for a 90-second
+    /// limit sends the reader back early to the same refusal.
+    public static func phrase(_ seconds: TimeInterval) -> String {
+        if seconds < 90 {
+            let whole = max(1, Int(seconds.rounded(.up)))
+            return "\(whole) second\(whole == 1 ? "" : "s")"
+        }
+        if seconds < 5400 {
+            let minutes = max(1, Int((seconds / 60).rounded(.up)))
+            return "\(minutes) minute\(minutes == 1 ? "" : "s")"
+        }
+        let hours = max(1, Int((seconds / 3600).rounded(.up)))
+        return "\(hours) hour\(hours == 1 ? "" : "s")"
+    }
+
+    /// Fixed to the format and locale the header is defined in, not the
+    /// device's — an iPad set to Croatian would otherwise fail to read a date
+    /// that is always written in English.
+    private static let httpDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "GMT")
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return f
+    }()
+
+    /// The refusal a response amounts to, if it is one.
+    ///
+    /// 429 is the header for it and always counts, with or without a stated
+    /// wait. A 503 counts only when it carries one: a bare 503 is a server
+    /// having a moment, which is retried, while a 503 that names a wait is the
+    /// same server asking not to be.
+    static func refusal(status: Int, header: String?, host: String) -> DownloadError? {
+        let wait = seconds(header)
+        if status == 429 { return .rateLimited(host: host, retryAfter: wait) }
+        if status == 503, wait != nil { return .rateLimited(host: host, retryAfter: wait) }
+        return nil
+    }
+}
+
 public final class URLSessionDownloader: NSObject, FileDownloader, @unchecked Sendable {
 
     private let userAgent: String
@@ -77,8 +165,7 @@ public final class URLSessionDownloader: NSObject, FileDownloader, @unchecked Se
     /// the app is suspended. It is also why Mega decryption is a separate pass:
     /// the system writes the raw bytes out of process, so nothing can transform
     /// the stream in flight.
-    public init(userAgent: String = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15") {
+    public init(userAgent: String = UserAgent.browser) {
         self.userAgent = userAgent
     }
 
@@ -92,6 +179,14 @@ public final class URLSessionDownloader: NSObject, FileDownloader, @unchecked Se
         let session = URLSession(configuration: .default)
         let (bytes, response) = try await session.bytes(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            // Asked before the status is reported as a plain failure: a
+            // refusal names a wait, and the wait is the whole answer.
+            if let refusal = RetryAfter.refusal(
+                status: http.statusCode,
+                header: http.value(forHTTPHeaderField: "Retry-After"),
+                host: link.url.host ?? "the server") {
+                throw refusal
+            }
             throw DownloadError.badStatus(http.statusCode)
         }
         let expected = response.expectedContentLength

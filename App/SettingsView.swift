@@ -166,6 +166,41 @@ private struct Acknowledgements: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Group {
+                    Text("StripZona (free account needed)").font(.headline)
+                    Text("This is an independent reader. It is not affiliated "
+                         + "with, endorsed by, or connected to stripzona.com, "
+                         + "and it hosts no StripZona content of its own. A stripzona.com "
+			 + "approved account is needed to access any content.")
+                }
+                Group {
+                    Text("RetroSpec").font(.headline)
+                    // Credited by name, unlike the other two: this one is one
+                    // person's work rather than an institution, and the whole
+                    // ex-Yugoslav computer press survives in readable form
+                    // because he scanned it.
+                    Text("The RetroSpec source is Tomaž Kac's archive of "
+                         + "scanned ex-Yugoslav (1972=2001) computer magazines and books at "
+                         + "retrospec.elite.org/users/tomcat/yu. "
+                         + "The app ships the index and only downloads each "
+                         + "issue from the archive on demand. This is "
+                         + "an independent reader, not affiliated with or "
+                         + "endorsed by RetroSpec, and it hosts none of its "
+                         + "scans.")
+                }
+                Group {
+                    Text("Internet Archive").font(.headline)
+                    // The same disclaimer, and it has to be here for the same
+                    // reason: the app ships a list of archive.org items and
+                    // fetches them on request. It is not affiliated with the
+                    // Internet Archive and stores none of their material.
+                    Text("The Archive.org source lists items hosted by the "
+                         + "Internet Archive, which are downloaded from "
+                         + "archive.org on demand. This reader is "
+                         + "not affiliated with or endorsed by the Internet "
+                         + "Archive, and hosts none of their material. Only "
+                         + "ex-YU Amiga fanzines are currently indexed.")
+                }
+                Group {
                     Text("UnRAR").font(.headline)
                     // Reproduced verbatim, and it has to be: the licence asks
                     // for the full text of this paragraph, from those first
@@ -190,41 +225,6 @@ private struct Acknowledgements: View {
                     Text("LZMA SDK").font(.headline)
                     Text("7-Zip's LZMA SDK by Igor Pavlov, placed in the "
                          + "public domain. Used to read 7z archives.")
-                }
-                Group {
-                    Text("StripZona (free account needed)").font(.headline)
-                    Text("This is an independent reader. It is not affiliated "
-                         + "with, endorsed by, or connected to stripzona.com, "
-                         + "and it hosts no content of its own. A stripzona.com "
-			 + "approved account is needed to access any content.")
-                }
-                Group {
-                    Text("RetroSpec").font(.headline)
-                    // Credited by name, unlike the other two: this one is one
-                    // person's work rather than an institution, and the whole
-                    // ex-Yugoslav computer press survives in readable form
-                    // because he scanned it.
-                    Text("The RetroSpec source is Tomaž Kac's archive of "
-                         + "scanned ex-Yugoslav computer magazines and books at "
-                         + "retrospec.elite.org — nineteen runs from 1972 to "
-                         + "2001, and the reason any of them can still be read. "
-                         + "The app ships an index of it and downloads each "
-                         + "issue from the archive when you ask for it. This is "
-                         + "an independent reader, not affiliated with or "
-                         + "endorsed by RetroSpec, and it hosts none of its "
-                         + "scans.")
-                }
-                Group {
-                    Text("Internet Archive").font(.headline)
-                    // The same disclaimer, and it has to be here for the same
-                    // reason: the app ships a list of archive.org items and
-                    // fetches them on request. It is not affiliated with the
-                    // Internet Archive and stores none of their material.
-                    Text("The Archive.org source lists items hosted by the "
-                         + "Internet Archive, which are downloaded from "
-                         + "archive.org when you ask for them. This reader is "
-                         + "not affiliated with or endorsed by the Internet "
-                         + "Archive, and hosts none of their material.")
                 }
             }
             .font(.callout)

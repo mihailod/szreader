@@ -535,7 +535,13 @@ public final class Library {
                 try store.recordDownload(issueID: issueID, mirrorURL: mirror.url,
                                          path: outcome.path, bytes: outcome.bytes)
                 return outcome
-            } catch let error as DownloadError where error.isInsufficientSpace {
+            // A full disk and a refused rate are both about the reader's
+            // situation rather than this mirror's health, so neither is
+            // collected as a mirror failure and neither is followed by trying
+            // the next one — which for a rate limit would be the same server,
+            // asked again, moments after it said not to.
+            } catch let error as DownloadError
+                where error.isInsufficientSpace || error.isRateLimited {
                 throw error
             } catch HostError.notFound {
                 failures.append("\(mirror.host): dead")
@@ -603,6 +609,12 @@ public final class Library {
                                                 progress: slice)
                 total += outcome.bytes
                 if piece.part == 1 { first = outcome.path }
+            } catch let error as DownloadError where error.isRateLimited {
+                // Stops the set rather than working through the rest of the
+                // volumes: they are on the same host that has just asked for
+                // a pause, and the reader needs the message, not five more
+                // refusals collected into one.
+                throw error
             } catch {
                 failures.append("\(piece.source.host) part \(piece.part): "
                                 + "\(Self.reason(error))")

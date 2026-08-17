@@ -69,8 +69,7 @@ public final class URLSessionTransport: NSObject, Transport, URLSessionTaskDeleg
     /// task instead, which suppresses redirects just the same.
     private let session = URLSession(configuration: .ephemeral)
 
-    public init(userAgent: String = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15") {
+    public init(userAgent: String = UserAgent.browser) {
         self.userAgent = userAgent
     }
 

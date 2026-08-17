@@ -102,13 +102,13 @@ struct LibraryView: View {
             // one.
             .background(
                 Color.clear
-                    .alert("Download failed", isPresented: Binding(
+                    .alert(model.failure?.title ?? "", isPresented: Binding(
                         get: { model.failure != nil },
                         set: { if !$0 { model.failure = nil } }
                     )) {
                         Button("OK", role: .cancel) { model.failure = nil }
                     } message: {
-                        Text(model.failure ?? "")
+                        Text(model.failure?.message ?? "")
                     }
             )
         }

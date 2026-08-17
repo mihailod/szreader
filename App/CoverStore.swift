@@ -60,6 +60,11 @@ final class CoverStore: @unchecked Sendable {
 
         let config = URLSessionConfiguration.default
         config.requestCachePolicy = .returnCacheDataElseLoad
+        // The same string every other request in the app sends. Left unset,
+        // URLSession fills in CFNetwork's default — which names the app and
+        // the OS build, and did so on the most frequent request the app makes:
+        // one per cover, several per screen of shelf.
+        config.httpAdditionalHeaders = ["User-Agent": UserAgent.browser]
         session = URLSession(configuration: config)
     }
 
@@ -189,14 +194,31 @@ final class CoverStore: @unchecked Sendable {
     private func fetch(_ remote: URL, to file: URL, reportingAs key: String) async -> Data? {
         guard let (data, response) = try? await session.data(from: remote) else { return nil }
         let http = response as? HTTPURLResponse
-        guard CoverGuess.isImage(status: http?.statusCode ?? 200,
+        let status = http?.statusCode ?? 200
+        guard CoverGuess.isImage(status: status,
                                  contentType: http?.value(forHTTPHeaderField: "Content-Type"),
                                  body: data) else {
-            Self.reportDeadCover?(key)
+            // Only a definite answer condemns a cover. Nothing clears the dead
+            // mark once it is set, so a host that is rate-limiting or having a
+            // moment would otherwise blank artwork permanently over an answer
+            // that was never about the image — and a shelf that loads six
+            // hundred covers at once is exactly what provokes a 429.
+            if Self.isFinal(status) { Self.reportDeadCover?(key) }
             return nil
         }
         try? data.write(to: file, options: .atomic)
         return data
+    }
+
+    /// Whether a status is the server's last word on this URL.
+    ///
+    /// A 200 that was not an image counts: the server answered, and what it
+    /// has there is not artwork. So does anything in the 4xx range except the
+    /// two that mean "not now" — 408 and 429.
+    private static func isFinal(_ status: Int) -> Bool {
+        if status == 200 { return true }
+        if status == 408 || status == 429 { return false }
+        return (400..<500).contains(status)
     }
 
     /// The largest a cover is ever drawn.

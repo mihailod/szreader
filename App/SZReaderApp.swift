@@ -259,7 +259,19 @@ final class AppModel: ObservableObject {
     }
     /// A failure worth interrupting for. The status line is too easy to miss,
     /// and a download that silently does nothing looks like a broken app.
-    @Published var failure: String?
+    @Published var failure: Failure?
+
+    /// What the alert says, and what it is called.
+    ///
+    /// The title used to be the constant "Download failed", which is wrong for
+    /// the one failure that is not one: a host asking for a pause has not lost
+    /// the file and there is nothing to fix — the reader has to be told to
+    /// wait, and a heading that says the download failed sends them straight
+    /// back to the button.
+    struct Failure: Equatable {
+        let title: String
+        let message: String
+    }
 
     /// The comic currently open in the reader.
     @Published var reading: OpenComic?
@@ -570,7 +582,9 @@ final class AppModel: ObservableObject {
             } catch {
                 guard let self else { return }
                 self.reading = nil
-                self.failure = "“\(name)” could not be opened.\n\n" + Library.reason(error)
+                self.failure = Failure(
+                    title: "Could not open",
+                    message: "“\(name)” could not be opened.\n\n" + Library.reason(error))
             }
         }
     }
@@ -848,6 +862,23 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
+
+                // A host asking for a pause is not a download that failed.
+                // Nothing is wrong with the link, so nothing is marked on the
+                // shelf and the reader is told the one thing they can act on:
+                // how long to leave it.
+                if let refusal = error as? DownloadError, refusal.isRateLimited {
+                    self.search(self.query)
+                    self.status = "asked to wait"
+                    self.failure = Failure(
+                        title: "Too many requests",
+                        message: "“\(name)” was not downloaded.\n\n"
+                               + refusal.description
+                               + "\n\nNothing is wrong with the issue — trying "
+                               + "again before then will be refused too.")
+                    return
+                }
+
                 // Marked on the shelf, not just in an alert that is gone the
                 // moment it is dismissed: some of these links really are dead,
                 // and without a mark you retry them for ever.
@@ -857,8 +888,10 @@ final class AppModel: ObservableObject {
                 // Summarised, not dumped: interpolating the raw error filled
                 // the alert with NSError userInfo and buried the one sentence
                 // that says what went wrong.
-                self.failure = "“\(name)” could not be downloaded.\n\n"
-                    + Library.reason(error)
+                self.failure = Failure(
+                    title: "Download failed",
+                    message: "“\(name)” could not be downloaded.\n\n"
+                           + Library.reason(error))
             }
         }
     }
