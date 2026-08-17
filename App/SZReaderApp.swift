@@ -131,6 +131,10 @@ final class AppModel: ObservableObject {
         didSet { search(query) }
     }
 
+    /// The size the page thumbnails on disk were rendered at, so a build that
+    /// changes it can throw them away rather than serve the old ones.
+    @AppStorage("thumbnailSize") private var thumbnailSize = 0
+
     // MARK: - Sources
 
     /// Whether the forum's issues are shown. On by default: importing a page
@@ -292,6 +296,15 @@ final class AppModel: ObservableObject {
             // Safe from any thread — `Store` serialises its statements.
             CoverStore.reportDeadCover = { [weak store] url in
                 try? store?.markCoverDead(url: url)
+            }
+            // Page thumbnails are cached by page, not by size, so a change to
+            // how large they are rendered leaves the old ones being served at
+            // the old size — soft on a bigger tile, and nothing would ever
+            // replace them. Cheap to throw away: they are made from pages that
+            // are still on disk.
+            if thumbnailSize != Library.thumbnailPixels {
+                library?.discardAllPageThumbnails()
+                thumbnailSize = Library.thumbnailPixels
             }
             library = Library(store: store,
                               paths: paths,

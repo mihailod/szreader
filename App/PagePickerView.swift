@@ -70,9 +70,19 @@ struct PagePickerView: View {
         return page
     }
 
-    /// Around 120pt a tile, which puts five across a 12.9" iPad in portrait
-    /// and three across a phone — close to the archive's own five-up index.
-    private let columns = [GridItem(.adaptive(minimum: 108, maximum: 190), spacing: 14)]
+    /// How big a tile is, which is the only question this grid has to answer:
+    /// large enough to recognise a page by, small enough to take in a spread
+    /// of them at once.
+    ///
+    /// Five across an iPad in portrait, seven in landscape — the archive's own
+    /// index page runs five across a desktop window, and at arm's length on a
+    /// 12.9" screen that is about the same size in the eye. The phone keeps
+    /// the smaller tile it already had: three across is as few as fits before
+    /// the page numbers matter more than the pictures.
+    private var columns: [GridItem] {
+        let smallest: CGFloat = Device.isPhone ? 108 : 170
+        return [GridItem(.adaptive(minimum: smallest, maximum: smallest * 1.8), spacing: 14)]
+    }
 
     var body: some View {
         VStack(spacing: 0) {

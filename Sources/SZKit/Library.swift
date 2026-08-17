@@ -311,10 +311,13 @@ public final class Library {
 
     /// How wide a page thumbnail is rendered.
     ///
-    /// Drawn at around 120pt in the grid, so this is the 2x size and no more:
-    /// a 300-page magazine is 300 of these, and the point of the grid is to
-    /// recognise a page at a glance rather than to read it.
-    public static let thumbnailPixels = 240
+    /// Twice the widest a tile is ever drawn — about 190pt on an iPad — and no
+    /// more: a 300-page magazine is 300 of these, and the point of the grid is
+    /// to recognise a page at a glance rather than to read it.
+    ///
+    /// Changing this invalidates what is already on disk, which is why the app
+    /// discards the cache when the number moves.
+    public static let thumbnailPixels = 400
 
     /// A small rendering of one page, made once and kept.
     ///
