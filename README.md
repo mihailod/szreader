@@ -45,17 +45,33 @@ August 1990) and [Amiga Bilten](https://archive.org/details/amiga-bilten-1) (Sep
 1988), built offline from the archive's own metadata.
 
 And **anything else scanned there**. Import gains a second entry that opens archive.org's search
-inside the app; find an item, and Import brings it onto the shelf. Which file it downloads is your
-choice — the CBR or PDF the scanner uploaded, or the archive's smaller searchable-text PDF, with the
-size shown beside each, because the same comic is routinely 300 MB one way and 25 MB the other.
-JPEG 2000 pages, EPUB, OCR text layers and torrents are never offered: iOS cannot decode the first,
-the reader cannot open the next two, and there is no BitTorrent client here.
+inside the app; find an item, and Import brings it onto the shelf.
+
+Which file it downloads is your choice, with the size shown beside each, because the same comic is
+routinely 300 MB as the CBR its scanner uploaded and 25 MB as the PDF the archive derived from it.
+Only files this reader can actually open are offered, and the archive's own metadata is what decides:
+it marks every file as uploaded, derived or bookkeeping, so derivatives are admitted by a short
+allow-list rather than by their extension. That is what keeps out JPEG 2000 pages (iOS cannot decode
+them at all, and they are usually the largest file in the item), EPUB and OCR text layers (nothing
+here can open them), DAISY accessibility packages (navigation XML with no pages in it — and a
+plausible-looking 1 MB "ZIP" if you go by the extension) and torrents (every item has one whether or
+not anyone wanted it, and there is no BitTorrent client here). Items filed as software, audio or
+video are refused outright whatever they hold: a game's upload is a zip of disk images, and nothing
+in the file list says so.
+
+**One item is not always one issue.** The archive's "magazine packs" hold a whole run under a single
+identifier — thirteen issues of Transactor for the Amiga, one PDF each. Files are grouped by name,
+so two formats of one issue stay one issue while thirteen volumes become thirteen shelf entries,
+each with its own key, title and cover. Open a volume in the archive's own reader and the address
+says which one, so Import takes exactly what is on screen.
 
 Importing writes down the issue's details and its cover and stops there — the scan is downloaded
 later, from the shelf, like everything else. archive.org's metadata is uploader-typed and often
 sparse, wrong or missing, so nothing is guessed at beyond a title and an issue number: the publisher
 is recorded as **Archive.org** so search and the filter menus can find the lot, and the item's own
-title, identifier and tags all go into the search index untouched.
+title, identifier, filename and tags all go into the search index untouched. Covers come from the
+issue's own first page where the archive has rendered one, and otherwise from the scan itself once
+it is downloaded — never from another issue's artwork.
 
 Both browsers — StripZona's and this one — are **fenced to their own site**. The address line is a
 readout, never a field, and a link leading anywhere else is not followed. The app embeds a view of
@@ -74,8 +90,9 @@ than arriving with six hundred magazines nobody asked for.
   handle each.
 - **Carries the RetroSpec and Archive.org indexes** for the ex-Yugoslav computer magazines and
   fanzines, built offline rather than imported, with dates, issue numbers, languages and page counts.
-- **Imports single items from archive.org**, chosen in a fenced in-app browser, with the download
-  format picked by hand from what the item actually holds.
+- **Imports single items from archive.org**, found in a fenced in-app browser, with the download
+  format picked by hand from what the item actually holds — one shelf entry per issue, even when
+  the archive keeps a whole run of them under one identifier.
 - **Finds cover art** from the page itself, or resolving the name against stripovi.com.
 - **Downloads** from mirrors (MediaFire, Mega, Pixeldrain), including split archives
   and sets where one archive holds a run of issues, or straight from RetroSpec or archive.org.
@@ -83,8 +100,9 @@ than arriving with six hundred magazines nobody asked for.
   one continuous fit to width (for oversized content) scroll with a scrubber down each edge, so it works in either
   hand. It remembers where you stopped reading.
 - **Search, filter, sort** by title, hero, publisher, series or number, with
-  read/redaging/unread and downloaded states — across both sources at once, or
-  either on its own.
+  read/reading/unread and downloaded states — across all three sources at once, or
+  any of them on its own. The shelf leads with whatever arrived most recently;
+  a search stays in relevance order.
 
 ## StripZona Signing in
 
@@ -148,6 +166,9 @@ simulator. `unrar` and the LZMA SDK are vendored under `Sources/CUnrar` and
 The test fixtures are saved forum pages in `spike/pages/`, which is gitignored to protect the mirror links.
 RetroSpec's fixtures are committed instead, under `Tests/Fixtures/retrospec/` — they are a public,
 static archive carrying no private links, so those tests run on a fresh clone with no network.
+Archive.org's are inline in the tests: trimmed copies of the real metadata responses for the items
+the import was built against — a comic, a scanned magazine, a pack of thirteen, a game and a
+single-image upload — so they need no network either.
 
 Both shipped indexes are rebuilt by hand — RetroSpec's when the site changes, Archive.org's when an
 item is added to the list in `ArchiveOrgLibrary`:
