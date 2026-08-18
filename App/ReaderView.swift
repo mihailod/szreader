@@ -347,21 +347,24 @@ private struct PageView: View {
     @State private var looking = CGPoint(x: 0.5, y: 0.5)
 
     var body: some View {
-        Group {
-            if let image {
-                ZoomablePage(image: image, zoom: zoom, looking: looking,
-                             onSettle: { zoom = $0; looking = $1 },
-                             onTap: onTap, turnPage: turnPage)
-            } else {
-                ProgressView().tint(.white)
+        // One `ZoomablePage` for the life of this page, image or no image. Put
+        // behind an `if`, it was built and thrown away again the moment the
+        // decode landed — and a scroll view being born inside the pager while
+        // the pager is mid-swipe is enough to strand the swipe between two
+        // pages. The spinner is an overlay for the same reason.
+        ZoomablePage(image: image, zoom: zoom, looking: looking,
+                     onSettle: { zoom = $0; looking = $1 },
+                     onTap: onTap, turnPage: turnPage)
+            .overlay(alignment: .center) {
+                if image == nil { ProgressView().tint(.white) }
             }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
 private struct ZoomablePage: UIViewRepresentable {
-    let image: CGImage
+    /// Nil until the page has been decoded; the reader is on it before then.
+    let image: CGImage?
     /// Where a freshly built scroll view is to pick up from.
     let zoom: CGFloat
     let looking: CGPoint
@@ -435,8 +438,12 @@ private final class PageScroll: UIScrollView, UIScrollViewDelegate {
         bouncesZoom = true
         bounces = true
         // Set from the zoom, in `holdOntoDrags`.
+        panGestureRecognizer.isEnabled = false
         alwaysBounceHorizontal = false
         alwaysBounceVertical = false
+        // Nothing inside to delay a touch on the way to, and the delay is one
+        // more thing between the pager and a swipe.
+        delaysContentTouches = false
         showsHorizontalScrollIndicator = false
         showsVerticalScrollIndicator = false
         // The reader is full-screen and behind the chrome; a safe-area inset
@@ -454,17 +461,26 @@ private final class PageScroll: UIScrollView, UIScrollViewDelegate {
         // Or every double tap would show and hide the chrome on its way.
         single.require(toFail: double)
         addGestureRecognizer(single)
+        for tap in [double, single] {
+            // A tap recogniser holds back the touches it might still want,
+            // including the one that ends a swipe. The pager is waiting on that
+            // touch to decide which page it landed on, so none of it is held.
+            tap.delaysTouchesBegan = false
+            tap.delaysTouchesEnded = false
+            tap.cancelsTouchesInView = false
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("not loaded from a nib") }
 
-    /// The page to show. Only when it is actually a different image —
-    /// `updateUIView` runs for every unrelated change around it, and refitting
-    /// on each of those would be work for nothing.
-    func show(_ image: CGImage) {
+    /// The page to show, or nil while it is still being decoded. Acted on only
+    /// when it is actually a different image — `updateUIView` runs for every
+    /// unrelated change around it, and refitting on each of those would be work
+    /// for nothing.
+    func show(_ image: CGImage?) {
         guard image !== shown else { return }
         shown = image
-        page.image = UIImage(cgImage: image)
+        page.image = image.map { UIImage(cgImage: $0) }
         fittedTo = .zero
         setNeedsLayout()
     }
@@ -541,21 +557,28 @@ private final class PageScroll: UIScrollView, UIScrollViewDelegate {
 
     /// Which of the two scroll views a drag belongs to.
     ///
-    /// A scroll view takes a drag it can use and leaves one it cannot to
-    /// whatever is underneath — here the pager. That is exactly right unzoomed,
-    /// where the page has no slack and a swipe should turn it. Zoomed it is
-    /// not: a page held against its right edge has no slack that way either, so
-    /// a pan across it was handed to the pager and turned the page mid-read.
+    /// Unzoomed the answer is the pager: a whole page has nothing to pan, and a
+    /// swipe across it is how it is turned. Zoomed the answer is this one, all
+    /// the way to the edges — a page held against its right side has no slack
+    /// that way either, and letting the pager have that drag turned the page
+    /// mid-read. Bouncing counts as somewhere to go, so while zoomed the page
+    /// keeps every drag and rubber-bands at the ends, and a page is turned only
+    /// by the deliberate push in `scrollViewDidEndDragging`.
     ///
-    /// Bouncing counts as somewhere to go, so while zoomed the page keeps every
-    /// drag and rubber-bands at the ends — and a page is turned only by the
-    /// deliberate push in `scrollViewDidEndDragging`.
+    /// Unzoomed the pan is *disabled*, not merely left to decline. A scroll view
+    /// that declines a drag is still in the gesture arena for it, and that was
+    /// enough to get the pager's own drag cancelled instead of ended: the pager
+    /// stopped wherever the finger left it, between two pages, and stayed there
+    /// until a second swipe knocked it loose — which is what made turning pages
+    /// stick and then jump. A disabled recogniser is not in the arena at all.
+    /// The pinch is never disabled, so a zoom can still be started from a whole
+    /// page, and it is what carries the page under the fingers.
     private func holdOntoDrags() {
         let zoomed = zoomScale > minimumZoomScale
-        if alwaysBounceHorizontal != zoomed {
-            alwaysBounceHorizontal = zoomed
-            alwaysBounceVertical = zoomed
-        }
+        guard panGestureRecognizer.isEnabled != zoomed else { return }
+        panGestureRecognizer.isEnabled = zoomed
+        alwaysBounceHorizontal = zoomed
+        alwaysBounceVertical = zoomed
     }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { page }
