@@ -63,7 +63,8 @@ enum PendingAction: Identifiable {
 struct LibraryView: View {
     @ObservedObject var model: AppModel
     @State private var selected: StoredIssue?
-    @State private var showingImport = false
+    /// Which browser is open, if either.
+    @State private var browsing: BrowseTarget?
     @State private var showingSettings = false
     /// Set when Import was tapped with StripZona hidden, so the reader is
     /// asked before importing into a source they cannot see.
@@ -114,8 +115,15 @@ struct LibraryView: View {
         }
         // Kept off the view that owns .sheet(item:): SwiftUI honours only one
         // presentation modifier per view, and the sheet would win.
-        .fullScreenCover(isPresented: $showingImport) {
-            ImportView { html in try model.importPage(html: html) }
+        //
+        // One cover for both browsers rather than one each, for that same
+        // reason: two `fullScreenCover` modifiers on one view means only the
+        // last of them ever presents anything.
+        .fullScreenCover(item: $browsing) { target in
+            switch target {
+            case .stripzona: ImportView { html in try model.importPage(html: html) }
+            case .archive:   ArchiveBrowserView(model: model)
+            }
         }
         .sheet(isPresented: $showingSettings) { SettingsView(model: model) }
         // Importing into a hidden source would land a page of comics nowhere
@@ -126,7 +134,7 @@ struct LibraryView: View {
         .alert("Enable StripZona?", isPresented: $confirmingStripZona) {
             Button("Yes") {
                 model.setSource(.stripzona, enabled: true)
-                showingImport = true
+                browsing = .stripzona
             }
             Button("No", role: .cancel) { }
         } message: {
@@ -334,21 +342,42 @@ struct LibraryView: View {
             .menuStyle(.borderlessButton)
             .tint(filtering ? .accentColor : .secondary)
 
-            // The icon goes on a phone. Even on its own row the controls
-            // came to about 420pt against a 6.1" screen's 393, and Import —
-            // the one button the first screen exists for — was what ran off
-            // the edge. The word alone is unambiguous; the icon was decoration.
-            Button { beginImport() } label: {
-                if Device.isPhone {
-                    Text("Import")
-                        .font(.headline).padding(.horizontal, 4).frame(height: 36)
-                } else {
-                    Label("Import", systemImage: "square.and.arrow.down")
-                        .font(.headline).padding(.horizontal, 6).frame(height: 40)
+            // With Archive.org switched on there are two places to import
+            // from, so the button asks which. With it off there is one, and
+            // the button stays exactly what it has always been — a tap that
+            // opens the forum — rather than a menu with a single entry.
+            if model.showArchive {
+                Menu {
+                    Button { beginImport() } label: {
+                        Label("StripZona", systemImage: "text.bubble")
+                    }
+                    Button { browsing = .archive } label: {
+                        Label("Archive.org", systemImage: "building.columns")
+                    }
+                } label: {
+                    importLabel
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(Device.isPhone ? .regular : .large)
+            } else {
+                Button { beginImport() } label: { importLabel }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(Device.isPhone ? .regular : .large)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(Device.isPhone ? .regular : .large)
+    }
+
+    /// The icon goes on a phone. Even on its own row the controls came to
+    /// about 420pt against a 6.1" screen's 393, and Import — the one button
+    /// the first screen exists for — was what ran off the edge. The word alone
+    /// is unambiguous; the icon was decoration.
+    @ViewBuilder private var importLabel: some View {
+        if Device.isPhone {
+            Text("Import")
+                .font(.headline).padding(.horizontal, 4).frame(height: 36)
+        } else {
+            Label("Import", systemImage: "square.and.arrow.down")
+                .font(.headline).padding(.horizontal, 6).frame(height: 40)
+        }
     }
 
     /// The series rows themselves, shared by the grouped and ungrouped forms
@@ -374,10 +403,19 @@ struct LibraryView: View {
     /// settings screen they have no reason to open.
     private func beginImport() {
         if model.showStripZona {
-            showingImport = true
+            browsing = .stripzona
         } else {
             confirmingStripZona = true
         }
+    }
+
+    /// Which browser the Import button opens.
+    ///
+    /// Identifiable so one `fullScreenCover(item:)` can present either — see
+    /// the note on that modifier for why there is only one.
+    enum BrowseTarget: String, Identifiable {
+        case stripzona, archive
+        var id: String { rawValue }
     }
 
     /// One menu for both layouts — long-pressing cover art behaves identically

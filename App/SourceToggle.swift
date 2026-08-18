@@ -60,8 +60,13 @@ struct SourceToggle: View {
             // Named rather than counted: four issues is a number that dates
             // the sentence the moment a fifth is added, and the two runs are
             // what someone would recognise.
-            return "Ex-Yugoslav Amiga fanzines scanned on the Internet Archive — "
-                 + "A-Profy and Amiga Bilten."
+            //
+            // The second sentence is why this switch is worth more than the
+            // fanzines it started as: with it on, Import gains a second entry
+            // and anything scanned on the Internet Archive can be brought in.
+            return "Scanned Ex-Yugoslav Amiga fanzines - "
+                 + "A-Profy and Amiga Bilten. Also search and "
+                 + "Import public Internet Archive content."
         }
     }
 }

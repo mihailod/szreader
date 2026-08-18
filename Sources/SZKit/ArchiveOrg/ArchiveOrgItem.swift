@@ -12,8 +12,10 @@ import Foundation
 public struct ArchiveOrgItem: Equatable, Sendable {
 
     public let identifier: String
-    /// The item's own title — "Amiga Bilten 1". Not what the shelf shows: the
-    /// shelf wants "Septembar 1988", which is assembled from `date`.
+    /// The item's own title — "Amiga Bilten 1". Not what the shelf shows for a
+    /// shipped issue: that wants "Septembar 1988", which is assembled from
+    /// `date`. For an item imported out of the browser it is all there is, and
+    /// `Store.archiveLabel` is what makes a shelf entry of it.
     public let title: String
     /// "1988-09" on all four of the items shipped today. The month is what the
     /// title is built from, so an item dated by year alone gets a title of
@@ -21,6 +23,16 @@ public struct ArchiveOrgItem: Equatable, Sendable {
     public let year: Int?
     public let month: Int?
     public let files: [File]
+    /// What kind of thing the archive thinks this is — "texts", "image",
+    /// "audio", "collection". Lowercased.
+    ///
+    /// Not used to decide anything: an item is importable when it holds a file
+    /// this app can open, which is a better test than a word its uploader
+    /// picked off a menu. Kept because it is the one honest sentence to put in
+    /// front of a reader whose item yields nothing.
+    public let mediatype: String?
+    /// The uploader's own tags. Searchable, and nothing else.
+    public let subjects: [String]
 
     public struct File: Equatable, Sendable {
         public let name: String
@@ -35,10 +47,14 @@ public struct ArchiveOrgItem: Equatable, Sendable {
         }
     }
 
+    /// The two fields the browser added carry defaults, so the shape the
+    /// catalogue builder and its tests construct an item in is unchanged.
     public init(identifier: String, title: String,
-                year: Int?, month: Int?, files: [File]) {
+                year: Int?, month: Int?, files: [File],
+                mediatype: String? = nil, subjects: [String] = []) {
         self.identifier = identifier; self.title = title
         self.year = year; self.month = month; self.files = files
+        self.mediatype = mediatype; self.subjects = subjects
     }
 
     // MARK: - The files that matter
@@ -82,14 +98,21 @@ public struct ArchiveOrgItem: Equatable, Sendable {
     public static func decode(_ data: Data) throws -> ArchiveOrgItem? {
         let payload = try JSONDecoder().decode(Payload.self, from: data)
         guard let metadata = payload.metadata else { return nil }
-        let date = Self.dateComponents(of: metadata.date)
+        let date = Self.dateComponents(of: metadata.date?.first)
+        let title = metadata.title?.first?.trimmingCharacters(in: .whitespacesAndNewlines)
         return ArchiveOrgItem(
             identifier: metadata.identifier,
-            title: metadata.title,
+            // An item with no title at all is rare and real. Its identifier is
+            // the only name it has, and is a better one to put on a shelf than
+            // an empty string — which would also fold to an empty search key
+            // and make the row unfindable.
+            title: (title?.isEmpty == false ? title : nil) ?? metadata.identifier,
             year: date.year, month: date.month,
             files: (payload.files ?? []).map {
                 File(name: $0.name, format: $0.format, bytes: $0.size.flatMap(Int64.init))
-            })
+            },
+            mediatype: metadata.mediatype?.first?.lowercased(),
+            subjects: metadata.subject?.values ?? [])
     }
 
     /// "1988-09" — year, and month when the item is dated to one.
@@ -113,16 +136,56 @@ public struct ArchiveOrgItem: Equatable, Sendable {
         let metadata: Metadata?
         let files: [RawFile]?
 
+        /// Every field but the identifier is read loosely, and every one of
+        /// them is optional.
+        ///
+        /// The four items this app ships were chosen by hand and are as
+        /// well-formed as the archive gets. Anything a reader browses to was
+        /// filled in by whoever uploaded it: a title can be missing, a date
+        /// can be "n.d.", and any of these can arrive as a list where the same
+        /// key on the next item is a string. A strict decoder throws on the
+        /// second shape and loses the whole item over a field that may not
+        /// even be read.
         struct Metadata: Decodable {
             let identifier: String
-            let title: String
-            let date: String?
+            let title: LooseText?
+            let date: LooseText?
+            let mediatype: LooseText?
+            let subject: LooseText?
         }
 
         struct RawFile: Decodable {
             let name: String
             let format: String?
             let size: String?
+        }
+    }
+}
+
+/// A metadata value archive.org states as either one string or a list of them.
+///
+/// Which shape a given key arrives in is decided by whoever filled in the
+/// upload form, not by the key: `subject` is a string on one Zagor item and an
+/// array on the next. Decoding both as a list means nothing downstream has to
+/// know or care.
+struct LooseText: Decodable {
+
+    let values: [String]
+
+    var first: String? { values.first }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let one = try? container.decode(String.self) {
+            values = [one]
+        } else if let many = try? container.decode([String].self) {
+            values = many
+        } else if let number = try? container.decode(Int.self) {
+            // A title of "1988" decodes as a number, and losing an item over
+            // that would be absurd.
+            values = [String(number)]
+        } else {
+            values = []
         }
     }
 }

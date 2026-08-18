@@ -483,6 +483,72 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Archive.org
+
+    /// Asks archive.org what an item holds, while the reader browses.
+    ///
+    /// Not the throttled transport the downloads share. That one exists to
+    /// keep third-party file hosts from banning the device; this is
+    /// archive.org's own metadata API being asked one small question per page
+    /// opened, and a second and a half of latency on every tap would be paid
+    /// by the person browsing for nobody's benefit.
+    private let archive = ArchiveOrgClient(transport: URLSessionTransport())
+
+    /// Items already asked about, so stepping back and forward through the
+    /// browser's history costs nothing.
+    ///
+    /// A browsing convenience, not a store: it is dropped wholesale once it
+    /// gets large rather than being aged entry by entry. Losing it costs one
+    /// request the next time an item is opened, which is what the first visit
+    /// cost anyway.
+    private var archiveItems: [String: ArchiveOrgItem] = [:]
+
+    /// How many items are remembered before the lot is dropped. A long
+    /// afternoon's browsing is tens of items, not hundreds.
+    private static let archiveCacheLimit = 200
+
+    func archiveItem(_ identifier: String) async throws -> ArchiveOrgItem? {
+        if let known = archiveItems[identifier] { return known }
+        let item = try await archive.item(identifier)
+        if let item {
+            if archiveItems.count >= Self.archiveCacheLimit { archiveItems.removeAll() }
+            archiveItems[identifier] = item
+        }
+        return item
+    }
+
+    /// What the library already holds for an item, so the browser can say so
+    /// before the reader taps Import.
+    func archiveRow(_ identifier: String) -> ArchiveRow? {
+        (try? store?.archiveItem(identifier: identifier)) ?? nil
+    }
+
+    /// Puts an archive.org item on the shelf. Metadata and cover only.
+    ///
+    /// Nothing is downloaded: the reader is in a browser looking for the next
+    /// item, and an issue arrives here the way every other issue does — greyed
+    /// out, waiting to be asked for.
+    @discardableResult
+    func importFromArchive(_ item: ArchiveOrgItem,
+                           file: ArchiveOrgItem.ReadableFile) throws -> ArchiveImport {
+        guard let store else { throw ImportFailure.notReady }
+        // Changing which file an issue points at makes whatever is on the
+        // device a download of something else. Dropped here rather than left
+        // behind, where the shelf would go on showing the issue as downloaded
+        // and open the old file for ever.
+        let url = file.url(item: item.identifier)
+        if let existing = try store.archiveItem(identifier: item.identifier),
+           existing.isDownloaded, existing.mirrorURL != url {
+            removeFromDisk(try store.deleteDownload(issueID: existing.issueID))
+            library?.discardPageThumbnails(forIssue: existing.issueID)
+        }
+        let done = try store.importArchiveItem(item, file: file)
+        refresh(note: done.existed
+                ? "updated “\(done.title)”"
+                : "imported “\(done.title)” from Archive.org")
+        return done
+    }
+
     /// A comic handed to the reader. Identifiable so it can drive a cover.
     /// A comic handed to the reader.
     ///

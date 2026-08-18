@@ -47,9 +47,54 @@ public enum ArchiveOrg {
         "\(encode(item))/__ia_thumb.jpg"
     }
 
-    /// Where the item's metadata is served, which is the builder's one source.
+    /// Where the item's metadata is served, which is the builder's one source
+    /// — and, since the reader gained a browser, the app's too.
     public static func metadataURL(item: String) -> String {
         "https://archive.org/metadata/\(encode(item))"
+    }
+
+    // MARK: - Browsing
+
+    /// Where the in-app browser opens.
+    ///
+    /// The search page rather than the front page: nothing on the front page
+    /// leads anywhere this app can use in fewer than two taps, and the reader
+    /// is here to find one item.
+    public static let searchURL = "https://archive.org/search"
+
+    /// Hosts the archive.org browser may visit.
+    ///
+    /// The bare domain plus everything under it. `web.archive.org` is the
+    /// Wayback Machine, and the item servers a download redirects to are
+    /// `ia601403.us.archive.org` and the like — all of them subdomains, all of
+    /// them the same archive, and none of them somewhere else.
+    public static let host = "archive.org"
+
+    /// The item an archive.org address is about, if it is about one.
+    ///
+    /// This is what tells a page the reader can import from — an item — apart
+    /// from the ones they cannot: `/search`, a collection, a profile, the
+    /// front page. Everything the archive serves about one item hangs off its
+    /// identifier in the second path segment, whichever of the three verbs
+    /// comes first, so reading it needs no request and no page.
+    ///
+    /// Deliberately blind to what the identifier names. `/details/comics` is
+    /// shaped exactly like `/details/amiga-bilten-1` and is a collection of
+    /// three hundred thousand items; nothing in the URL says so, and the
+    /// metadata does. So this answers "there is an item id here", and whether
+    /// it is anything worth importing is settled by asking the archive.
+    public static func identifier(inURL url: URL) -> String? {
+        guard let host = url.host?.lowercased(),
+              host == Self.host || host.hasSuffix("." + Self.host) else { return nil }
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count >= 2,
+              ["details", "download", "metadata", "stream"].contains(parts[0].lowercased())
+        else { return nil }
+        let identifier = parts[1].removingPercentEncoding ?? parts[1]
+        // "@someone" is a member's profile, which sits at the same address
+        // shape as an item and is not one.
+        guard !identifier.isEmpty, !identifier.hasPrefix("@") else { return nil }
+        return identifier
     }
 
     // MARK: - Scandata

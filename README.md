@@ -37,11 +37,29 @@ Unlike StripZona there is nothing to browse or import: the index is built offlin
 own pages and read straight into the shelf, where it searches, filters and sorts exactly like
 everything else. Issues download individually, on request, from the archive itself.
 
-A third: **Archive.org**, the Internet Archive. Hand-picked items rather than a whole site — for
-now the two ex-Yugoslav Amiga fanzines that survive in full, [A-Profy](https://archive.org/details/a-profy-yugoslav-amiga-fanzine-1-july-1990)
-(July and August 1990) and [Amiga Bilten](https://archive.org/details/amiga-bilten-1) (September and
-October 1988). Same shape as RetroSpec: the index is built offline from the archive's own metadata,
-each issue's cover is its first page, and the scan is downloaded from archive.org on request.
+A third: **Archive.org**, the Internet Archive, which arrives two ways.
+
+A small shipped index, same shape as RetroSpec: the two ex-Yugoslav Amiga fanzines that survive in
+full, [A-Profy](https://archive.org/details/a-profy-yugoslav-amiga-fanzine-1-july-1990) (July and
+August 1990) and [Amiga Bilten](https://archive.org/details/amiga-bilten-1) (September and October
+1988), built offline from the archive's own metadata.
+
+And **anything else scanned there**. Import gains a second entry that opens archive.org's search
+inside the app; find an item, and Import brings it onto the shelf. Which file it downloads is your
+choice — the CBR or PDF the scanner uploaded, or the archive's smaller searchable-text PDF, with the
+size shown beside each, because the same comic is routinely 300 MB one way and 25 MB the other.
+JPEG 2000 pages, EPUB, OCR text layers and torrents are never offered: iOS cannot decode the first,
+the reader cannot open the next two, and there is no BitTorrent client here.
+
+Importing writes down the issue's details and its cover and stops there — the scan is downloaded
+later, from the shelf, like everything else. archive.org's metadata is uploader-typed and often
+sparse, wrong or missing, so nothing is guessed at beyond a title and an issue number: the publisher
+is recorded as **Archive.org** so search and the filter menus can find the lot, and the item's own
+title, identifier and tags all go into the search index untouched.
+
+Both browsers — StripZona's and this one — are **fenced to their own site**. The address line is a
+readout, never a field, and a link leading anywhere else is not followed. The app embeds a view of
+two sites; it is not a web browser.
 
 **Every source can be switched on and off** in Settings, or from the empty shelf on a first run.
 Switching one off hides it everywhere — shelf, search and filter menus — and never deletes
@@ -56,6 +74,8 @@ than arriving with six hundred magazines nobody asked for.
   handle each.
 - **Carries the RetroSpec and Archive.org indexes** for the ex-Yugoslav computer magazines and
   fanzines, built offline rather than imported, with dates, issue numbers, languages and page counts.
+- **Imports single items from archive.org**, chosen in a fenced in-app browser, with the download
+  format picked by hand from what the item actually holds.
 - **Finds cover art** from the page itself, or resolving the name against stripovi.com.
 - **Downloads** from mirrors (MediaFire, Mega, Pixeldrain), including split archives
   and sets where one archive holds a run of issues, or straight from RetroSpec or archive.org.
@@ -142,9 +162,11 @@ cover, and both refuse to write a catalogue that fails their own checks. `retros
 everything it fetches under `.retrospec-cache/`, so a rebuild asks the site for each of its ~1300
 pages once; `archive-build` makes a dozen requests to archive.org's metadata API and caches nothing.
 
-Adding an issue from archive.org is a line in `ArchiveOrgLibrary.series` — its identifier, in the
-run it belongs to — and another `swift run archive-build`. Everything else (the scan's name and
-size, the page count, the cover, the title's month and year) comes from the item's own metadata.
+Adding an issue to the *shipped* archive.org index is a line in `ArchiveOrgLibrary.series` — its
+identifier, in the run it belongs to — and another `swift run archive-build`. Everything else (the
+scan's name and size, the page count, the cover, the title's month and year) comes from the item's
+own metadata. That list stays hand-picked and small; anything else worth reading is imported from
+the browser at runtime instead, which needs no rebuild and ships nothing.
 
 ## Licence
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import SZKit
 import WebKit
 
 /// Holds the web view and its navigation state.
@@ -16,18 +17,31 @@ final class BrowserModel: NSObject, ObservableObject {
     @Published var canGoBack = false
     @Published var canGoForward = false
     @Published var progress: Double = 0
+    /// The host a link tried to reach and was not allowed to.
+    ///
+    /// A cancelled navigation leaves the page exactly as it was, so without
+    /// this a tap on an outward link is a tap that does nothing — which reads
+    /// as a broken app rather than as a rule. Cleared by going somewhere, or
+    /// by dismissing it; deliberately not on a timer, because the message
+    /// explains a screen that has not changed and there is nothing to say when
+    /// it has gone.
+    @Published var refused: String?
+
+    /// Where this browser may go. See `HostFence`.
+    let fence: HostFence
 
     let webView: WKWebView
 
     private var observers: [NSKeyValueObservation] = []
 
-    override init() {
+    /// - Parameter desktopSite: ask for the desktop layout, the way Safari's
+    ///   "Request Desktop Website" does. True for a site whose markup the app
+    ///   has to read, false for one it only shows.
+    init(fence: HostFence, desktopSite: Bool) {
+        self.fence = fence
         let config = WKWebViewConfiguration()
         // .default() is the persistent store: the login cookie outlives launches.
         config.websiteDataStore = .default()
-        // Always ask for the desktop site, the way Safari's "Request Desktop
-        // Website" does.
-        //
         // StripZona serves a different forum entirely to phones — different
         // markup, different link shapes — and the import reads the page it is
         // shown. That mobile skin is not what any of the parsing was built
@@ -35,17 +49,31 @@ final class BrowserModel: NSObject, ObservableObject {
         // at all. Asking for the desktop site makes the page the app sees the
         // same page on every device.
         //
-        // Unconditional rather than phone-only: iPadOS already requests
-        // desktop by default, so this states what the iPad was doing anyway.
-        config.defaultWebpagePreferences.preferredContentMode = .desktop
+        // archive.org is not parsed at all: the app reads an item from the
+        // metadata API, not from the page. So it gets whichever layout the
+        // device would normally be served, which on a phone is the one built
+        // for a phone.
+        config.defaultWebpagePreferences.preferredContentMode =
+            desktopSite ? .desktop : .recommended
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
         webView.allowsBackForwardNavigationGestures = true
         webView.navigationDelegate = self
+        // Without this, a link that opens in a new window does nothing at all
+        // — WebKit asks for a view to put it in and the default answer is
+        // none. See `createWebViewWith` below.
+        webView.uiDelegate = self
 
         observers = [
             webView.observe(\.url, options: [.new]) { [weak self] view, _ in
-                Task { @MainActor in self?.url = view.url }
+                Task { @MainActor in
+                    self?.url = view.url
+                    // Going somewhere is what makes the refusal notice stale:
+                    // it explains a page that did not change, and this is the
+                    // page changing. A cancelled navigation never gets here,
+                    // which is exactly why the notice survives one.
+                    self?.refused = nil
+                }
             },
             webView.observe(\.title, options: [.new]) { [weak self] view, _ in
                 Task { @MainActor in self?.title = view.title ?? "" }
@@ -71,6 +99,11 @@ final class BrowserModel: NSObject, ObservableObject {
         webView.load(URLRequest(url: url))
     }
 
+    /// Says a link was turned away.
+    func noteRefusal(of host: String) {
+        refused = host
+    }
+
     /// The **live DOM**, not the originally fetched source.
     ///
     /// This is the whole reason the import lives in the app. IPB reveals hidden
@@ -88,11 +121,20 @@ final class BrowserModel: NSObject, ObservableObject {
 
 extension BrowserModel: WKNavigationDelegate {
 
-    /// Upgrades stripzona page loads to HTTPS.
+    /// Keeps the browser on its own site, and on TLS.
     ///
-    /// The site serves the forum over TLS but emits plain-http links, and its
-    /// session cookie is not marked Secure, so a cleartext hop would put a live
-    /// session on the wire.
+    /// Two rules, in that order.
+    ///
+    /// **The fence.** A main-frame navigation to anywhere outside `fence` is
+    /// cancelled and reported. Sub-frames are left alone: an iframe is part of
+    /// the page being shown rather than somewhere the reader has gone, and
+    /// blocking those would break the archive's own reader while stopping
+    /// nobody from going anywhere. A new-window action has no target frame at
+    /// all and is treated as a main-frame one, which is what it becomes.
+    ///
+    /// **The upgrade.** StripZona serves the forum over TLS but emits plain-http
+    /// links, and its session cookie is not marked Secure, so a cleartext hop
+    /// would put a live session on the wire.
     ///
     /// GET ONLY, and that restriction is load-bearing. Upgrading works by
     /// cancelling the navigation and re-issuing it, but WebKit does not expose
@@ -106,13 +148,18 @@ extension BrowserModel: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction
     ) async -> WKNavigationActionPolicy {
         let request = navigationAction.request
+        guard let url = request.url else { return .allow }
+
+        if navigationAction.targetFrame?.isMainFrame ?? true, !fence.admits(url) {
+            let host = url.host ?? url.scheme ?? "somewhere else"
+            Task { @MainActor in self.noteRefusal(of: host) }
+            return .cancel
+        }
+
         guard request.httpMethod == nil || request.httpMethod == "GET",
               navigationAction.navigationType != .formSubmitted,
               navigationAction.navigationType != .formResubmitted,
-              let url = request.url,
               url.scheme == "http",
-              let host = url.host?.lowercased(),
-              host.hasSuffix("stripzona.com"),
               var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
         else { return .allow }
 
@@ -123,6 +170,25 @@ extension BrowserModel: WKNavigationDelegate {
         upgraded.url = secure
         Task { @MainActor in webView.load(upgraded) }
         return .cancel
+    }
+}
+
+extension BrowserModel: WKUIDelegate {
+
+    /// Opens a `target="_blank"` link in the view the reader is looking at.
+    ///
+    /// Returning a new web view is not an option — there is one browser here,
+    /// not a tab bar — and returning nil without doing anything else is what
+    /// WebKit does by default, which makes those links look broken. The fence
+    /// has already had its say: an action that gets this far passed it, so
+    /// loading it in place is exactly as safe as following any other link.
+    nonisolated func webView(_ webView: WKWebView,
+                             createWebViewWith configuration: WKWebViewConfiguration,
+                             for navigationAction: WKNavigationAction,
+                             windowFeatures: WKWindowFeatures) -> WKWebView? {
+        guard let url = navigationAction.request.url, fence.admits(url) else { return nil }
+        Task { @MainActor in self.webView.load(URLRequest(url: url)) }
+        return nil
     }
 }
 

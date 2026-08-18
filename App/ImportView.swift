@@ -10,8 +10,7 @@ import SZKit
 struct ImportView: View {
 
     let onImport: (String) throws -> ImportReport
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var browser = BrowserModel()
+    @StateObject private var browser = BrowserModel(fence: .stripzona, desktopSite: true)
 
     @State private var report: ImportReport?
     @State private var errorText: String?
@@ -22,128 +21,53 @@ struct ImportView: View {
     private static let home = "https://www.stripzona.com/port/index.php"
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                if browser.isLoading {
-                    ProgressView(value: browser.progress)
-                        .progressViewStyle(.linear)
-                        .frame(height: 2)
-                }
-                BrowserView(model: browser)
-                banner
-            }
-            .navigationTitle(browser.title.isEmpty ? "Import" : browser.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                // Shows the live URL and its scheme. If a login bounces, this
-                // is what tells you where it actually landed.
-                HStack(spacing: 8) {
-                    Image(systemName: browser.url?.scheme == "https"
-                          ? "lock.fill" : "lock.open.fill")
-                        .font(.caption2)
-                        .foregroundStyle(browser.url?.scheme == "https" ? .green : .orange)
-                    Text(browser.url?.absoluteString ?? "—")
-                        .font(.caption.monospaced())
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
-                .background(.bar)
-            }
-            .toolbar {
-                // Five items do not fit a phone's navigation bar: it folds
-                // the overflow into a "…" menu, and Import — the last one, and
-                // the only reason to be here — was what disappeared into it.
-                // The web view keeps its edge-swipe back and forward either
-                // way, so on a phone these three cost little.
-                ToolbarItemGroup(placement: .topBarLeading) {
-                    // Back on every device: on a phone it is the one you
-                    // actually need, since the forum's own pages give you no
-                    // way back to where you came from.
-                    Button { browser.webView.goBack() } label: {
-                        Image(systemName: "chevron.backward")
-                    }.disabled(!browser.canGoBack)
-                    // Forward and reload only where there is room. Five items
-                    // overflow a phone's navigation bar into a "…" menu, and
-                    // Import — the reason to be here — was what went into it.
-                    if !Device.isPhone {
-                        Button { browser.webView.goForward() } label: {
-                            Image(systemName: "chevron.forward")
-                        }.disabled(!browser.canGoForward)
-                        Button { browser.webView.reload() } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
+        BrowserScreen(model: browser, fallbackTitle: "Import") {
+            Button {
+                Task { await performImport() }
+            } label: {
+                if importing {
+                    ProgressView()
+                } else {
+                    // Spelled out as an explicit stack: a toolbar collapses a
+                    // Label to its icon regardless of labelStyle, and the word
+                    // "Import" is what makes this recognisably the same button
+                    // as on the shelf.
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.and.arrow.down")
+                        Text("Import")
                     }
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    // Done sits to the LEFT of Import so that Import keeps the
-                    // top-right corner it occupies on the shelf. It said
-                    // "Import this page" here and "Import" there, in a
-                    // different place and a different style — three differences
-                    // that made the one button you came in to press look like a
-                    // new one you had not seen before.
-                    Button("Done") { dismiss() }
-
-                    Button {
-                        Task { await performImport() }
-                    } label: {
-                        if importing {
-                            ProgressView()
-                        } else {
-                            // Spelled out as an explicit stack: a toolbar
-                            // collapses a Label to its icon regardless of
-                            // labelStyle, and the word "Import" is what makes
-                            // this recognisably the same button as on the
-                            // shelf.
-                            HStack(spacing: 6) {
-                                Image(systemName: "square.and.arrow.down")
-                                Text("Import")
-                            }
-                            .font(.headline)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(importing || browser.isLoading)
+                    .font(.headline)
                 }
             }
-            .onAppear { if browser.url == nil { browser.load(Self.home) } }
+            .buttonStyle(.borderedProminent)
+            .disabled(importing || browser.isLoading)
+        } banner: {
+            banner
         }
+        .onAppear { if browser.url == nil { browser.load(Self.home) } }
     }
 
     @ViewBuilder private var banner: some View {
         if let errorText {
-            bannerBody(icon: "exclamationmark.triangle.fill",
-                       tint: .orange, title: "Import failed", detail: errorText)
+            BrowserBanner(icon: "exclamationmark.triangle.fill", tint: .orange,
+                          title: "Import failed", detail: errorText,
+                          dismiss: clearBanner)
         } else if let report {
-            bannerBody(
+            BrowserBanner(
                 icon: report.isEmpty ? "questionmark.circle.fill" : "checkmark.circle.fill",
                 tint: report.isEmpty ? .orange : .green,
                 title: report.isEmpty
                     ? "Nothing new imported"
                     : "Imported \(report.issues) issue\(report.issues == 1 ? "" : "s"), \(report.mirrors) mirror\(report.mirrors == 1 ? "" : "s")",
                 detail: report.advice
-                    ?? "\(report.attributed) of \(report.links) links matched an issue.")
+                    ?? "\(report.attributed) of \(report.links) links matched an issue.",
+                dismiss: clearBanner)
         }
     }
 
-    private func bannerBody(icon: String, tint: Color,
-                            title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon).foregroundStyle(tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(detail).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button {
-                report = nil; errorText = nil
-            } label: { Image(systemName: "xmark.circle.fill") }
-                .foregroundStyle(.tertiary)
-        }
-        .padding(12)
-        .background(.thinMaterial)
+    private func clearBanner() {
+        report = nil
+        errorText = nil
     }
 
     private func performImport() async {

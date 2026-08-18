@@ -22,6 +22,8 @@
 		A0542A495542645E1D9C357D /* ReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A12CF237924287D34868EA /* ReaderView.swift */; };
 		BA4BB5AAC4C822A2A670E4E6 /* PagePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09747345D1188621DE903027 /* PagePickerView.swift */; };
 		C60D7220DE77EEC3D2B69C65 /* AppInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98B96100C7CD082FD8703855 /* AppInfo.swift */; };
+		D8B69D7A078A37E310965586 /* ArchiveBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECEA8FA212E036CC702DFBD /* ArchiveBrowserView.swift */; };
+		E394C166FE3B68BDB594232D /* BrowserScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8483FF3778C83E8A0ED613BC /* BrowserScreen.swift */; };
 		F3E6287092C23A79A5D74554 /* SourceToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 289683A4600939769465C523 /* SourceToggle.swift */; };
 /* End PBXBuildFile section */
 
@@ -29,12 +31,14 @@
 		09747345D1188621DE903027 /* PagePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PagePickerView.swift; sourceTree = "<group>"; };
 		0DA4EDA742DCFD028234085B /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
 		10A12CF237924287D34868EA /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
+		1ECEA8FA212E036CC702DFBD /* ArchiveBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveBrowserView.swift; sourceTree = "<group>"; };
 		289683A4600939769465C523 /* SourceToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceToggle.swift; sourceTree = "<group>"; };
 		29AF759576024F9476C06792 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeReader.swift; sourceTree = "<group>"; };
 		3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverStore.swift; sourceTree = "<group>"; };
 		3F41C3389BD9E0C5FE60156A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		640135922A53F0FDE2BFEDE9 /* ImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportView.swift; sourceTree = "<group>"; };
+		8483FF3778C83E8A0ED613BC /* BrowserScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserScreen.swift; sourceTree = "<group>"; };
 		897256247FA21EB8FD55169C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		8BB52132DFB9CAD97122F6DD /* SZReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SZReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		98B96100C7CD082FD8703855 /* AppInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfo.swift; sourceTree = "<group>"; };
@@ -70,7 +74,9 @@
 			isa = PBXGroup;
 			children = (
 				98B96100C7CD082FD8703855 /* AppInfo.swift */,
+				1ECEA8FA212E036CC702DFBD /* ArchiveBrowserView.swift */,
 				3F41C3389BD9E0C5FE60156A /* Assets.xcassets */,
+				8483FF3778C83E8A0ED613BC /* BrowserScreen.swift */,
 				0DA4EDA742DCFD028234085B /* BrowserView.swift */,
 				3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */,
 				F6ECA8838FF66470193A9021 /* CoverViewer.swift */,
@@ -182,6 +188,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				C60D7220DE77EEC3D2B69C65 /* AppInfo.swift in Sources */,
+				D8B69D7A078A37E310965586 /* ArchiveBrowserView.swift in Sources */,
+				E394C166FE3B68BDB594232D /* BrowserScreen.swift in Sources */,
 				4DA39CCBA66CCAC30888EB87 /* BrowserView.swift in Sources */,
 				95E0C572BF4994B77DDB41B0 /* CoverStore.swift in Sources */,
 				0C1E38893CAB2B217CA9D632 /* CoverViewer.swift in Sources */,
