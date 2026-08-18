@@ -316,13 +316,18 @@ struct ReaderView: View {
 
 /// One page, pinch- and double-tap-zoomable, pannable while zoomed.
 ///
-/// Every gesture here is a UIKit recogniser, laid over the page by
-/// `PageGestures`. That is not a preference: SwiftUI's `MagnificationGesture`
-/// never says *where* a pinch is, so a page could only be scaled about its own
-/// middle. Once one gesture has to come from UIKit they all do — a
-/// representable laid over the page wins SwiftUI's hit-testing outright, and
-/// the tap, double tap and drag attached to the image behind it simply stop
-/// being offered the touch.
+/// The zoom is a `UIScrollView`'s rather than one of our own, and that is the
+/// whole point: Photos' zoom *is* a scroll view's zoom, and everything ours got
+/// wrong is something a scroll view already does. It scales about the live
+/// midpoint between the fingers, so pinching a corner walks that corner back
+/// under them instead of hauling the middle of the page up and pushing the
+/// borders off the screen. It keeps panning from a two-finger drag while the
+/// pinch is still going. It rubber-bands past its own edges and past both zoom
+/// limits and springs back rather than stopping dead. And a flick carries on
+/// with the same deceleration as every other scroll in iOS.
+///
+/// What is still ours is the page turn, which a photo has no equivalent of:
+/// see `PageScroll.pageTurnPush`.
 private struct PageView: View {
     let image: CGImage?
     /// Show or hide the reader's chrome.
@@ -330,251 +335,289 @@ private struct PageView: View {
     /// Asks for the page before (-1) or after (+1) this one.
     var turnPage: (Int) -> Void = { _ in }
 
-    /// How far a drag has to carry on past the edge of a zoomed page before it
-    /// is taken as asking for the next one.
-    ///
-    /// While zoomed the drag pans, so a page cannot be turned by swiping — a
-    /// swipe is how you read across it. Pressing on after the page has stopped
-    /// moving is unambiguous, and far enough not to happen at the end of an
-    /// ordinary pan.
-    private static let pageTurnPush: CGFloat = 90
-
-    /// What a double tap zooms to.
-    private static let doubleTapZoom: CGFloat = 2.5
-
+    /// The zoom is kept here rather than in the scroll view because the pager
+    /// throws the scroll view away and builds another one whenever the chrome
+    /// comes or goes — the page gets the strip the status bar was in, and every
+    /// page in the pager is rebuilt at the new size. State this side of the
+    /// representable outlives that, so tapping to hide the chrome no longer
+    /// costs the reader the panel they were in.
     @State private var zoom: CGFloat = 1
-    @State private var committedZoom: CGFloat = 1
-    @State private var offset: CGSize = .zero
-    @State private var committedOffset: CGSize = .zero
-    /// Where the fingers were when the pinch began, from the middle of the box.
-    @State private var pinchPoint: CGSize = .zero
-    @State private var pinching = false
-    /// How far the current drag has gone beyond the edge it is pressed
-    /// against, if it has. Signed: positive is dragging right, past the left
-    /// edge, which asks for the previous page.
-    @State private var pushedPast: CGFloat = 0
-
-    private var imageSize: CGSize {
-        guard let image else { return .zero }
-        return CGSize(width: image.width, height: image.height)
-    }
+    /// Which part of the page is on screen, as a fraction of the whole, which is
+    /// the one way of saying it that survives the page changing size.
+    @State private var looking = CGPoint(x: 0.5, y: 0.5)
 
     var body: some View {
-        GeometryReader { geo in
-            Group {
-                if let image {
-                    Image(decorative: image, scale: 1)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .scaleEffect(zoom)
-                        .offset(offset)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .overlay(PageGestures(
-                            zoomed: zoom > 1,
-                            onPinch: { scale, at in pinch(scale, at: at, in: geo.size) },
-                            onPinchEnd: { endPinch() },
-                            onPan: { moved, ended in
-                                panned(moved, ended: ended, in: geo.size)
-                            },
-                            onTap: onTap,
-                            onDoubleTap: { at in toggleZoom(at: at, in: geo.size) }))
-                } else {
-                    ProgressView().tint(.white)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                }
+        Group {
+            if let image {
+                ZoomablePage(image: image, zoom: zoom, looking: looking,
+                             onSettle: { zoom = $0; looking = $1 },
+                             onTap: onTap, turnPage: turnPage)
+            } else {
+                ProgressView().tint(.white)
             }
         }
-    }
-
-    /// Zooms about the fingers rather than about the middle of the page.
-    ///
-    /// The point is read once, when the pinch starts. Following the midpoint
-    /// as the fingers move would slide the page under a pinch that drifts,
-    /// which feels like the page fighting back.
-    private func pinch(_ scale: CGFloat, at point: CGPoint, in box: CGSize) {
-        if !pinching {
-            pinching = true
-            pinchPoint = CGSize(width: point.x - box.width / 2,
-                                height: point.y - box.height / 2)
-        }
-        let wanted = min(max(committedZoom * scale, 1), 4)
-        // Re-clamped as it shrinks, so zooming out walks the page back to
-        // centre rather than leaving it stranded off-screen.
-        offset = ZoomPan.focused(committedOffset, pinch: pinchPoint,
-                                 from: committedZoom, to: wanted,
-                                 image: imageSize, box: box)
-        zoom = wanted
-    }
-
-    private func endPinch() {
-        pinching = false
-        committedZoom = zoom
-        committedOffset = offset
-        if zoom == 1 { resetPan() }
-    }
-
-    /// Drag to move around a zoomed page — and, at an edge, to leave it.
-    ///
-    /// The page moves in whatever direction it has slack, which is what makes
-    /// fine print readable. Turning a page while zoomed cannot also be a
-    /// swipe, so it is a push: carry on past the edge by `pageTurnPush` after
-    /// the page has stopped moving, and let go.
-    private func panned(_ translation: CGSize, ended: Bool, in box: CGSize) {
-        let moved = CGSize(width: committedOffset.width + translation.width,
-                           height: committedOffset.height + translation.height)
-        offset = ZoomPan.clamp(moved, image: imageSize, box: box, zoom: zoom)
-        // Whatever the clamp refused is the reader pressing on.
-        pushedPast = moved.width - offset.width
-        guard ended else { return }
-        committedOffset = offset
-        // On release rather than mid-drag: a page that turns under a finger
-        // still moving is a page turned by accident.
-        if abs(pushedPast) > Self.pageTurnPush { turnPage(pushedPast > 0 ? -1 : 1) }
-        pushedPast = 0
-    }
-
-    /// Double tap zooms in on what was tapped, and again to come back out.
-    private func toggleZoom(at point: CGPoint, in box: CGSize) {
-        let wanted: CGFloat = zoom > 1 ? 1 : Self.doubleTapZoom
-        let at = CGSize(width: point.x - box.width / 2, height: point.y - box.height / 2)
-        let landing = ZoomPan.focused(committedOffset, pinch: at,
-                                      from: zoom, to: wanted,
-                                      image: imageSize, box: box)
-        withAnimation(.spring(duration: 0.25)) {
-            zoom = wanted
-            offset = landing
-        }
-        committedZoom = wanted
-        committedOffset = landing
-    }
-
-    private func resetPan() {
-        offset = .zero
-        committedOffset = .zero
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
-/// Every touch on a page, in UIKit, so that a pinch can say where it is.
-///
-/// Laid over the page. Recognises simultaneously with everything around it,
-/// and the pan only begins while the page is zoomed — so an unzoomed swipe
-/// still belongs to the pager underneath, exactly as it did. While zoomed the
-/// pager is made to wait on this pan instead, which is what lets a zoomed page
-/// be read across without flicking to the next one.
-private struct PageGestures: UIViewRepresentable {
-    let zoomed: Bool
-    let onPinch: (CGFloat, CGPoint) -> Void
-    let onPinchEnd: () -> Void
-    /// Translation since the drag began, and whether it has finished.
-    let onPan: (CGSize, Bool) -> Void
+private struct ZoomablePage: UIViewRepresentable {
+    let image: CGImage
+    /// Where a freshly built scroll view is to pick up from.
+    let zoom: CGFloat
+    let looking: CGPoint
+    /// Reported once a pinch or a pan has come to rest, not on every frame of
+    /// one: this is only the note that lets the next scroll view carry on where
+    /// this one left off.
+    let onSettle: (CGFloat, CGPoint) -> Void
     let onTap: () -> Void
-    let onDoubleTap: (CGPoint) -> Void
+    let turnPage: (Int) -> Void
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.backgroundColor = .clear
-        let c = context.coordinator
-
-        let pinch = UIPinchGestureRecognizer(target: c, action: #selector(Coordinator.pinched(_:)))
-        let pan = UIPanGestureRecognizer(target: c, action: #selector(Coordinator.panned(_:)))
-        let double = UITapGestureRecognizer(target: c, action: #selector(Coordinator.doubled(_:)))
-        double.numberOfTapsRequired = 2
-        let single = UITapGestureRecognizer(target: c, action: #selector(Coordinator.tapped(_:)))
-        // Or every double tap would show and hide the chrome on its way.
-        single.require(toFail: double)
-
-        for gesture in [pinch, pan, double, single] as [UIGestureRecognizer] {
-            gesture.delegate = c
-            view.addGestureRecognizer(gesture)
-        }
-        c.pan = pan
+    func makeUIView(context: Context) -> PageScroll {
+        let view = PageScroll()
+        update(view)
+        view.open(at: zoom, looking: looking)
         return view
     }
 
-    func updateUIView(_ view: UIView, context: Context) {
-        context.coordinator.zoomed = zoomed
-        context.coordinator.onPinch = onPinch
-        context.coordinator.onPinchEnd = onPinchEnd
-        context.coordinator.onPan = onPan
-        context.coordinator.onTap = onTap
-        context.coordinator.onDoubleTap = onDoubleTap
-        context.coordinator.deferPager(around: view)
+    func updateUIView(_ view: PageScroll, context: Context) { update(view) }
+
+    private func update(_ view: PageScroll) {
+        view.onSettle = onSettle
+        view.onTap = onTap
+        view.turnPage = turnPage
+        view.show(image)
+    }
+}
+
+/// A page in a scroll view, which is where the zoom comes from.
+///
+/// The page sits inside at the size it fits the screen at, so the scroll view's
+/// own zoom scale is the zoom the reader sees: 1 is a whole page, 4 is as close
+/// as it will go, and a pinch may overshoot either end and spring back.
+private final class PageScroll: UIScrollView, UIScrollViewDelegate {
+    /// What a double tap zooms to.
+    private static let doubleTapZoom: CGFloat = 2.5
+
+    /// As far in as a pinch will go, over and above a whole page.
+    private static let maxZoom: CGFloat = 4
+
+    /// How far the page has to be held past its own side before letting go
+    /// asks for the next one.
+    ///
+    /// While zoomed a drag pans, so a page cannot be turned by swiping — a
+    /// swipe is how you read across it. Pressing on after the page has run out
+    /// of slack is unambiguous. Measured in how far the page has actually
+    /// moved, which the rubber band makes a good deal less than the finger
+    /// travels: 70pt of stretch is around 140pt of drag on an iPad.
+    private static let pageTurnPush: CGFloat = 70
+
+    var onTap: () -> Void = {}
+    var turnPage: (Int) -> Void = { _ in }
+    /// Where the page came to rest, for whatever scroll view shows it next.
+    var onSettle: (CGFloat, CGPoint) -> Void = { _, _ in }
+
+    private let page = UIImageView()
+    private var shown: CGImage?
+    /// The screen the page was last fitted to. A rotation invalidates it.
+    private var fittedTo: CGSize = .zero
+    /// Where to be once there is a screen to be it on — a new scroll view has
+    /// no size to zoom or scroll within until it is laid out.
+    private var opening: (zoom: CGFloat, looking: CGPoint)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        delegate = self
+        backgroundColor = .clear
+        minimumZoomScale = 1
+        maximumZoomScale = Self.maxZoom
+        // The elastic ends: a pinch can overshoot a whole page or the far end
+        // of the zoom and be let back, rather than hitting a wall.
+        bouncesZoom = true
+        bounces = true
+        // Set from the zoom, in `holdOntoDrags`.
+        alwaysBounceHorizontal = false
+        alwaysBounceVertical = false
+        showsHorizontalScrollIndicator = false
+        showsVerticalScrollIndicator = false
+        // The reader is full-screen and behind the chrome; a safe-area inset
+        // here would show up as the page sitting off-centre.
+        contentInsetAdjustmentBehavior = .never
+        // Not a distortion: the frame this fills is the fitted size, so the
+        // aspect ratio is already in it.
+        page.contentMode = .scaleToFill
+        addSubview(page)
+
+        let double = UITapGestureRecognizer(target: self, action: #selector(doubled(_:)))
+        double.numberOfTapsRequired = 2
+        addGestureRecognizer(double)
+        let single = UITapGestureRecognizer(target: self, action: #selector(tapped))
+        // Or every double tap would show and hide the chrome on its way.
+        single.require(toFail: double)
+        addGestureRecognizer(single)
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(zoomed: zoomed, onPinch: onPinch, onPinchEnd: onPinchEnd,
-                    onPan: onPan, onTap: onTap, onDoubleTap: onDoubleTap)
+    required init?(coder: NSCoder) { fatalError("not loaded from a nib") }
+
+    /// The page to show. Only when it is actually a different image —
+    /// `updateUIView` runs for every unrelated change around it, and refitting
+    /// on each of those would be work for nothing.
+    func show(_ image: CGImage) {
+        guard image !== shown else { return }
+        shown = image
+        page.image = UIImage(cgImage: image)
+        fittedTo = .zero
+        setNeedsLayout()
     }
 
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var zoomed: Bool
-        var onPinch: (CGFloat, CGPoint) -> Void
-        var onPinchEnd: () -> Void
-        var onPan: (CGSize, Bool) -> Void
-        var onTap: () -> Void
-        var onDoubleTap: (CGPoint) -> Void
-        weak var pan: UIPanGestureRecognizer?
-        private var pagerDeferred = false
+    /// Picks up where the page was before this scroll view existed.
+    func open(at zoom: CGFloat, looking: CGPoint) {
+        opening = (zoom, looking)
+        setNeedsLayout()
+    }
 
-        init(zoomed: Bool, onPinch: @escaping (CGFloat, CGPoint) -> Void,
-             onPinchEnd: @escaping () -> Void, onPan: @escaping (CGSize, Bool) -> Void,
-             onTap: @escaping () -> Void, onDoubleTap: @escaping (CGPoint) -> Void) {
-            self.zoomed = zoomed; self.onPinch = onPinch; self.onPinchEnd = onPinchEnd
-            self.onPan = onPan; self.onTap = onTap; self.onDoubleTap = onDoubleTap
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if bounds.size != fittedTo { fit() } else { centre() }
+    }
+
+    /// Sizes the page to the screen, keeping the zoom and roughly the panel the
+    /// reader was looking at.
+    ///
+    /// Not only for rotations: hiding the chrome gives the page back the strip
+    /// the status bar was in, and a re-fit that dropped the zoom would have
+    /// thrown the reader out of a panel for tapping the screen.
+    private func fit() {
+        guard let shown, bounds.width > 0, bounds.height > 0 else { return }
+        let resume = opening
+        opening = nil
+        let looking = resume?.looking ?? lookingAt
+        let zoom = resume?.zoom ?? zoomScale
+        fittedTo = bounds.size
+        // Measured unzoomed: the fitted size is the page at zoom 1, and
+        // measuring it while zoomed would fit it to a scaled box.
+        zoomScale = 1
+        let size = ZoomPan.fittedSize(image: CGSize(width: shown.width, height: shown.height),
+                                      box: bounds.size)
+        page.frame = CGRect(origin: .zero, size: size)
+        contentSize = size
+        zoomScale = min(max(zoom, minimumZoomScale), maximumZoomScale)
+        centre()
+        holdOntoDrags()
+        if zoomScale > minimumZoomScale, let looking { look(at: looking) }
+    }
+
+    /// The middle of what is on screen, as a fraction of the whole page — the
+    /// one way of naming it that survives the page changing size. Nil unzoomed,
+    /// where the whole page is on screen and there is nothing to keep.
+    private var lookingAt: CGPoint? {
+        guard zoomScale > minimumZoomScale, contentSize.width > 0, contentSize.height > 0
+        else { return nil }
+        return CGPoint(x: (contentOffset.x + bounds.midX) / contentSize.width,
+                       y: (contentOffset.y + bounds.midY) / contentSize.height)
+    }
+
+    private func look(at spot: CGPoint) {
+        let wanted = CGPoint(x: spot.x * contentSize.width - bounds.midX,
+                             y: spot.y * contentSize.height - bounds.midY)
+        contentOffset = CGPoint(
+            x: min(max(wanted.x, -contentInset.left),
+                   max(contentSize.width + contentInset.right - bounds.width, -contentInset.left)),
+            y: min(max(wanted.y, -contentInset.top),
+                   max(contentSize.height + contentInset.bottom - bounds.height, -contentInset.top)))
+    }
+
+    /// Holds a page with room to spare in the middle of the screen.
+    ///
+    /// By inset rather than by moving the page, so that where the scroll view
+    /// believes its edges are — which is what it clamps a pinch to and what it
+    /// rubber-bands against — agrees with where the page looks like it is.
+    private func centre() {
+        let slack = UIEdgeInsets(top: max((bounds.height - contentSize.height) / 2, 0),
+                                 left: max((bounds.width - contentSize.width) / 2, 0),
+                                 bottom: max((bounds.height - contentSize.height) / 2, 0),
+                                 right: max((bounds.width - contentSize.width) / 2, 0))
+        if contentInset != slack { contentInset = slack }
+    }
+
+    /// Which of the two scroll views a drag belongs to.
+    ///
+    /// A scroll view takes a drag it can use and leaves one it cannot to
+    /// whatever is underneath — here the pager. That is exactly right unzoomed,
+    /// where the page has no slack and a swipe should turn it. Zoomed it is
+    /// not: a page held against its right edge has no slack that way either, so
+    /// a pan across it was handed to the pager and turned the page mid-read.
+    ///
+    /// Bouncing counts as somewhere to go, so while zoomed the page keeps every
+    /// drag and rubber-bands at the ends — and a page is turned only by the
+    /// deliberate push in `scrollViewDidEndDragging`.
+    private func holdOntoDrags() {
+        let zoomed = zoomScale > minimumZoomScale
+        if alwaysBounceHorizontal != zoomed {
+            alwaysBounceHorizontal = zoomed
+            alwaysBounceVertical = zoomed
         }
+    }
 
-        /// Makes the pager's own scrolling wait for this pan to fail.
-        ///
-        /// Once, when the view has a place in the hierarchy. Both gestures are
-        /// drags across the same pixels, and without an order between them the
-        /// winner is whichever recognised first — which is how a pan across a
-        /// zoomed page turned the page instead of reading across it. The pan
-        /// declines to begin unless the page is zoomed, so an ordinary swipe
-        /// still reaches the pager untouched.
-        func deferPager(around view: UIView) {
-            guard !pagerDeferred, let pan else { return }
-            var ancestor: UIView? = view.superview
-            while let here = ancestor {
-                if let scroll = here as? UIScrollView {
-                    scroll.panGestureRecognizer.require(toFail: pan)
-                    pagerDeferred = true
-                    return
-                }
-                ancestor = here.superview
-            }
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { page }
+
+    /// Every frame of a pinch, and of the spring back afterwards.
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        centre()
+        holdOntoDrags()
+    }
+
+    /// Double tap zooms in on what was tapped, and again to come back out.
+    ///
+    /// `zoom(to:)` rather than holding the tapped point exactly where it was:
+    /// it brings that point to the middle of the screen as far as the page's
+    /// edges allow, which is what Photos does. Pinned under the finger, a tap
+    /// near a corner would zoom into a panel and leave it in the corner.
+    @objc private func doubled(_ gesture: UITapGestureRecognizer) {
+        guard zoomScale <= minimumZoomScale else {
+            setZoomScale(minimumZoomScale, animated: true)
+            return
         }
+        let at = gesture.location(in: page)
+        let size = CGSize(width: bounds.width / Self.doubleTapZoom,
+                          height: bounds.height / Self.doubleTapZoom)
+        zoom(to: CGRect(x: at.x - size.width / 2, y: at.y - size.height / 2,
+                        width: size.width, height: size.height),
+             animated: true)
+    }
 
-        @objc func pinched(_ gesture: UIPinchGestureRecognizer) {
-            switch gesture.state {
-            case .began, .changed:
-                onPinch(gesture.scale, gesture.location(in: gesture.view))
-            case .ended, .cancelled, .failed:
-                onPinchEnd()
-            default:
-                break
-            }
-        }
+    @objc private func tapped() { onTap() }
 
-        @objc func panned(_ gesture: UIPanGestureRecognizer) {
-            let moved = gesture.translation(in: gesture.view)
-            let ended = gesture.state == .ended || gesture.state == .cancelled
-            onPan(CGSize(width: moved.x, height: moved.y), ended)
-        }
+    /// Turned on release rather than mid-drag: a page that turns under a finger
+    /// still moving is a page turned by accident.
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate { settled() }
+        let push = heldPastSide
+        guard abs(push) > Self.pageTurnPush else { return }
+        turnPage(push > 0 ? -1 : 1)
+    }
 
-        @objc func tapped(_ gesture: UITapGestureRecognizer) { onTap() }
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { settled() }
 
-        @objc func doubled(_ gesture: UITapGestureRecognizer) {
-            onDoubleTap(gesture.location(in: gesture.view))
-        }
+    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?,
+                                 atScale scale: CGFloat) { settled() }
 
-        /// A page that is not zoomed has nowhere to pan, so the drag belongs
-        /// to the pager.
-        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-            gesture === pan ? zoomed : true
-        }
+    private func settled() {
+        onSettle(zoomScale, lookingAt ?? CGPoint(x: 0.5, y: 0.5))
+    }
 
-        func gestureRecognizer(_ gesture: UIGestureRecognizer,
-                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer)
-            -> Bool { true }
+    /// How far the page is being held past its own left or right edge, if it
+    /// is. Signed: positive is dragging right, past the left edge, which asks
+    /// for the previous page.
+    ///
+    /// Zero unless zoomed. An unzoomed page has no slack, so the drag was never
+    /// this scroll view's — it belonged to the pager, which turned the page on
+    /// its own.
+    private var heldPastSide: CGFloat {
+        guard zoomScale > minimumZoomScale else { return 0 }
+        let start = -contentInset.left
+        let end = contentSize.width + contentInset.right - bounds.width
+        if contentOffset.x < start { return start - contentOffset.x }
+        if contentOffset.x > end { return end - contentOffset.x }
+        return 0
     }
 }

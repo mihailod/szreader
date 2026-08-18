@@ -5,6 +5,10 @@ import CoreGraphics
 /// Pure arithmetic, kept out of the view so the edge cases can be tested: the
 /// awkward ones are a page narrower than the screen, a zoom of exactly 1, and
 /// the axis that has no slack because the image already fits it.
+///
+/// The portrait reader keeps a page in a scroll view now, so the limits it
+/// pans and pinches within are the scroll view's own — of what follows, only
+/// `fittedSize` is on that path, deciding how big the page is at zoom 1.
 public enum ZoomPan {
 
     /// The size the page occupies at zoom 1, fitted inside `box`.
@@ -49,10 +53,10 @@ public enum ZoomPan {
 
     /// Where the page must sit for the point under a pinch to stay under it.
     ///
-    /// The page is scaled about its own middle, so a zoom on its own always
-    /// pulls the middle of the page towards the reader — pinch a panel in the
-    /// corner and the corner runs away off the screen, which is what made
-    /// zooming feel like it was ignoring where your fingers were.
+    /// Not what the reader zooms by any more — a scroll view anchors a pinch on
+    /// the live midpoint between the fingers, and this could only ever hold the
+    /// one point it was given when the pinch began. Kept because the arithmetic
+    /// is the same wherever a scale has to be taken about a point.
     ///
     /// `pinch` is where the fingers are, measured from the middle of the box.
     /// A point sits on screen at `middle + content × zoom + offset`, so
