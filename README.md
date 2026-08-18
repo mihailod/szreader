@@ -1,110 +1,68 @@
 <table><tr>
 <th>
-      <img src=https://raw.githubusercontent.com/mihailod/szreader/refs/heads/master/App/Assets.xcassets/AppIcon.appiconset/icon_1024.png width=200>
-
+  <img src=https://raw.githubusercontent.com/mihailod/szreader/refs/heads/master/App/Assets.xcassets/AppIcon.appiconset/icon_1024.png width=200>
 </th>
 <th>
-  StreamZine for iOS<br>
-  comics & magazines reader<br>
-  that supports<br>
-  StripZona forum,<br>
-  RetroSpec archive<br>
-  and Archive.org<br>
+  StreamZine for iOS<br><br>
+  Comics & magazines reader that supports StripZona forum<br>
+  <br>
+  COMING SOON TO APPLE APP STORE!<br>
+  (review in progress)<br>
+  <br>
+  Coming in V1.1: support for RetroSpec and Archive.org<br>
 </th>
 </tr>
 </table>
 
-## V1.0 IS COMING SOON TO APPLE APP STORE! (review in progress)
-
-iPad shown and recommended (larger screen):
-
-<img src="screenshot.png" alt="Screenshot" width="400" />
-
-[StripZona](https://www.stripzona.com) is a Serbian/ex-YU comics fan site. You browse its forum
-inside the app, import a topic page, and its issues become a searchable shelf — covers, series,
-hero, publisher and issue numbers, all read off the page in a convenient Kindle-style reader.
-Downloads and reading happen in the app.
+<img src="screenshot.png" alt="Screenshot" width="350">
 
 ## New in 1.1 (work in progress)
 
-A second source: [RetroSpec](https://retrospec.elite.org/users/tomcat/yu/revije.php), Tomaž Kac's
-archive of scanned ex-Yugoslav computer magazines. **653 issues across 19 runs** — Svet Kompjutera,
-Računari, Galaksija, Moj Mikro (Slovenian and Serbo-Croatian, kept as two separate runs), Svet
-Igara, BIT, Megazin, Club Nintendo, Amiga Style, Warp and more, plus a dozen 1980s computer books.
-1972 to 2001, about 52,000 scanned pages.
-
+* **A second source:** [RetroSpec](https://retrospec.elite.org/users/tomcat/yu/revije.php), Tomaž Kac's
+archive of scanned ex-Yugoslav (1972-2001) computer magazines (Svet Kompjutera,
+Računari, Moj Mikro, etc.) plus a dozen of computer books.
 Unlike StripZona there is nothing to browse or import: the index is built offline from the site's
 own pages and read straight into the shelf, where it searches, filters and sorts exactly like
 everything else. Issues download individually, on request, from the archive itself.
 
-A third: **Archive.org**, the Internet Archive, which arrives two ways.
+* **A third source:** **[Archive.org](https://archive.org)**, the Internet Archive, which arrives two ways.
+First, a small shipped index for the two ex-Yugoslav Amiga fanzines: A-Profy (July and August 1990)
+and Amiga Bilten (September and October 1988). Second, **anything else searchable there**:
+Import gains a second entry that opens archive.org's search inside the app; find an item,
+and Import brings it onto the shelf.
 
-A small shipped index, same shape as RetroSpec: the two ex-Yugoslav Amiga fanzines that survive in
-full, [A-Profy](https://archive.org/details/a-profy-yugoslav-amiga-fanzine-1-july-1990) (July and
-August 1990) and [Amiga Bilten](https://archive.org/details/amiga-bilten-1) (September and October
-1988), built offline from the archive's own metadata.
+* **Browser fencing** Both browser views (StripZona, Archive.org) are fenced to their own site.
+The address line is read-only and links leading outside those domains are not followed.
+(The app embeds a view of two sites; it is not a full web browser, App Store compliance.)
 
-And **anything else scanned there**. Import gains a second entry that opens archive.org's search
-inside the app; find an item, and Import brings it onto the shelf.
-
-Which file it downloads is your choice, with the size shown beside each, because the same comic is
-routinely 300 MB as the CBR its scanner uploaded and 25 MB as the PDF the archive derived from it.
-Only files this reader can actually open are offered, and the archive's own metadata is what decides:
-it marks every file as uploaded, derived or bookkeeping, so derivatives are admitted by a short
-allow-list rather than by their extension. That is what keeps out JPEG 2000 pages (iOS cannot decode
-them at all, and they are usually the largest file in the item), EPUB and OCR text layers (nothing
-here can open them), DAISY accessibility packages (navigation XML with no pages in it — and a
-plausible-looking 1 MB "ZIP" if you go by the extension) and torrents (every item has one whether or
-not anyone wanted it, and there is no BitTorrent client here). Items filed as software, audio or
-video are refused outright whatever they hold: a game's upload is a zip of disk images, and nothing
-in the file list says so.
-
-**One item is not always one issue.** The archive's "magazine packs" hold a whole run under a single
-identifier — thirteen issues of Transactor for the Amiga, one PDF each. Files are grouped by name,
-so two formats of one issue stay one issue while thirteen volumes become thirteen shelf entries,
-each with its own key, title and cover. Open a volume in the archive's own reader and the address
-says which one, so Import takes exactly what is on screen.
-
-Importing writes down the issue's details and its cover and stops there — the scan is downloaded
-later, from the shelf, like everything else. archive.org's metadata is uploader-typed and often
-sparse, wrong or missing, so nothing is guessed at beyond a title and an issue number: the publisher
-is recorded as **Archive.org** so search and the filter menus can find the lot, and the item's own
-title, identifier, filename and tags all go into the search index untouched. Covers come from the
-issue's own first page where the archive has rendered one, and otherwise from the scan itself once
-it is downloaded — never from another issue's artwork.
-
-Both browsers — StripZona's and this one — are **fenced to their own site**. The address line is a
-readout, never a field, and a link leading anywhere else is not followed. The app embeds a view of
-two sites; it is not a web browser.
-
-**Every source can be switched on and off** in Settings, or from the empty shelf on a first run.
+* **Sources can be switched on and off** in Settings, or from the empty shelf on a first run.
 Switching one off hides it everywhere — shelf, search and filter menus — and never deletes
 anything: what you have read and downloaded is exactly as you left it when you switch it back on.
 RetroSpec and Archive.org start switched off, so the app opens on an empty shelf and asks rather
-than arriving with six hundred magazines nobody asked for.
+than arriving with hundreds of retro computer magazines a strictly comics lover might not care about.
 
-## What it does
+---
 
-- **Imports a saved topic page** and turns its posts into library entries.
-  Uploaders on the forum label issues in many ways; the parser learns offline from corpus and tries to
-  handle each.
-- **Carries the RetroSpec and Archive.org indexes** for the ex-Yugoslav computer magazines and
-  fanzines, built offline rather than imported, with dates, issue numbers, languages and page counts.
-- **Imports single items from archive.org**, found in a fenced in-app browser, with the download
-  format picked by hand from what the item actually holds — one shelf entry per issue, even when
-  the archive keeps a whole run of them under one identifier.
-- **Finds cover art** from the page itself, or resolving the name against stripovi.com.
+## 1.0 Features
+
+- **Imports a liked StripZona forum page** and turns its posts into library entries.
+- **Finds cover art** from the page itself, or by resolving against stripovi.com.
 - **Downloads** from mirrors (MediaFire, Mega, Pixeldrain), including split archives
-  and sets where one archive holds a run of issues, or straight from RetroSpec or archive.org.
+  and sets where one archive holds a run of issues.
 - **Reads** CBR, CBZ, RAR, ZIP, 7z and PDF. Portrait turns pages like Kindle; landscape is
   one continuous fit to width (for oversized content) scroll with a scrubber down each edge, so it works in either
   hand. It remembers where you stopped reading.
 - **Search, filter, sort** by title, hero, publisher, series or number, with
-  read/reading/unread and downloaded states — across all three sources at once, or
-  any of them on its own. The shelf leads with whatever arrived most recently;
-  a search stays in relevance order.
+  read/reading/unread and downloaded states.
 
-## StripZona Signing in
+> [StripZona](https://www.stripzona.com) is a Serbian/ex-YU comics fan site. You browse its forum
+inside the app, import a topic page, and its issues become a searchable shelf — covers, series,
+hero, publisher and issue numbers, all read off the page in a convenient Kindle-style reader.
+Downloads and reading happen in the app.
+
+---
+
+## StripZona Support Details
 
 All posts hide their links until you are logged in and liked them. You log in on StripZona's
 own form, inside the app's sandboxed web view (the reader doesn't know, store or replay your credentials).
@@ -126,28 +84,23 @@ Bookglobe, Slobodna Dalmacija and Fibra.
 
 Cover art is complete for most of these but there are some inevitable gaps / misses.
 
-RetroSpec needs none of this: its index is fixed and built offline against the whole archive, so
-its 19 runs are covered completely. Eight of its 653 archives are missing from the site itself —
-six Moj Mikro issues from 1990-91, one BIT and one Galaksija. They keep their covers and metadata
-and stay on the shelf, because the site may restore them.
-
 ### Will it work for my favorite hero / series?
 
 I will keep adding to the offline training corpus but I cannot claim 100% coverage.
 
-In the meantime, a topic that is written like one of the above should import the same way. One
-that is not may import partially — missing links, missing cover art, or issues
+In the meantime, a topic that is written like one of the above should import the same way.
+One that is not may import partially — missing links, missing cover art, or issues
 skipped entirely — and it will do so quietly rather than reporting an error,
 because there is no way to tell an unread convention from a post that simply
 has nothing in it.
 
-If a topic imports badly, saving its page into `spike/pages/` and running the
-tests is the whole diagnosis: the counts say how many of its links were
-understood.
+Contact me to add support for your favorite hero in the next version.
 
-## Building
+----
 
-Requires Xcode and [xcodegen](https://github.com/yonaskolb/XcodeGen). The app
+## Development Notes
+
+Building requires Xcode and [xcodegen](https://github.com/yonaskolb/XcodeGen). The app
 target is generated from `project.yml`, so edit that rather than the project
 file.
 
@@ -163,12 +116,19 @@ and PDF decoding — and builds on macOS, which is why the tests run without a
 simulator. `unrar` and the LZMA SDK are vendored under `Sources/CUnrar` and
 `Sources/C7z`.
 
+Uploaders on the StripZona forum label issues in many ways; the parser learns
+offline from corpus and tries to handle each.
+
 The test fixtures are saved forum pages in `spike/pages/`, which is gitignored to protect the mirror links.
 RetroSpec's fixtures are committed instead, under `Tests/Fixtures/retrospec/` — they are a public,
 static archive carrying no private links, so those tests run on a fresh clone with no network.
 Archive.org's are inline in the tests: trimmed copies of the real metadata responses for the items
 the import was built against — a comic, a scanned magazine, a pack of thirteen, a game and a
 single-image upload — so they need no network either.
+
+If a topic imports badly, saving its page into `spike/pages/` and running the
+tests is the whole diagnosis: the counts say how many of its links were
+understood.
 
 Both shipped indexes are rebuilt by hand — RetroSpec's when the site changes, Archive.org's when an
 item is added to the list in `ArchiveOrgLibrary`:
@@ -189,11 +149,10 @@ scan's name and size, the page count, the cover, the title's month and year) com
 own metadata. That list stays hand-picked and small; anything else worth reading is imported from
 the browser at runtime instead, which needs no rebuild and ships nothing.
 
+---
+
 ## Licence
 
-Content: the app is just a reader — it hosts nothing and ships no content. The RetroSpec and
-Archive.org indexes that ship with it are metadata only — names, dates, sizes, page counts and
-links. Cover art is loaded from each archive, and issues are downloaded from it on request. This
-reader is not affiliated with or endorsed by the Internet Archive.
+**Content:** the app is a reader — it hosts nothing and ships no content.
 
-Code: © Mihailo Despotovic, 2026. [PolyForm Noncommercial 1.0.0](LICENSE).
+**Code:** © Mihailo Despotovic, 2026. [PolyForm Noncommercial 1.0.0](LICENSE).
