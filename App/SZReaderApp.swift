@@ -121,8 +121,14 @@ final class AppModel: ObservableObject {
     /// Every hero in the library, in the spelling the rows hold.
     @Published var availableHeroes: [String] = []
 
-    /// How the shelf is ordered. `imported` keeps the query's own order.
-    @AppStorage("shelfSort") var sortOrder: ShelfSort = .imported {
+    /// How the shelf is ordered.
+    ///
+    /// Newest first by default: the shelf runs to thousands of issues, and
+    /// anything just imported was landing at the far end of it where nobody
+    /// was going to scroll. A reader who has picked another order has it
+    /// stored and keeps it — `@AppStorage` only writes when set, so this
+    /// default reaches exactly the people who never chose.
+    @AppStorage("shelfSort") var sortOrder: ShelfSort = .default {
         didSet { search(query) }
     }
 
@@ -131,9 +137,15 @@ final class AppModel: ObservableObject {
         didSet { search(query) }
     }
 
-    /// The size the page thumbnails on disk were rendered at, so a build that
-    /// changes it can throw them away rather than serve the old ones.
-    @AppStorage("thumbnailSize") private var thumbnailSize = 0
+    /// How the page thumbnails on disk were rendered — their size, and which
+    /// build of the drawing made them — so a build that changes either throws
+    /// them away rather than serving the old ones.
+    ///
+    /// A new key, deliberately: the old one held the size alone, and every
+    /// library out there has the current size written into it. Reusing it
+    /// would mean this fix reached nobody who already had thumbnails, which is
+    /// precisely the set of people with clipped ones.
+    @AppStorage("pageRenderStamp") private var pageRenderStamp = ""
 
     // MARK: - Sources
 
@@ -328,19 +340,25 @@ final class AppModel: ObservableObject {
             CoverStore.reportDeadCover = { [weak store] url in
                 try? store?.markCoverDead(url: url)
             }
-            // Page thumbnails are cached by page, not by size, so a change to
-            // how large they are rendered leaves the old ones being served at
-            // the old size — soft on a bigger tile, and nothing would ever
-            // replace them. Cheap to throw away: they are made from pages that
-            // are still on disk.
-            if thumbnailSize != Library.thumbnailPixels {
-                library?.discardAllPageThumbnails()
-                thumbnailSize = Library.thumbnailPixels
-            }
             library = Library(store: store,
                               paths: paths,
                               transport: transport,
                               downloader: URLSessionDownloader())
+
+            // Page thumbnails are cached by page, and the file on disk records
+            // neither how large it was drawn nor how — so a build that changes
+            // either goes on serving what the last one left behind, for ever,
+            // because nothing ever looks at them again. Cheap to throw away:
+            // they are made from pages that are still on disk.
+            //
+            // *After* the library exists, which is what this needed and did
+            // not have. It ran a line earlier, against a `library` that was
+            // still nil: it discarded nothing, wrote the stamp, and left the
+            // stale thumbnails exactly where they were.
+            if pageRenderStamp != Library.pageRenderingStamp {
+                library?.discardAllPageThumbnails()
+                pageRenderStamp = Library.pageRenderingStamp
+            }
 
             // A library that already holds the catalogue keeps showing it.
             //
@@ -397,10 +415,11 @@ final class AppModel: ObservableObject {
             results = []
             return
         }
+        let searching = !text.trimmingCharacters(in: .whitespaces).isEmpty
         do {
             // Empty query lists the start of the library rather than nothing,
             // so the shelf is never blank on launch.
-            results = text.trimmingCharacters(in: .whitespaces).isEmpty
+            results = !searching
                 // No cap: the grid and list are lazy, so only visible cells are
                 // built, and a silent 200-row ceiling made a 613-issue library
                 // look like it ended at 200.
@@ -414,10 +433,11 @@ final class AppModel: ObservableObject {
                                    publishers: selectedPublishers,
                                    heroes: selectedHeroes,
                                    states: readStates, sites: visibleSites)
-            // Applied on top of the query, so the default costs nothing and
-            // leaves insertion order when browsing and relevance when
-            // searching — each view's own answer to what it was asked.
-            if let comparator = StoredIssue.comparator(for: sortOrder) {
+            // Applied on top of the query, and told whether there is one: the
+            // shelf sorts by arrival, a search stays in relevance order. Both
+            // import orders defer here; the four explicit keys do not.
+            if let comparator = StoredIssue.comparator(for: sortOrder,
+                                                       whileSearching: searching) {
                 results.sort(by: comparator)
             }
         } catch {
@@ -735,13 +755,33 @@ final class AppModel: ObservableObject {
         selectedHeroes = chosen
     }
 
-    func clearSeriesFilter() {
+    /// Puts the whole library back on the shelf.
+    ///
+    /// Every way the shelf can be narrowed, including the search field — which
+    /// is the one people mean and the one that used to survive. "Show all"
+    /// that leaves a query in the box shows a search, and the reader is left
+    /// looking at three issues wondering which control lied to them.
+    ///
+    /// Downloaded goes too, for the same reason: it is a filter like any
+    /// other, and a shelf still hiding everything not on the device is not
+    /// showing all of anything.
+    ///
+    /// Sources are deliberately left alone. Switching a source off is a
+    /// decision made in Settings about what this library holds at all, not a
+    /// filter over it, and turning three of them back on is not what anyone
+    /// means by this button.
+    func showAll() {
         showRead = false
         showUnread = false
         showReading = false
         selectedHeroes = []
         selectedSeries = []
         selectedPublishers = []
+        downloadedOnly = false
+        // Last, and through `search` rather than by assigning `query`: the
+        // field is bound to it, and this is what actually re-runs the query
+        // and rebuilds the shelf.
+        search("")
     }
 
     /// Names issues the forum post never named.

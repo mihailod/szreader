@@ -24,6 +24,47 @@ final class ShelfSortTests: XCTestCase {
         XCTAssertEqual(order(shelf, by: .imported), [3, 1, 2])
     }
 
+    /// The default: what arrived last is at the top, where someone who has
+    /// just imported it will actually see it.
+    ///
+    /// A real comparator rather than "reverse whatever came back". The rows a
+    /// search hands over are in relevance order, and the reverse of that is
+    /// the least relevant first — which is not newest by any reading.
+    func testNewestFirstIsTheDefaultAndSortsByArrival() {
+        XCTAssertEqual(ShelfSort.default, .newest)
+        XCTAssertEqual(ShelfSort.allCases.first, .newest, "and it is offered first")
+        let shelf = [issue(3, title: "c"), issue(1, title: "a"), issue(2, title: "b")]
+        XCTAssertEqual(order(shelf, by: .newest), [3, 2, 1])
+    }
+
+    /// A search stays in the order the search produced.
+    ///
+    /// The shelf answers "what have I got", and newest-first is the right
+    /// answer to that. A search answers "where is the thing I typed", which
+    /// the query has already ranked — re-sorting those hits by age buries the
+    /// best match under whatever was imported most recently.
+    func testNewestDefersToRelevanceWhileSearching() {
+        XCTAssertNil(StoredIssue.comparator(for: .newest, whileSearching: true))
+        XCTAssertNil(StoredIssue.comparator(for: .imported, whileSearching: true))
+        XCTAssertNotNil(StoredIssue.comparator(for: .newest, whileSearching: false))
+
+        // The four explicit keys are unaffected: asking for Title means Title,
+        // question or no question.
+        for sort in [ShelfSort.title, .series, .hero, .number] {
+            XCTAssertNotNil(StoredIssue.comparator(for: sort, whileSearching: true),
+                            "\(sort) was asked for by name and must still apply")
+        }
+    }
+
+    /// The stored value is what a reader picked, so the two import orders must
+    /// never be confusable: renaming `imported` to mean its opposite would
+    /// silently reverse the shelf of everyone who had chosen it.
+    func testTheTwoImportOrdersAreDistinctStoredValues() {
+        XCTAssertEqual(ShelfSort.imported.rawValue, "imported")
+        XCTAssertEqual(ShelfSort.newest.rawValue, "newest")
+        XCTAssertEqual(ShelfSort(rawValue: "imported"), .imported)
+    }
+
     func testByTitle() {
         let shelf = [issue(1, title: "Zoo simfonija"), issue(2, title: "Grupa TNT"),
                      issue(3, title: "Kuća duhova")]
@@ -74,13 +115,21 @@ final class ShelfSortTests: XCTestCase {
     }
 
     /// Equal keys must not shuffle between refreshes.
+    ///
+    /// `imported` has no comparator to be unstable, and `newest` sorts on the
+    /// id itself — which is unique, so it has no ties to break and is the one
+    /// order that legitimately puts the higher id first.
     func testEveryOrderIsStable() {
-        for sort in ShelfSort.allCases where sort != .imported {
+        for sort in ShelfSort.allCases where sort != .imported && sort != .newest {
             let shelf = [issue(9, edition: "ZS", number: 5, title: "same", hero: "Zagor"),
                          issue(4, edition: "ZS", number: 5, title: "same", hero: "Zagor")]
             XCTAssertEqual(order(shelf, by: sort), [4, 9], "\(sort) is unstable")
             XCTAssertEqual(order(shelf.reversed(), by: sort), [4, 9], "\(sort) is unstable")
         }
+        // And newest is stable in its own direction, whichever way it is fed.
+        let shelf = [issue(9), issue(4)]
+        XCTAssertEqual(order(shelf, by: .newest), [9, 4])
+        XCTAssertEqual(order(shelf.reversed(), by: .newest), [9, 4])
     }
 }
 

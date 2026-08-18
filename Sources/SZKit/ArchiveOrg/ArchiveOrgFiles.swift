@@ -30,12 +30,30 @@ public extension ArchiveOrgItem {
         /// is what lets a download too large for the device be refused before
         /// a byte of it moves.
         public let bytes: Int64?
+        /// Whether this is what somebody uploaded, rather than something the
+        /// archive made out of it.
+        public let isOriginal: Bool
 
         /// Unique within an item, which is all this identity is for.
         public var id: String { name }
 
-        public init(name: String, kind: Kind, bytes: Int64?) {
+        public init(name: String, kind: Kind, bytes: Int64?, isOriginal: Bool) {
             self.name = name; self.kind = kind; self.bytes = bytes
+            self.isOriginal = isOriginal
+        }
+
+        /// The half-sentence under the name in the picker.
+        ///
+        /// Says where the file came from and nothing about how big it is. It
+        /// used to call the archive's PDF "smaller", which is true of most
+        /// items and was wrong by two orders of magnitude on the first one
+        /// anybody tried it on: Byte's September 1986 issue is a 330 MB PDF
+        /// beside a 1 MB accessibility package. The size is printed next to
+        /// this, measured; a word that guesses at it can only disagree with
+        /// the number beside it.
+        public var detail: String {
+            if isOriginal { return "as uploaded" }
+            return kind == .text ? "searchable text" : "made by archive.org"
         }
 
         /// Where it lives, relative to `ArchiveOrg.base`.
@@ -83,55 +101,196 @@ public extension ArchiveOrgItem {
             case .scan, .text:           return "PDF"
             }
         }
-
-        /// The half-sentence under the name in the picker.
-        public var detail: String {
-            switch self {
-            case .comicBook, .scan, .container: return "as uploaded"
-            case .text:                         return "searchable text, smaller"
-            }
-        }
     }
+
+    /// Item kinds this app will not import from, whatever files they hold.
+    ///
+    /// The one place a file's own evidence runs out. "In Search of the Most
+    /// Amazing Thing" is an Apple II game whose upload is two plain `ZIP`s,
+    /// marked `original`, and nothing about a zip says whether it holds
+    /// scanned pages or disk images. The item says: `mediatype: software`.
+    /// The same goes for the zip beside a concert recording or a film.
+    ///
+    /// A deny-list rather than "texts only", deliberately. Uploaders file
+    /// scans under `image` and `data` as well — the mediatype is a menu choice
+    /// on an upload form, not a fact — and refusing everything unfamiliar
+    /// would make perfectly readable issues unimportable with no way for
+    /// anyone to say otherwise. These four are the ones that are never a
+    /// scanned issue.
+    static let unreadableMediatypes: Set<String> = [
+        "software", "audio", "movies",
+        // The archive's own name for live music, and audio by another word.
+        "etree",
+    ]
 
     /// What this item can be read from, best first.
     ///
     /// Empty is the answer that matters: it is what greys out Import, and it
-    /// is the truth for a collection page, a lending-restricted book, an audio
-    /// item, and for the single-PNG items that a scanner uploads one cover at
-    /// a time.
+    /// is the truth for a collection page, a lending-restricted book, a game,
+    /// a concert, and for the single-PNG items that a scanner uploads one
+    /// cover at a time.
     var readableFiles: [ReadableFile] {
-        files.compactMap { file in
+        guard !Self.unreadableMediatypes.contains(mediatype ?? "") else { return [] }
+        return files.compactMap { file in
             Self.kind(of: file).map {
-                ReadableFile(name: file.name, kind: $0, bytes: file.bytes)
+                ReadableFile(name: file.name, kind: $0, bytes: file.bytes,
+                             isOriginal: file.source == .original)
             }
         }
         .sorted { ($0.kind, $0.name) < ($1.kind, $1.name) }
     }
 
-    /// Whether the archive has run its page pipeline over this item.
+    /// One issue, and the formats it can be read in.
+    ///
+    /// An archive.org item is not always one issue. `transactor-for-the-amiga`
+    /// is a "magazine pack": one item, thirteen issues of Transactor, a PDF
+    /// each. Treating the item as the issue offered those thirteen as thirteen
+    /// identical-looking "PDF · as uploaded" rows, and importing any two of
+    /// them wrote the same library row twice — the second silently replacing
+    /// the first.
+    struct ReadableIssue: Equatable, Sendable, Identifiable {
+        /// The filename its files share, without extension. This is what the
+        /// archive's reader puts in the URL, and what identifies the issue
+        /// inside the item.
+        public let stem: String
+        /// Its formats, best first. Never empty.
+        public let files: [ReadableFile]
+
+        public var id: String { stem }
+        /// What to offer when no choice of format is being made.
+        public var best: ReadableFile { files[0] }
+
+        public init(stem: String, files: [ReadableFile]) {
+            self.stem = stem; self.files = files
+        }
+
+        /// The stem as a person would read it: underscores undone and the
+        /// archive's own tags dropped, so
+        /// `Transactor_for_the_Amiga_Vol_01_01_1988_Apr[ocr]` reads as
+        /// "Transactor for the Amiga Vol 01 01 1988 Apr".
+        public var name: String { ArchiveOrgItem.readableName(stem) }
+    }
+
+    /// The issues this item holds, oldest name first.
+    ///
+    /// Grouped by filename stem, which is exactly the distinction that matters
+    /// and the one an extension cannot make: `Zagor 137….cbr` and
+    /// `Zagor 137….pdf` are two formats of one issue, while
+    /// `…Vol_01_01….pdf` and `…Vol_01_02….pdf` are two issues.
+    var readableIssues: [ReadableIssue] {
+        var order: [String] = []
+        var stems: [String: String] = [:]          // folded key -> stem as written
+        var grouped: [String: [ReadableFile]] = [:]
+        for file in readableFiles {
+            let stem = Self.stem(of: file.name)
+            let key = stem.lowercased()
+            if grouped[key] == nil {
+                order.append(key)
+                stems[key] = stem
+            }
+            grouped[key, default: []].append(file)
+        }
+        return order
+            .map { ReadableIssue(stem: stems[$0] ?? $0, files: grouped[$0] ?? []) }
+            .sorted { $0.stem.localizedStandardCompare($1.stem) == .orderedAscending }
+    }
+
+    /// The issue a file belongs to.
+    func issue(holding file: ReadableFile) -> ReadableIssue? {
+        let key = Self.stem(of: file.name).lowercased()
+        return readableIssues.first { $0.stem.lowercased() == key }
+    }
+
+    /// The issue an address names, when it names one this item holds.
+    func issue(named stem: String) -> ReadableIssue? {
+        let key = stem.lowercased()
+        return readableIssues.first { $0.stem.lowercased() == key }
+    }
+
+    /// How one issue of this item is filed in the library.
+    ///
+    /// An item holding one issue *is* that issue, and keeps the identifier as
+    /// its key — which is what lets a reader who browses to A-Profy find the
+    /// copy the shipped catalogue already gave them. An item holding several
+    /// has to name which, or the second import overwrites the first.
+    func code(for issue: ReadableIssue) -> String {
+        readableIssues.count > 1 ? "\(identifier)/\(issue.stem)" : identifier
+    }
+
+    /// Whether the archive has run its page pipeline over one issue.
     ///
     /// Which is exactly the question "will the BookReader cover endpoint
     /// answer for it" — `/page/n0_w1024.jpg` is served out of those
     /// derivatives, and an item that has none 404s. Asking it here costs
-    /// nothing; asking it over the network would cost a request per item
-    /// browsed to.
-    var hasRenderedPages: Bool {
-        files.contains { file in
+    /// nothing; asking it over the network would cost a request per item.
+    ///
+    /// Per issue, not per item, and that is the whole point on a pack: the
+    /// archive scanned Transactor's first volume and left the other twelve as
+    /// plain PDFs, so the item answers `/page/n0` with volume one's cover —
+    /// which is the right cover for exactly one of the thirteen.
+    func hasRenderedPages(forStem stem: String) -> Bool {
+        let prefix = stem.lowercased()
+        return files.contains { file in
             let format = (file.format ?? "").lowercased()
-            return format.contains("jp2") || format == "scandata"
+            guard format.contains("jp2") || format == "scandata" else { return false }
+            return file.name.lowercased().hasPrefix(prefix)
         }
     }
 
     /// The best cover available without downloading the issue.
     ///
-    /// The item's own first page where the archive can render one, and its
-    /// square tile where it cannot. Nil when the item has neither, which
-    /// leaves the shelf drawing its placeholder until the download arrives and
-    /// the issue's own first page replaces it.
-    var coverPath: String? {
-        if hasRenderedPages { return ArchiveOrg.firstPagePath(item: identifier) }
-        guard files.contains(where: { $0.name == "__ia_thumb.jpg" }) else { return nil }
+    /// The issue's own first page where the archive can render one, and the
+    /// item's square tile where it cannot — but the tile belongs to the item,
+    /// so a pack's members get nothing rather than thirteen copies of volume
+    /// one's cover. Nil leaves the shelf drawing its placeholder until the
+    /// download arrives and the issue's own first page replaces it, which is
+    /// the truth in the meantime.
+    func coverPath(for issue: ReadableIssue) -> String? {
+        if hasRenderedPages(forStem: issue.stem) {
+            return ArchiveOrg.firstPagePath(item: identifier)
+        }
+        guard readableIssues.count == 1,
+              files.contains(where: { $0.name == "__ia_thumb.jpg" }) else { return nil }
         return ArchiveOrg.thumbnailPath(item: identifier)
+    }
+
+    /// A filename without its extension.
+    static func stem(of name: String) -> String {
+        (name as NSString).deletingPathExtension
+    }
+
+    /// Tags the archive appends to a scan's name — `[ocr]`, `[b&w]`.
+    private static let scanTag = Rx(#"\[[^\]]*\]"#)
+    private static let spaceRun = Rx(#"\s+"#)
+
+    /// A filename stem as a person would read it.
+    static func readableName(_ stem: String) -> String {
+        var text = stem.replacingOccurrences(of: "_", with: " ")
+        text = scanTag.replacing(text, with: " ")
+        text = spaceRun.replacing(text, with: " ")
+        return text.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// An issue's name with the part the whole item already says trimmed off.
+    ///
+    /// Every file in a pack repeats the magazine's name, and the picker states
+    /// that once in its heading — so thirteen rows reading "Transactor for the
+    /// Amiga Vol 01 01 1988 Apr" differ only in their last few words, which is
+    /// exactly where the eye is not looking. Trimmed, they read "Vol 01 01
+    /// 1988 Apr".
+    ///
+    /// Only leading words, and only ones the title actually has: an issue
+    /// whose name shares nothing with the item's keeps all of it.
+    func shortName(for issue: ReadableIssue) -> String {
+        let words = Self.readableName(issue.name).split(separator: " ").map(String.init)
+        let titleWords = Fold.fold(title).split(separator: " ").map(String.init)
+        var index = 0
+        while index < words.count, index < titleWords.count,
+              Fold.fold(words[index]) == titleWords[index] {
+            index += 1
+        }
+        let kept = words.dropFirst(index).joined(separator: " ")
+        return kept.isEmpty ? issue.name : kept
     }
 
     // MARK: - Classification
@@ -181,6 +340,26 @@ public extension ArchiveOrgItem {
         "_meta.sqlite", "_archive.torrent", "_thumb.jpg", "__ia_thumb.jpg",
     ]
 
+    /// The only things the archive *derives* that are worth reading.
+    ///
+    /// A strict allow-list, and the point is what it excludes. Everything an
+    /// item holds beyond the upload was generated by the archive's pipeline —
+    /// JPEG 2000 pages, an EPUB, a DjVu, four text layers, an animated GIF, a
+    /// DAISY accessibility package — and only one of them is a readable copy
+    /// of the magazine. Judging those by extension is what offered Byte's
+    /// September 1986 issue as a 1 MB "ZIP, as uploaded" that was neither: it
+    /// was `_daisy.zip`, a bundle of navigation XML with no pages in it.
+    ///
+    /// So a derivative has to be named here to be offered, and a format the
+    /// archive invents next year is refused until somebody looks at it.
+    private static let readableDerivatives: [String: Kind] = [
+        "text pdf": .text,
+        "additional text pdf": .text,
+        // Vanishingly rare as a derivative, and admitted because an item whose
+        // upload has been replaced by one is still a readable scan.
+        "image container pdf": .scan,
+    ]
+
     /// What one file is, or nil if it is nothing this app can open.
     ///
     /// Positive matching throughout: a file is offered because it was
@@ -192,6 +371,20 @@ public extension ArchiveOrgItem {
         // A zero-byte file is a file the upload lost.
         if let bytes = file.bytes, bytes <= 0 { return nil }
         let format = (file.format ?? "").lowercased()
+
+        switch file.source {
+        case .metadata:
+            // The archive's own bookkeeping: the torrent, the XML, the sqlite.
+            return nil
+        case .derivative:
+            return readableDerivatives[format]
+        case .original:
+            break
+        }
+
+        // An upload is judged on what it is. The by-product checks still earn
+        // their place here, because "original" covers the item tile and the
+        // files.xml as well as the scan.
         if let known = knownFormats[format] { return known }
         if byProductWords.contains(where: format.contains) { return nil }
         let name = file.name.lowercased()

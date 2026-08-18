@@ -323,6 +323,23 @@ public final class Library {
     /// discards the cache when the number moves.
     public static let thumbnailPixels = 400
 
+    /// Bumped whenever the *drawing* changes rather than the size.
+    ///
+    /// A thumbnail on disk is a JPEG and says nothing about how it was made,
+    /// so without this a build that fixes the rendering goes on serving the
+    /// pictures the broken one left behind — for ever, because nothing ever
+    /// looks at them again.
+    ///
+    /// 2: a PDF page carrying a `/Rotate` was drawn into a frame sized from
+    /// its unrotated box, so every page of a quarter-turned scan was clipped
+    /// along one edge.
+    public static let pageRenderingVersion = 2
+
+    /// What a cached thumbnail would have to match to still be good.
+    public static var pageRenderingStamp: String {
+        "\(thumbnailPixels)/\(pageRenderingVersion)"
+    }
+
     /// A small rendering of one page, made once and kept.
     ///
     /// Nil rather than throwing: a page that will not decode is one blank

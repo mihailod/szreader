@@ -84,6 +84,33 @@ public enum ArchiveOrg {
     /// metadata does. So this answers "there is an item id here", and whether
     /// it is anything worth importing is settled by asking the archive.
     public static func identifier(inURL url: URL) -> String? {
+        segments(inURL: url)?.item
+    }
+
+    /// Which *file* of an item an address is about, when it names one.
+    ///
+    /// An item can hold a whole run — `transactor-for-the-amiga` is thirteen
+    /// issues of a magazine, one PDF each — and the archive's reader says
+    /// which of them you are looking at in the third path segment:
+    /// `/details/transactor-for-the-amiga/Transactor_for_the_Amiga_Vol_01_01_1988_Apr[ocr]`.
+    ///
+    /// Returned without its extension, because that is how the details page
+    /// writes it and how the files group: one issue is a `.pdf` and its
+    /// siblings under one name.
+    public static func fileStem(inURL url: URL) -> String? {
+        segments(inURL: url)?.file
+    }
+
+    /// Words the archive's own reader puts where a filename would go.
+    ///
+    /// `/details/<id>/page/n0/mode/2up` is a place in the book, not a file in
+    /// the item, and reading it as one would look for an issue called "page".
+    private static let readerPathWords: Set<String> = [
+        "page", "mode", "search", "theater", "fullscreen",
+    ]
+
+    /// The item, and the file within it, that an address names.
+    static func segments(inURL url: URL) -> (item: String, file: String?)? {
         guard let host = url.host?.lowercased(),
               host == Self.host || host.hasSuffix("." + Self.host) else { return nil }
         let parts = url.path.split(separator: "/").map(String.init)
@@ -94,7 +121,15 @@ public enum ArchiveOrg {
         // "@someone" is a member's profile, which sits at the same address
         // shape as an item and is not one.
         guard !identifier.isEmpty, !identifier.hasPrefix("@") else { return nil }
-        return identifier
+
+        var file: String?
+        if parts.count >= 3 {
+            let raw = parts[2].removingPercentEncoding ?? parts[2]
+            if !raw.isEmpty, !readerPathWords.contains(raw.lowercased()) {
+                file = (raw as NSString).deletingPathExtension
+            }
+        }
+        return (identifier, file)
     }
 
     // MARK: - Scandata

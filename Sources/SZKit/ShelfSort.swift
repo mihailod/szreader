@@ -2,21 +2,37 @@ import Foundation
 
 /// How the shelf is ordered.
 ///
+/// Declaration order is menu order, so the case a reader wants first is
+/// written first.
+///
 /// `imported` is not a comparator: it means "leave the query's own order
 /// alone", which is insertion order when browsing and relevance rank when
-/// searching. Those are the defaults because they answer the two questions
-/// each view is actually asked — what did I add recently, and what matches
-/// what I typed — and a reader who wants something else can say so.
+/// searching. `newest` is its opposite and *is* a comparator, because
+/// reversing "whatever order the query produced" is only meaningful when that
+/// order was insertion.
 public enum ShelfSort: String, CaseIterable, Sendable {
+    /// Most recently imported first, which is what someone who has just
+    /// imported something is looking for — and, on a shelf of several
+    /// thousand, the only order in which a new arrival is visible without
+    /// scrolling to the end.
+    ///
+    /// The default, and the raw value is deliberately new rather than a rename
+    /// of `imported`: a reader who has chosen a sort has that choice stored,
+    /// and it must keep meaning what they picked.
+    case newest
     case imported
     case title
     case series
     case hero
     case number
 
+    /// What a fresh install sorts by.
+    public static let `default` = ShelfSort.newest
+
     public var label: String {
         switch self {
-        case .imported: return "Import order"
+        case .newest:   return "Reverse Import Order"
+        case .imported: return "Import Order"
         case .title:    return "Title"
         case .series:   return "Series"
         case .hero:     return "Hero"
@@ -26,6 +42,7 @@ public enum ShelfSort: String, CaseIterable, Sendable {
 
     public var symbol: String {
         switch self {
+        case .newest:   return "clock.arrow.circlepath"
         case .imported: return "clock"
         case .title:    return "textformat"
         case .series:   return "books.vertical"
@@ -38,9 +55,23 @@ public enum ShelfSort: String, CaseIterable, Sendable {
 public extension StoredIssue {
 
     /// The comparator for a sort, or nil to keep the query's own order.
-    static func comparator(for sort: ShelfSort) -> ((StoredIssue, StoredIssue) -> Bool)? {
+    ///
+    /// `whileSearching` is what keeps a search sorted by relevance. The two
+    /// import orders describe *arrival*, which is the useful answer to "what
+    /// is on my shelf" and the wrong one to "what matches what I typed" — a
+    /// search already comes back best-match-first, and re-sorting it by age
+    /// buries the row the reader was looking for. The four explicit keys are
+    /// unaffected: someone who asks for Title means Title, question or no
+    /// question.
+    static func comparator(for sort: ShelfSort,
+                           whileSearching: Bool = false)
+        -> ((StoredIssue, StoredIssue) -> Bool)? {
         switch sort {
         case .imported: return nil
+        // The id is the insertion counter, so descending is newest first.
+        // Reversing the *rows* would not do even when browsing: it is the
+        // order that has to be defined, not the array that came back.
+        case .newest:   return whileSearching ? nil : { $0.id > $1.id }
         case .title:    return { byText($0.title ?? $0.code, $1.title ?? $1.code, $0, $1) }
         case .series:   return bySeries
         case .hero:     return byHero

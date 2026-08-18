@@ -32,11 +32,13 @@ public struct ArchiveImport: Equatable, Sendable {
 
 public extension Store {
 
-    /// What an archive.org item is filed under here, if anything.
+    /// What an archive.org issue is filed under here, if anything.
     ///
-    /// Keyed on the identifier, which is the item — the same key the shipped
-    /// catalogue uses, so a reader who browses to A-Profy finds the copy they
-    /// already have rather than making a second one.
+    /// The code is the item's identifier for an item that holds one issue —
+    /// the same key the shipped catalogue uses, so a reader who browses to
+    /// A-Profy finds the copy they already have rather than making a second
+    /// one — and `identifier/stem` for one issue of a pack. `ArchiveOrgItem`
+    /// decides which; see `code(for:)`.
     func archiveItem(identifier: String) throws -> ArchiveRow? {
         var row: ArchiveRow?
         try db.query("""
@@ -46,6 +48,7 @@ public extension Store {
                    IFNULL(i.source, '')
             FROM issue i WHERE i.site = ? AND i.code = ?
             """, [.text(IssueSite.archive.rawValue), .text(identifier)]) { result in
+
             row = ArchiveRow(issueID: result.int(0) ?? 0,
                              mirrorURL: result.string(1),
                              isDownloaded: (result.int(2) ?? 0) == 1,
@@ -74,17 +77,32 @@ public extension Store {
     func importArchiveItem(_ item: ArchiveOrgItem,
                            file: ArchiveOrgItem.ReadableFile) throws -> ArchiveImport {
         let site = IssueSite.archive
-        let existing = try archiveItem(identifier: item.identifier)
-        let label = Self.archiveLabel(for: item.title)
+        // Which issue of the item this file belongs to. An item holding one
+        // issue is that issue; a pack holds many, and the file says which.
+        let issue = item.issue(holding: file)
+        let code = issue.map { item.code(for: $0) } ?? item.identifier
+        let existing = try archiveItem(identifier: code)
+        // A pack's members all share the item's title — thirteen issues of
+        // Transactor are all called "Transactor For The Amiga" — so the
+        // filename is the only thing that tells them apart, and it is what
+        // names them. `TitleCleaner` is not asked: it reads forum mirror
+        // names, and on these it turns "…Vol_01_01_1988_Apr" into "01 1988
+        // Apr", issue 1.
+        let label: (title: String, number: Int?) =
+            item.readableIssues.count > 1 && issue != nil
+                ? (issue!.name, nil)
+                : Self.archiveLabel(for: item.title)
         let url = file.url(item: item.identifier)
 
         // Everything the item says about itself, so a search finds it by the
-        // archive.org title it was uploaded under, by its identifier, and by
-        // its uploader's tags — none of which survive into the shelf's own
-        // columns once the title has been cleaned up.
-        let context = ([item.title, item.identifier, site.display] + item.subjects)
+        // archive.org title it was uploaded under, by its identifier, by the
+        // file it came from, and by its uploader's tags — none of which
+        // survive into the shelf's own columns once the title has been
+        // cleaned up.
+        let context = ([item.title, item.identifier, site.display,
+                        issue.map(\.stem) ?? ""] + item.subjects)
             .joined(separator: " ")
-        let search = Self.searchText(title: label.title, code: item.identifier,
+        let search = Self.searchText(title: label.title, code: code,
                                      number: label.number, series: nil, context: context)
 
         var id = Int64(existing?.issueID ?? 0)
@@ -95,8 +113,9 @@ public extension Store {
             // not an improvement on it. Only the file it points at is the
             // reader's to change.
             if existing?.isCatalogued != true {
-                id = try writeImportedRow(item, label: label, context: context,
-                                          search: search, existing: existing)
+                id = try writeImportedRow(code: code, label: label, context: context,
+                                          search: search, existing: existing,
+                                          cover: issue.flatMap { item.coverPath(for: $0) })
             }
             // One file per issue, so a swap replaces the link rather than
             // adding a second one. Two mirrors under an issue mean something
@@ -133,10 +152,11 @@ public extension Store {
     /// `started_at`, `last_page` and the download belong to the reader, and
     /// re-importing an item to change which file it points at must not mark a
     /// half-read magazine unread.
-    private func writeImportedRow(_ item: ArchiveOrgItem,
+    private func writeImportedRow(code: String,
                                   label: (title: String, number: Int?),
                                   context: String, search: String,
-                                  existing: ArchiveRow?) throws -> Int64 {
+                                  existing: ArchiveRow?,
+                                  cover: String?) throws -> Int64 {
         let site = IssueSite.archive
         let folded = Fold.fold(label.title)
         // Publisher, and nothing else. An imported item has no series and no
@@ -145,7 +165,7 @@ public extension Store {
         // is what makes the whole lot findable, filterable and separable from
         // the forum's issues.
         let values: [SQLValue] = [
-            .text(item.identifier), SQLValue(label.number), .text(label.title),
+            .text(code), SQLValue(label.number), .text(label.title),
             .text(folded), .text(site.display),
             .text(context), .text(search),
         ]
@@ -161,7 +181,7 @@ public extension Store {
             // The cover it already has is kept. It may be the issue's own
             // first page, captured when the comic was downloaded, which is
             // better artwork than anything a URL can offer.
-            if let cover = item.coverPath {
+            if let cover {
                 try db.run("""
                     UPDATE issue SET cover_url = ? WHERE id = ? AND cover_url IS NULL
                     """, [.text(ArchiveOrg.base + cover), .int(id)])
@@ -176,7 +196,7 @@ public extension Store {
                   (code, number, title, title_folded, publisher, context, search_text,
                    cover_url, site, style, source)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, values + [SQLValue(item.coverPath.map { ArchiveOrg.base + $0 }),
+                """, values + [SQLValue(cover.map { ArchiveOrg.base + $0 }),
                                .text(site.rawValue),
                                .text(LabelStyle.labeledBlock.rawValue),
                                .text("archive.org import")])

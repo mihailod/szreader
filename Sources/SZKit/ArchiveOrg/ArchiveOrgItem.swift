@@ -37,13 +37,37 @@ public struct ArchiveOrgItem: Equatable, Sendable {
     public struct File: Equatable, Sendable {
         public let name: String
         /// The archive's own word for what it is — "Image Container PDF",
-        /// "Page Numbers JSON". More reliable than the extension, and the only
-        /// way to tell an uploaded scan from a derivative made out of it.
+        /// "Page Numbers JSON". More reliable than the extension.
         public let format: String?
         public let bytes: Int64?
+        /// Where the file came from: "original" for what a person uploaded,
+        /// "derivative" for what the archive made out of it, "metadata" for
+        /// the bookkeeping.
+        ///
+        /// The API's own answer to the question this app most needs to ask,
+        /// and it took a Byte magazine issue to notice it was there: that
+        /// item's `_daisy.zip` is an accessibility package holding no pages at
+        /// all, and nothing about the name "Daisy" or the extension ".zip"
+        /// says so. `source` does, in one word.
+        public let source: Provenance
 
-        public init(name: String, format: String?, bytes: Int64?) {
+        public init(name: String, format: String?, bytes: Int64?,
+                    source: Provenance = .original) {
             self.name = name; self.format = format; self.bytes = bytes
+            self.source = source
+        }
+    }
+
+    /// Whether a file was uploaded, generated, or is bookkeeping.
+    ///
+    /// Anything unrecognised — an older item, a value the archive adds later —
+    /// counts as uploaded, which is the reading that judges the file on what
+    /// it actually is rather than discarding it unseen.
+    public enum Provenance: String, Sendable, Equatable {
+        case original, derivative, metadata
+
+        public init(_ raw: String?) {
+            self = Provenance(rawValue: (raw ?? "").lowercased()) ?? .original
         }
     }
 
@@ -109,7 +133,8 @@ public struct ArchiveOrgItem: Equatable, Sendable {
             title: (title?.isEmpty == false ? title : nil) ?? metadata.identifier,
             year: date.year, month: date.month,
             files: (payload.files ?? []).map {
-                File(name: $0.name, format: $0.format, bytes: $0.size.flatMap(Int64.init))
+                File(name: $0.name, format: $0.format, bytes: $0.size.flatMap(Int64.init),
+                     source: Provenance($0.source))
             },
             mediatype: metadata.mediatype?.first?.lowercased(),
             subjects: metadata.subject?.values ?? [])
@@ -158,6 +183,7 @@ public struct ArchiveOrgItem: Equatable, Sendable {
             let name: String
             let format: String?
             let size: String?
+            let source: String?
         }
     }
 }

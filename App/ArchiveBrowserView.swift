@@ -22,6 +22,9 @@ struct ArchiveBrowserView: View {
     /// The identifier `page` describes, so navigating within one item — into
     /// its reader, back out — costs nothing.
     @State private var shown: String?
+    /// And which file of it, for a pack: turning to another volume is the same
+    /// item and a different issue.
+    @State private var shownFile: String?
     @State private var choosingFile = false
     /// Set when the chosen file would replace one already on the device.
     @State private var pendingSwap: Swap?
@@ -32,17 +35,23 @@ struct ArchiveBrowserView: View {
         /// Not looking at an item: the search page, a collection, a profile.
         case idle
         case loading
-        /// An item, and the files it can be read from.
-        case ready(ArchiveOrgItem, [ArchiveOrgItem.ReadableFile], ArchiveRow?)
+        /// An item, and the issues in it this page is about — every issue the
+        /// item holds, or the single one the address names.
+        case ready(ArchiveOrgItem, [ArchiveOrgItem.ReadableIssue])
         /// An item holding nothing this app can open.
         case unusable(ArchiveOrgItem)
         case failed(String)
 
         var item: ArchiveOrgItem? {
             switch self {
-            case .ready(let item, _, _), .unusable(let item): return item
-            case .idle, .loading, .failed:                    return nil
+            case .ready(let item, _), .unusable(let item): return item
+            case .idle, .loading, .failed:                 return nil
             }
+        }
+
+        var issues: [ArchiveOrgItem.ReadableIssue] {
+            if case .ready(_, let issues) = self { return issues }
+            return []
         }
     }
 
@@ -122,12 +131,16 @@ struct ArchiveBrowserView: View {
         return false
     }
 
-    // MARK: - Picking a file
+    // MARK: - Picking what to import
 
-    private var files: [ArchiveOrgItem.ReadableFile] {
-        if case .ready(_, let files, _) = page { return files }
-        return []
-    }
+    /// Whether the choice on offer is between issues or between formats.
+    ///
+    /// An item usually holds one issue and the question is which format to
+    /// take. A pack holds a run — thirteen issues of Transactor, one PDF each
+    /// — and then the question is which issue, asked first and on its own,
+    /// because thirteen rows all reading "PDF · as uploaded" are not a choice
+    /// anybody can make.
+    private var choosingBetweenIssues: Bool { page.issues.count > 1 }
 
     private var fileDialogTitle: String {
         page.item?.title ?? "Import"
@@ -140,7 +153,11 @@ struct ArchiveBrowserView: View {
     /// the archive derived from it, and which of those is the right answer
     /// depends on the device and the reader, not on the app.
     private var fileDialogMessage: String {
-        if case .ready(_, _, let existing) = page, existing != nil {
+        if choosingBetweenIssues {
+            return "This item holds \(page.issues.count) issues. Importing one "
+                 + "adds it to your shelf; come back for the others."
+        }
+        if let issue = page.issues.first, alreadyInLibrary(issue) != nil {
             return "Already in your library. Choosing a different file changes "
                  + "which one this issue downloads."
         }
@@ -149,12 +166,32 @@ struct ArchiveBrowserView: View {
     }
 
     @ViewBuilder private var fileButtons: some View {
-        ForEach(files) { file in
-            Button("\(file.label) · \(file.kind.detail) · \(Self.size(file.bytes))") {
-                choose(file)
+        if choosingBetweenIssues, let item = page.item {
+            // One row per issue, named by the part of the filename the item's
+            // own title does not already say, and taking that issue's best
+            // format. A pack's issues have one format each in practice, and a
+            // second question asked thirteen times over would be worse than
+            // the app choosing between a scan and its own OCR copy.
+            ForEach(page.issues) { issue in
+                Button("\(item.shortName(for: issue)) · \(issue.best.label) "
+                       + "· \(Self.size(issue.best.bytes))") {
+                    choose(issue.best)
+                }
+            }
+        } else {
+            ForEach(page.issues.first?.files ?? []) { file in
+                Button("\(file.label) · \(file.detail) · \(Self.size(file.bytes))") {
+                    choose(file)
+                }
             }
         }
         Button("Cancel", role: .cancel) { }
+    }
+
+    /// The library row for one issue of the item on screen, if it has one.
+    private func alreadyInLibrary(_ issue: ArchiveOrgItem.ReadableIssue) -> ArchiveRow? {
+        guard let item = page.item else { return nil }
+        return model.archiveRow(item.code(for: issue))
     }
 
     // MARK: - The banner
@@ -177,7 +214,15 @@ struct ArchiveBrowserView: View {
                 BrowserBanner(icon: "exclamationmark.triangle.fill", tint: .orange,
                               title: "archive.org could not be asked about this item",
                               detail: reason, dismiss: { page = .idle })
-            case .ready(_, _, let existing) where existing != nil:
+            case .ready(let item, let issues) where issues.count > 1:
+                BrowserBanner(
+                    icon: "square.stack", tint: .secondary,
+                    title: "\(issues.count) issues in one item",
+                    detail: "“\(item.title)” is a pack. Import brings in one "
+                          + "issue at a time, each onto its own shelf entry.",
+                    dismiss: { page = .idle })
+            case .ready(_, let issues) where issues.first.flatMap(alreadyInLibrary) != nil:
+                let existing = issues.first.flatMap(alreadyInLibrary)
                 BrowserBanner(
                     icon: "checkmark.circle", tint: .secondary,
                     title: "Already in your library",
@@ -202,9 +247,15 @@ struct ArchiveBrowserView: View {
         case "collection":
             return "This is a collection, not a single item. Open one of the "
                  + "items inside it."
-        case "audio":    return "This is a recording, not a scanned issue."
+        case "audio", "etree":
+            return "This is a recording, not a scanned issue."
         case "movies":   return "This is a video, not a scanned issue."
-        case "software": return "This is software, not a scanned issue."
+        case "software":
+            // The one that reads as a false negative unless it says why: these
+            // items often hold plain zips, which look exactly like a scan
+            // until you open one and find disk images.
+            return "This is software, not a scanned issue — its archives hold "
+                 + "programs rather than pages."
         case "image":
             // The single-image items: a scanner uploading one cover at a time.
             return "This is a single picture, not a scanned issue."
@@ -224,9 +275,14 @@ struct ArchiveBrowserView: View {
     /// and asking again on each of them would be a request per scroll.
     private func resolve(_ url: URL?) {
         let identifier = url.flatMap { ArchiveOrg.identifier(inURL: $0) }
-        guard identifier != shown else { return }
+        // Which file of the item the reader has open, when the address says.
+        // Not part of the guard below: opening a second volume of the same
+        // pack keeps the identifier and changes only this.
+        let stem = url.flatMap { ArchiveOrg.fileStem(inURL: $0) }
+        guard identifier != shown || stem != shownFile else { return }
         shown = identifier
-        // A result belongs to the item it was about; moving on drops it.
+        shownFile = stem
+        // A result belongs to the issue it was about; moving on drops it.
         report = nil
 
         guard let identifier else {
@@ -239,17 +295,26 @@ struct ArchiveBrowserView: View {
                 let item = try await model.archiveItem(identifier)
                 // The reader has moved on; this answer is about a page that is
                 // no longer open.
-                guard shown == identifier else { return }
+                guard shown == identifier, shownFile == stem else { return }
                 guard let item else {
                     page = .failed("archive.org has no item called “\(identifier)”.")
                     return
                 }
-                let files = item.readableFiles
-                page = files.isEmpty
-                    ? .unusable(item)
-                    : .ready(item, files, model.archiveRow(identifier))
+                let issues = item.readableIssues
+                guard !issues.isEmpty else {
+                    page = .unusable(item)
+                    return
+                }
+                // The archive's reader puts the open file in the address, so
+                // on a pack the app can import exactly what is on screen
+                // rather than asking again which of thirteen it was.
+                if let stem, let named = item.issue(named: stem) {
+                    page = .ready(item, [named])
+                } else {
+                    page = .ready(item, issues)
+                }
             } catch {
-                guard shown == identifier else { return }
+                guard shown == identifier, shownFile == stem else { return }
                 page = .failed(Library.reason(error))
             }
         }
@@ -258,9 +323,10 @@ struct ArchiveBrowserView: View {
     /// A file was picked: import it, unless doing so would throw away a
     /// download the reader already has.
     private func choose(_ file: ArchiveOrgItem.ReadableFile) {
-        guard case .ready(let item, _, let existing) = page else { return }
+        guard let item = page.item, let issue = item.issue(holding: file) else { return }
         let url = file.url(item: item.identifier)
-        if let existing, existing.isDownloaded, existing.mirrorURL != url {
+        if let existing = alreadyInLibrary(issue), existing.isDownloaded,
+           existing.mirrorURL != url {
             pendingSwap = Swap(item: item, file: file)
             return
         }
@@ -268,12 +334,14 @@ struct ArchiveBrowserView: View {
     }
 
     private func perform(_ item: ArchiveOrgItem, file: ArchiveOrgItem.ReadableFile) {
+        let offered = page.issues
         do {
             let done = try model.importFromArchive(item, file: file)
-            // The row has changed underneath the state that described it, so
-            // the "already in your library" note is re-read rather than left
-            // saying what was true a moment ago.
-            page = .ready(item, item.readableFiles, model.archiveRow(item.identifier))
+            // The rows have changed underneath the state that described them,
+            // so the notes are re-read rather than left saying what was true a
+            // moment ago. The same issues stay on offer: importing one volume
+            // of a pack is not a reason to stop showing the other twelve.
+            page = .ready(item, offered)
             report = Report(
                 title: done.existed && !done.fileChanged
                     ? "Already in your library"

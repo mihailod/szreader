@@ -219,20 +219,37 @@ struct LibraryView: View {
             // reason the filter fills: a shelf in an unexpected order should
             // say so rather than look wrong.
             Menu {
-                Picker("Sort by", selection: $model.sortOrder) {
+                // Toggles rather than a `Picker`, for the heading.
+                //
+                // A menu draws a section header for rows; wrap a `Picker` in
+                // that same section and the header is dropped without a word,
+                // because the picker becomes its own group. Two builds went by
+                // before that was visible. Toggles carry the tick just as a
+                // picker's selection does, they match the filter menu beside
+                // this one, and the heading survives.
+                //
+                // Radio semantics: the setter ignores being switched *off*, so
+                // tapping the order already in force does nothing rather than
+                // leaving the shelf with no order at all.
+                Section("Sort by:") {
                     ForEach(ShelfSort.allCases, id: \.self) { order in
-                        Label(order.label, systemImage: order.symbol).tag(order)
+                        Toggle(isOn: Binding(
+                            get: { model.sortOrder == order },
+                            set: { if $0 { model.sortOrder = order } }
+                        )) {
+                            Label(order.label, systemImage: order.symbol)
+                        }
                     }
                 }
             } label: {
-                Image(systemName: model.sortOrder == .imported
+                Image(systemName: model.sortOrder == .default
                       ? "arrow.up.arrow.down.circle"
                       : "arrow.up.arrow.down.circle.fill")
                     .font(.system(size: 30))
                     .frame(height: 44)
             }
             .menuStyle(.borderlessButton)
-            .tint(model.sortOrder == .imported ? .secondary : .accentColor)
+            .tint(model.sortOrder == .default ? .secondary : .accentColor)
 
             // Filled icon when a filter is on, so a narrowed library never
             // looks like a missing one.
@@ -245,23 +262,40 @@ struct LibraryView: View {
                 // the shelf's colours nor the system's. The shape carries the
                 // meaning here, as it does on the shelf; the colour is the
                 // part the menu will not give up.
-                Toggle(isOn: $model.downloadedOnly) {
-                    Label("Downloaded", systemImage: "arrow.down.circle")
+                // Above the heading, in a section of its own, because it is
+                // not a thing you filter on — it is the way out of every
+                // filter below it.
+                //
+                // There whether or not anything is on. It used to appear only
+                // once a filter was set, which meant the one control that
+                // undoes a narrowed shelf was missing from every menu opened
+                // to check whether the shelf *was* narrowed. A button that
+                // does nothing costs far less than a button nobody can find.
+                Section {
+                    Button("Show All", systemImage: "xmark.circle") {
+                        model.showAll()
+                    }
                 }
 
-                Toggle(isOn: $model.showUnread) {
-                    Label("Unread", systemImage: "circle")
-                }
-                Toggle(isOn: $model.showReading) {
-                    // The same three dots in a circle the shelf badge draws,
-                    // which is what a part-read issue looks like there. The
-                    // shelf draws its own because at a quarter of a thumbnail
-                    // the symbol's dots shrink to specks; at menu size the
-                    // symbol is fine.
-                    Label("Reading", systemImage: "ellipsis.circle")
-                }
-                Toggle(isOn: $model.showRead) {
-                    Label("Read", systemImage: "checkmark.circle")
+                Section("Filter on:") {
+                    Toggle(isOn: $model.downloadedOnly) {
+                        Label("Downloaded", systemImage: "arrow.down.circle")
+                    }
+
+                    Toggle(isOn: $model.showUnread) {
+                        Label("Unread", systemImage: "circle")
+                    }
+                    Toggle(isOn: $model.showReading) {
+                        // The same three dots in a circle the shelf badge
+                        // draws, which is what a part-read issue looks like
+                        // there. The shelf draws its own because at a quarter
+                        // of a thumbnail the symbol's dots shrink to specks;
+                        // at menu size the symbol is fine.
+                        Label("Reading", systemImage: "ellipsis.circle")
+                    }
+                    Toggle(isOn: $model.showRead) {
+                        Label("Read", systemImage: "checkmark.circle")
+                    }
                 }
 
                 // Series are built from what has actually been imported, so
@@ -324,14 +358,6 @@ struct LibraryView: View {
                     }
                 }
 
-                if !model.selectedSeries.isEmpty || !model.selectedPublishers.isEmpty
-                    || !model.selectedHeroes.isEmpty {
-                    Section {
-                        Button("Show everything", systemImage: "xmark.circle") {
-                            model.clearSeriesFilter()
-                        }
-                    }
-                }
             } label: {
                 Image(systemName: filtering
                       ? "line.3.horizontal.decrease.circle.fill"
