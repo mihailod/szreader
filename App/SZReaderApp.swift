@@ -123,9 +123,9 @@ final class AppModel: ObservableObject {
 
     /// How the shelf is ordered.
     ///
-    /// Newest first by default: the shelf runs to thousands of issues, and
-    /// anything just imported was landing at the far end of it where nobody
-    /// was going to scroll. A reader who has picked another order has it
+    /// Recently Open by default: the shelf runs to thousands of issues, and
+    /// the handful anyone is actually part-way through is scattered through
+    /// it by every other order. A reader who has picked another order has it
     /// stored and keeps it — `@AppStorage` only writes when set, so this
     /// default reaches exactly the people who never chose.
     @AppStorage("shelfSort") var sortOrder: ShelfSort = .default {
@@ -701,6 +701,13 @@ final class AppModel: ObservableObject {
         guard let library, issue.isDownloaded, reading == nil else { return }
         let name = issue.readerTitle
         let resumeAt = (try? store?.lastPage(forIssue: issue.id)) ?? 0
+
+        // Stamped here rather than once the pages have arrived: opening is
+        // what the reader did, and an archive that turns out to be broken was
+        // still opened. The shelf catches up when the reader closes — it is
+        // rebuilt on the cover's `onDisappear` — so nothing is rearranged
+        // underneath a comic that is still on screen.
+        try? store?.markOpened(issueID: issue.id)
 
         // On screen straight away, holding nothing but a title and a place.
         // The reader shows its own progress until the pages arrive.

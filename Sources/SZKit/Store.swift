@@ -55,6 +55,12 @@ public struct StoredIssue: Equatable, Sendable {
     /// Scanned pages, where the source states them. Nil for anything from the
     /// forum, which never does — so this says "unknown", not "empty".
     public let pageCount: Int?
+    /// When the reader last opened this issue. Nil means never.
+    ///
+    /// Not a read state and not derivable from one: an issue can be marked
+    /// read without ever being opened, and a finished one reopened yesterday
+    /// is the most recently opened thing on the shelf.
+    public let openedAt: Date?
 
     /// Spelled out rather than left to the compiler's memberwise one, so
     /// `site` can carry a default. Every issue in existence was StripZona's
@@ -69,7 +75,8 @@ public struct StoredIssue: Equatable, Sendable {
                 isRead: Bool, lastPage: Int?, numberTo: Int?, started: Bool,
                 downloadFailed: Bool, style: LabelStyle, mirrorCount: Int,
                 coverURL: String?, isDownloaded: Bool,
-                site: IssueSite = .default, pageCount: Int? = nil) {
+                site: IssueSite = .default, pageCount: Int? = nil,
+                openedAt: Date? = nil) {
         self.id = id; self.code = code; self.number = number; self.title = title
         self.series = series; self.hero = hero; self.edition = edition
         self.publisher = publisher; self.isRead = isRead; self.lastPage = lastPage
@@ -77,7 +84,7 @@ public struct StoredIssue: Equatable, Sendable {
         self.downloadFailed = downloadFailed; self.style = style
         self.mirrorCount = mirrorCount; self.coverURL = coverURL
         self.isDownloaded = isDownloaded; self.site = site
-        self.pageCount = pageCount
+        self.pageCount = pageCount; self.openedAt = openedAt
     }
 
     /// Short form of the edition for the shelf: initials when it is several
@@ -278,6 +285,14 @@ public final class Store: @unchecked Sendable {
         // frame for good. The URL is kept rather than cleared — re-importing
         // the page would only write it back — and this marks it as spent.
         try? db.execute("ALTER TABLE issue ADD COLUMN cover_dead_at REAL")
+        // When the reader last opened this issue in the reader.
+        //
+        // Deliberately independent of the read columns beside it. `started_at`
+        // is sticky and `read_at` is cleared by unmarking; this is neither —
+        // it is simply the last time the issue was on screen, which is the one
+        // question "what was I reading lately" actually asks. Reopening a
+        // finished issue to check one panel moves this and nothing else.
+        try? db.execute("ALTER TABLE issue ADD COLUMN opened_at REAL")
 
         // Small facts about the library itself rather than about any issue —
         // currently just which build of the shipped catalogue has been
@@ -327,6 +342,8 @@ public final class Store: @unchecked Sendable {
             UPDATE issue SET started_at = strftime('%s', 'now')
             WHERE started_at IS NULL AND IFNULL(last_page, 0) >= 1
             """)
+
+        try? seedOpenedAtFromReadHistory()
 
         // Heal libraries damaged by the identity bug: naming an issue used to
         // rewrite `title_folded`, which is part of the natural key, so the next
@@ -412,6 +429,36 @@ public final class Store: @unchecked Sendable {
             UPDATE issue SET cover_asked_at = NULL
             WHERE cover_asked_at IS NOT NULL
               AND (cover_url IS NULL OR cover_dead_at IS NOT NULL)
+            """)
+        try db.run("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                   [.text(change), .text("\(Date().timeIntervalSince1970)")])
+    }
+
+    /// Seeds "last opened" for libraries older than the column, exactly once.
+    ///
+    /// Nothing recorded when an issue was opened before this build, but two
+    /// moments that imply it did get recorded: `started_at`, when reading
+    /// first got past the cover, and `read_at`, when it was marked read. The
+    /// later of the two is the closest thing to an opening time the library
+    /// holds, and far closer than the alternative — a Recently Open shelf
+    /// that is blank for a reader with hundreds of issues behind them.
+    ///
+    /// Once, via `meta`, for the same reason the cover questions are: run on
+    /// every launch it would keep re-stamping issues marked read from the
+    /// shelf without ever being opened, which is precisely the set this order
+    /// exists to leave out.
+    private func seedOpenedAtFromReadHistory() throws {
+        let change = "opened-at-seeded-from-read-history"
+        let seeded = try db.scalarInt("SELECT COUNT(*) FROM meta WHERE key = ?",
+                                      [.text(change)])
+        guard seeded == 0 else { return }
+        // MAX of the two rather than either alone: an issue read months ago
+        // and dipped into since has both, and the later one is when it was
+        // last on screen.
+        try db.run("""
+            UPDATE issue SET opened_at = MAX(IFNULL(read_at, 0), IFNULL(started_at, 0))
+            WHERE opened_at IS NULL
+              AND (read_at IS NOT NULL OR started_at IS NOT NULL)
             """)
         try db.run("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
                    [.text(change), .text("\(Date().timeIntervalSince1970)")])
@@ -736,7 +783,7 @@ public final class Store: @unchecked Sendable {
                    i.download_failed_at IS NOT NULL,
                    i.started_at IS NOT NULL,
                    i.number_to,
-                   i.site, i.page_count
+                   i.site, i.page_count, i.opened_at
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
@@ -763,7 +810,8 @@ public final class Store: @unchecked Sendable {
                 coverURL: row.string(7),
                 isDownloaded: (row.int(8) ?? 0) == 1,
                 site: IssueSite(rawValue: row.string(17) ?? "") ?? .default,
-                pageCount: row.int(18)))
+                pageCount: row.int(18),
+                openedAt: row.double(19).map(Date.init(timeIntervalSince1970:))))
         }
         return out
     }
@@ -846,6 +894,17 @@ public final class Store: @unchecked Sendable {
             WHERE id = ?
             """, [read ? .double(Date().timeIntervalSince1970) : .null,
                   .int(Int64(issueID))])
+    }
+
+    /// Records that the reader has just opened an issue.
+    ///
+    /// Assigned on every open, not only the first: the question this answers
+    /// is "what have I had open lately", so the newest visit is the one that
+    /// counts. Nothing about read state is touched — an issue marked read and
+    /// then reopened belongs at the top of Recently Open like any other.
+    public func markOpened(issueID: Int, at date: Date = Date()) throws {
+        try db.run("UPDATE issue SET opened_at = ? WHERE id = ?",
+                   [.double(date.timeIntervalSince1970), .int(Int64(issueID))])
     }
 
     /// Where the reader stopped, so the comic reopens there.
@@ -1018,7 +1077,7 @@ public final class Store: @unchecked Sendable {
                    i.download_failed_at IS NOT NULL,
                    i.started_at IS NOT NULL,
                    i.number_to,
-                   i.site, i.page_count
+                   i.site, i.page_count, i.opened_at
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
             """, table: "i"), terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             out.append(StoredIssue(
@@ -1036,7 +1095,8 @@ public final class Store: @unchecked Sendable {
                 coverURL: row.string(7),
                 isDownloaded: (row.int(8) ?? 0) == 1,
                 site: IssueSite(rawValue: row.string(17) ?? "") ?? .default,
-                pageCount: row.int(18)))
+                pageCount: row.int(18),
+                openedAt: row.double(19).map(Date.init(timeIntervalSince1970:))))
         }
         return out
     }

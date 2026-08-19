@@ -165,5 +165,13 @@ final class Database {
             guard sqlite3_column_type(stmt, i) != SQLITE_NULL else { return nil }
             return Int(sqlite3_column_int64(stmt, i))
         }
+
+        /// For the timestamp columns, which `int` would read to whole seconds
+        /// — and two issues opened within the same second must still have an
+        /// order, or "most recently opened" shuffles them on every refresh.
+        func double(_ i: Int32) -> Double? {
+            guard sqlite3_column_type(stmt, i) != SQLITE_NULL else { return nil }
+            return sqlite3_column_double(stmt, i)
+        }
     }
 }

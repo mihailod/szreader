@@ -11,14 +11,30 @@ import Foundation
 /// reversing "whatever order the query produced" is only meaningful when that
 /// order was insertion.
 public enum ShelfSort: String, CaseIterable, Sendable {
+    /// Most recently opened first, then everything never opened.
+    ///
+    /// The default, and first in the menu, because a shelf of several thousand
+    /// answers "what was I reading" badly by every other order: what the
+    /// reader had open last week is scattered through it by title, by number
+    /// or by arrival date, none of which has anything to do with reading.
+    ///
+    /// A rearrangement and nothing more. An issue never opened has no key to
+    /// sort on, but the shelf still holds it, so it goes below everything that
+    /// does — the same place a missing number or a missing title puts a row.
+    ///
+    /// Read state is deliberately not part of it: a comic finished last night
+    /// and one abandoned on page three are both things the reader had open,
+    /// which is the only question being asked.
+    case opened
+
     /// Most recently imported first, which is what someone who has just
     /// imported something is looking for — and, on a shelf of several
     /// thousand, the only order in which a new arrival is visible without
     /// scrolling to the end.
     ///
-    /// The default, and the raw value is deliberately new rather than a rename
-    /// of `imported`: a reader who has chosen a sort has that choice stored,
-    /// and it must keep meaning what they picked.
+    /// The raw value is deliberately new rather than a rename of `imported`:
+    /// a reader who has chosen a sort has that choice stored, and it must keep
+    /// meaning what they picked.
     case newest
     case imported
     case title
@@ -27,10 +43,11 @@ public enum ShelfSort: String, CaseIterable, Sendable {
     case number
 
     /// What a fresh install sorts by.
-    public static let `default` = ShelfSort.newest
+    public static let `default` = ShelfSort.opened
 
     public var label: String {
         switch self {
+        case .opened:   return "Recently Open"
         case .newest:   return "Reverse Import Order"
         case .imported: return "Import Order"
         case .title:    return "Title"
@@ -42,6 +59,10 @@ public enum ShelfSort: String, CaseIterable, Sendable {
 
     public var symbol: String {
         switch self {
+        // A book rather than a third clock: two of the orders below are
+        // already clocks, and at menu size the difference between them is
+        // exactly the thing nobody reads.
+        case .opened:   return "book"
         case .newest:   return "clock.arrow.circlepath"
         case .imported: return "clock"
         case .title:    return "textformat"
@@ -60,7 +81,7 @@ public extension StoredIssue {
     /// import orders describe *arrival*, which is the useful answer to "what
     /// is on my shelf" and the wrong one to "what matches what I typed" — a
     /// search already comes back best-match-first, and re-sorting it by age
-    /// buries the row the reader was looking for. The four explicit keys are
+    /// buries the row the reader was looking for. The five explicit keys are
     /// unaffected: someone who asks for Title means Title, question or no
     /// question.
     static func comparator(for sort: ShelfSort,
@@ -68,6 +89,10 @@ public extension StoredIssue {
         -> ((StoredIssue, StoredIssue) -> Bool)? {
         switch sort {
         case .imported: return nil
+        // An explicit key like the four below it, not an arrival order: a
+        // reader searching inside Recently Open asked for their reading
+        // history, and relevance rank is not it.
+        case .opened:   return byOpened
         // The id is the insertion counter, so descending is newest first.
         // Reversing the *rows* would not do even when browsing: it is the
         // order that has to be defined, not the array that came back.
@@ -76,6 +101,26 @@ public extension StoredIssue {
         case .series:   return bySeries
         case .hero:     return byHero
         case .number:   return byNumber
+        }
+    }
+
+    /// Most recently opened first, and everything never opened after all of
+    /// it — on the same principle as a missing number, which sorts last rather
+    /// than leading the shelf with the rows that have the least to say.
+    ///
+    /// The whole tail is a tie, so its own order matters. Descending id, which
+    /// is reverse import order: it matches the direction the opened rows above
+    /// it run in, and it is the order that shelf had before this one became
+    /// the default.
+    ///
+    /// Two opens in the same instant is not a real case; a shelf that
+    /// reshuffles between refreshes would be.
+    private static func byOpened(_ a: StoredIssue, _ b: StoredIssue) -> Bool {
+        switch (a.openedAt, b.openedAt) {
+        case let (x?, y?) where x != y: return x > y
+        case (nil, _?): return false
+        case (_?, nil): return true
+        default: return a.id > b.id
         }
     }
 

@@ -5,10 +5,17 @@ import XCTest
 final class ShelfSortTests: XCTestCase {
 
     private func issue(_ id: Int, edition: String? = nil, number: Int? = nil,
-                       title: String? = nil, hero: String? = nil) -> StoredIssue {
+                       title: String? = nil, hero: String? = nil,
+                       isRead: Bool = false, openedAt: Date? = nil) -> StoredIssue {
         StoredIssue(id: id, code: "C\(id)", number: number, title: title, series: nil,
-                    hero: hero, edition: edition, publisher: nil, isRead: false, lastPage: nil, numberTo: nil, started: false, downloadFailed: false, style: .labeledBlock,
-                    mirrorCount: 1, coverURL: nil, isDownloaded: false)
+                    hero: hero, edition: edition, publisher: nil, isRead: isRead, lastPage: nil, numberTo: nil, started: false, downloadFailed: false, style: .labeledBlock,
+                    mirrorCount: 1, coverURL: nil, isDownloaded: false,
+                    openedAt: openedAt)
+    }
+
+    /// Minutes ago, so a test reads as the reader would describe it.
+    private func ago(_ minutes: Int) -> Date {
+        Date(timeIntervalSince1970: 1_700_000_000 - Double(minutes) * 60)
     }
 
     private func order(_ issues: [StoredIssue], by sort: ShelfSort) -> [Int] {
@@ -24,17 +31,75 @@ final class ShelfSortTests: XCTestCase {
         XCTAssertEqual(order(shelf, by: .imported), [3, 1, 2])
     }
 
-    /// The default: what arrived last is at the top, where someone who has
-    /// just imported it will actually see it.
+    /// What arrived last is at the top, where someone who has just imported it
+    /// will actually see it.
     ///
     /// A real comparator rather than "reverse whatever came back". The rows a
     /// search hands over are in relevance order, and the reverse of that is
     /// the least relevant first — which is not newest by any reading.
-    func testNewestFirstIsTheDefaultAndSortsByArrival() {
-        XCTAssertEqual(ShelfSort.default, .newest)
-        XCTAssertEqual(ShelfSort.allCases.first, .newest, "and it is offered first")
+    func testNewestSortsByArrival() {
         let shelf = [issue(3, title: "c"), issue(1, title: "a"), issue(2, title: "b")]
         XCTAssertEqual(order(shelf, by: .newest), [3, 2, 1])
+    }
+
+    /// The default, and the head of the menu.
+    ///
+    /// Both matter and neither implies the other: `default` is what a reader
+    /// who has never chosen gets, `allCases.first` is where the one they are
+    /// most likely to want sits when they go looking.
+    func testRecentlyOpenIsTheDefaultAndComesFirst() {
+        XCTAssertEqual(ShelfSort.default, .opened)
+        XCTAssertEqual(ShelfSort.allCases.first, .opened, "and it is offered first")
+        XCTAssertEqual(ShelfSort.opened.label, "Recently Open")
+    }
+
+    /// Most recently opened first.
+    func testRecentlyOpenSortsByOpeningTime() {
+        let shelf = [issue(1, openedAt: ago(90)),
+                     issue(2, openedAt: ago(5)),
+                     issue(3, openedAt: ago(60))]
+        XCTAssertEqual(order(shelf, by: .opened), [2, 3, 1])
+    }
+
+    /// Read state has nothing to do with it. A comic finished last night is
+    /// more recently opened than one abandoned half-read a month ago, and the
+    /// order says so.
+    func testRecentlyOpenIgnoresReadState() {
+        let shelf = [issue(1, isRead: false, openedAt: ago(60 * 24 * 30)),
+                     issue(2, isRead: true, openedAt: ago(600))]
+        XCTAssertEqual(order(shelf, by: .opened), [2, 1])
+    }
+
+    /// A sort rearranges the shelf; it never shortens it. Everything never
+    /// opened follows everything that has been, and nothing goes missing.
+    func testNeverOpenedIssuesSortToTheBottomAndAreStillThere() {
+        let shelf = [issue(1), issue(2, openedAt: ago(90)),
+                     issue(3), issue(4, openedAt: ago(5))]
+        let sorted = order(shelf, by: .opened)
+        XCTAssertEqual(sorted, [4, 2, 3, 1])
+        XCTAssertEqual(Set(sorted), Set(shelf.map(\.id)), "the sort dropped a row")
+    }
+
+    /// The never-opened tail is one big tie, so it needs an order of its own:
+    /// reverse import, which is the direction the rows above it run in and the
+    /// order this shelf had before Recently Open became the default.
+    func testTheNeverOpenedTailIsInReverseImportOrder() {
+        let shelf = [issue(1), issue(3), issue(2)]
+        XCTAssertEqual(order(shelf, by: .opened), [3, 2, 1])
+        XCTAssertEqual(order(shelf.reversed(), by: .opened), [3, 2, 1])
+    }
+
+    /// Asked for by name, so it survives a search, like the four keys below
+    /// it. Someone who picked Recently Open and then typed asked for their
+    /// reading history narrowed to a word, not for relevance rank.
+    func testRecentlyOpenAppliesWhileSearching() {
+        XCTAssertNotNil(StoredIssue.comparator(for: .opened, whileSearching: true))
+    }
+
+    /// The stored value is a reader's choice, like the two import orders.
+    func testRecentlyOpenIsItsOwnStoredValue() {
+        XCTAssertEqual(ShelfSort.opened.rawValue, "opened")
+        XCTAssertEqual(ShelfSort(rawValue: "opened"), .opened)
     }
 
     /// A search stays in the order the search produced.
@@ -117,19 +182,27 @@ final class ShelfSortTests: XCTestCase {
     /// Equal keys must not shuffle between refreshes.
     ///
     /// `imported` has no comparator to be unstable, and `newest` sorts on the
-    /// id itself — which is unique, so it has no ties to break and is the one
-    /// order that legitimately puts the higher id first.
+    /// id itself — which is unique, so it has no ties to break and is one of
+    /// the two orders that legitimately put the higher id first. `opened` is
+    /// the other, and is checked separately below for the same reason.
     func testEveryOrderIsStable() {
-        for sort in ShelfSort.allCases where sort != .imported && sort != .newest {
+        for sort in ShelfSort.allCases
+        where sort != .imported && sort != .newest && sort != .opened {
             let shelf = [issue(9, edition: "ZS", number: 5, title: "same", hero: "Zagor"),
                          issue(4, edition: "ZS", number: 5, title: "same", hero: "Zagor")]
             XCTAssertEqual(order(shelf, by: sort), [4, 9], "\(sort) is unstable")
             XCTAssertEqual(order(shelf.reversed(), by: sort), [4, 9], "\(sort) is unstable")
         }
-        // And newest is stable in its own direction, whichever way it is fed.
+        // And the two reverse-chronological orders are stable in their own
+        // direction, whichever way they are fed: ties break on the id
+        // descending, matching the way the rest of the order runs.
         let shelf = [issue(9), issue(4)]
         XCTAssertEqual(order(shelf, by: .newest), [9, 4])
         XCTAssertEqual(order(shelf.reversed(), by: .newest), [9, 4])
+
+        let sameInstant = [issue(9, openedAt: ago(3)), issue(4, openedAt: ago(3))]
+        XCTAssertEqual(order(sameInstant, by: .opened), [9, 4])
+        XCTAssertEqual(order(sameInstant.reversed(), by: .opened), [9, 4])
     }
 }
 
