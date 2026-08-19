@@ -18,37 +18,31 @@
 
 ## New in 1.1 (work in progress)
 
-* **A second source:** [RetroSpec](https://retrospec.elite.org/users/tomcat/yu/revije.php), Tomaž Kac's
-archive of scanned ex-Yugoslav (1972-2001) computer magazines (Svet Kompjutera,
-Računari, Moj Mikro, etc.) plus a dozen of computer books.
-Unlike StripZona there is nothing to browse or import: the index is built offline from the site's
-own pages and read straight into the shelf, where it searches, filters and sorts exactly like
-everything else. Issues download individually, on request, from the archive itself.
+* **Added content sources:**
 
-* **A third source:** **[Archive.org](https://archive.org)**, the Internet Archive, which arrives two ways.
-First, a small shipped index for the two ex-Yugoslav Amiga fanzines: A-Profy (July and August 1990)
-and Amiga Bilten (September and October 1988). Second, **anything else searchable there**:
-Import gains a second entry that opens archive.org's search inside the app; find an item,
-and Import brings it onto the shelf.
+  * **[RetroSpec](https://retrospec.elite.org/users/tomcat/yu/revije.php)**, Tomaž Kac's
+archive of scanned ex-Yugoslav vintage (1972-2001) computer magazines (Moj Mikro,
+Računari, Svet Kompjutera, etc.) and computer books.
 
-* **A fourth source:** **[ComicBook+](https://comicbookplus.com)**, an archive of public-domain
-Golden Age comics, pulp magazines, story papers and fanzines — around 50K items.
-You browse to a series title, and Import brings that whole run metadata onto the shelf.
-Reading on thesite is open to anyone but a free ComicBook+ account is needed for downloads.
+  * **[Archive.org](https://archive.org)** - the Internet Archive.
+A small embedded index for the ex-Yugoslav Amiga fanzines: Amiga Bilten (Sep & Oct '88)
+and A-Profy (Jul & Aug '90) and Import from Archive.org individual item detail pages.
+
+  * **[ComicBook+](https://comicbookplus.com)**, an archive of public-domain
+Golden Age comics, pulp magazines, story papers and fanzines. You search/browse for a series,
+and Import metadata onto the shelf. To download you need a (free) ComicBook+ account.
+
+  * **All sources can now be switched ON / OFF in Settings.**
+Switching a source hides it everywhere but never deletes anything.
+
 
 * **Browser fencing** All three browser views (StripZona, Archive.org, ComicBook+) are fenced to
 their own site. The address line is read-only and links leading outside those domains are not
-followed. (The app embeds a view of three sites; it is not a full web browser, App Store compliance.)
+followed. (It is not a full web browser -- App Store compliance.)
 
-* **Smart Zoom** trims the blank margins off each page before it is drawn, so the artwork fills
-more of the screen but without stretching. It detects scanner edges, paper margins, lone page numbers
-in an otherwise empty margin. On by default (switchable in Settings).
-
-* **Sources can be switched on and off** in Settings, or from the empty shelf on a first run.
-Switching one off hides it everywhere — shelf, search and filter menus — and never deletes
-anything: what you have read and downloaded is exactly as you left it when you switch it back on.
-RetroSpec and Archive.org start switched off, so the app opens on an empty shelf and asks rather
-than arriving with hundreds of retro computer magazines a strictly comics lover might not care about.
+* **Smart Zoom** trims the blank space off so the artwork fills the full screen. Detects
+scanner edges, paper margins, and lone page numbers. So magic and unique that is is ON
+by default (switchable in Settings).
 
 * **Bug fixes, UI/UX tweaks and additions** including more natural zoom, sort by Recently Open, and
 Page Preview Grid.
@@ -163,8 +157,10 @@ the browser at runtime instead, which needs no rebuild and ships nothing.
 
 ---
 
-## Licence
+## StreamZine Licence
 
-**Content:** the app is a reader — it hosts nothing and ships no content.
+**Content:** there is no content. The app is a reader — it hosts nothing and ships no content.
 
-**Code:** © Mihailo Despotovic, 2026. [PolyForm Noncommercial 1.0.0](LICENSE).
+**Code:** Copyright © Mihailo Despotovic, 2026. Licensed under [PolyForm Noncommercial 1.0.0](LICENSE).
+* 🟢 **Free to use** for personal, educational, research, and non-commercial projects.
+* 🔴 **Commercial use prohibited.** If you intend to use my code in any way in any revenue-generating product, contact me for a commercial license.
