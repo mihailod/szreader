@@ -19,7 +19,14 @@ struct SourceToggle: View {
             set: { model.setSource(site, enabled: $0) }
         )) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline)
+                Text(title)
+                    .font(.headline)
+                    // The same reason the detail below has it: on a narrow
+                    // phone the stack offers one line's height and the label
+                    // truncates instead of wrapping, so "StripZona (free
+                    // account needed)" arrives as "StripZona (free account
+                    // nee…". Costs the iPad nothing — its titles already fit.
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(detail)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -28,45 +35,12 @@ struct SourceToggle: View {
         }
     }
 
-    /// What the switch is called.
-    ///
-    /// `site.display` everywhere except StripZona, which says here that an
-    /// account is needed — the one source that can be switched on and still
-    /// show nothing, because its links stay hidden until you are signed in.
-    /// The condition is on the switch rather than in `IssueSite.display`,
-    /// which is stored: it is written into the publisher column and the search
-    /// index of every seeded row, and a caveat belongs on a control, not in a
-    /// database.
-    private var title: String {
-        switch site {
-        case .stripzona: return "\(site.display) (free account needed)"
-        case .retrospec, .archive: return site.display
-        }
-    }
+    /// Both strings come from `SourceCopy`, which is the file to edit. They
+    /// used to be written here and again in Acknowledgements, and the two
+    /// copies had already drifted apart.
+    private var copy: SourceCopy { SourceCopy.of(site) }
 
-    /// What the reader is switching on, in the terms they would describe it.
-    ///
-    /// Says where the issues come from, because the sources behave nothing
-    /// alike: one is a forum you import pages from, the other two are fixed
-    /// catalogues that are simply there.
-    private var detail: String {
-        switch site {
-        case .stripzona:
-            return "Ex-Yugoslav, etc. comics and magazines you import from the StripZona forum."
-        case .retrospec:
-            return "Ex-Yugoslav computer magazines and books — Svet Kompjutera, "
-                 + "Računari, Moj Mikro and more."
-        case .archive:
-            // Named rather than counted: four issues is a number that dates
-            // the sentence the moment a fifth is added, and the two runs are
-            // what someone would recognise.
-            //
-            // The second sentence is why this switch is worth more than the
-            // fanzines it started as: with it on, Import gains a second entry
-            // and anything scanned on the Internet Archive can be brought in.
-            return "Scanned Ex-Yugoslav Amiga fanzines - "
-                 + "A-Profy and Amiga Bilten. Also search and "
-                 + "Import public Internet Archive content."
-        }
-    }
+    private var title: String { copy.switchTitle }
+
+    private var detail: String { copy.detail }
 }

@@ -266,3 +266,86 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: outcome.path), zipBytes)
     }
 }
+
+
+/// Progress when the server declares no length.
+///
+/// Comic Book Plus streams its downloads from a PHP script that answers with
+/// no `Content-Length` — measured against the live endpoint, not assumed — so
+/// `expectedContentLength` arrives as -1. Everything that wants a total then
+/// has nothing: the bar cannot move, and the free-space guard cannot weigh the
+/// transfer. The host reads the size off the book page and carries it down.
+final class UndeclaredLengthTests: XCTestCase {
+
+    private func serve(_ body: Data) throws -> (TinyHTTPServer, URL) {
+        let server = try TinyHTTPServer(routes: ["/comic.cbz": body], omitContentLength: true)
+        return (server, URL(string: "http://127.0.0.1:\(server.port)/comic.cbz")!)
+    }
+
+    private func destination() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("undeclared-\(UUID().uuidString).bin")
+    }
+
+    /// Without a hint there is no total, which is the state being fixed.
+    func testWithoutAHintThereIsNoTotalToShow() async throws {
+        let (server, url) = try serve(Data(repeating: 0x50, count: 2 << 20))
+        defer { server.stop() }
+        let file = destination()
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let totals = Box()
+        try await URLSessionDownloader().download(
+            DirectLink(url: url), to: file,
+            progress: { p in totals.append(p.expected) })
+
+        XCTAssertFalse(totals.values.isEmpty, "no progress at all")
+        XCTAssertTrue(totals.values.allSatisfy { $0 <= 0 },
+                      "the server declared a length after all: \(totals.values)")
+    }
+
+    /// With one, every report carries it.
+    func testTheHostsSizeStandsInForAMissingContentLength() async throws {
+        let size = 2 << 20
+        let (server, url) = try serve(Data(repeating: 0x50, count: size))
+        defer { server.stop() }
+        let file = destination()
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let totals = Box()
+        try await URLSessionDownloader().download(
+            DirectLink(url: url, expectedBytes: Int64(size)), to: file,
+            progress: { p in totals.append(p.expected) })
+
+        XCTAssertFalse(totals.values.isEmpty)
+        XCTAssertTrue(totals.values.allSatisfy { $0 == Int64(size) }, "\(totals.values)")
+        XCTAssertEqual(try Data(contentsOf: file).count, size)
+    }
+
+    /// A declared length still wins: the hint is rounded off a page, and the
+    /// server's own figure is exact.
+    func testADeclaredLengthIsPreferredToTheHint() async throws {
+        let size = 2 << 20
+        let server = try TinyHTTPServer(routes: ["/comic.cbz": Data(repeating: 0x50, count: size)])
+        defer { server.stop() }
+        let file = destination()
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let totals = Box()
+        try await URLSessionDownloader().download(
+            DirectLink(url: URL(string: "http://127.0.0.1:\(server.port)/comic.cbz")!,
+                       expectedBytes: 999_999),
+            to: file, progress: { p in totals.append(p.expected) })
+
+        XCTAssertTrue(totals.values.allSatisfy { $0 == Int64(size) },
+                      "the hint overrode the server: \(totals.values)")
+    }
+}
+
+/// Somewhere for a `@Sendable` progress closure to put what it saw.
+private final class Box: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Int64] = []
+    func append(_ v: Int64) { lock.lock(); storage.append(v); lock.unlock() }
+    var values: [Int64] { lock.lock(); defer { lock.unlock() }; return storage }
+}

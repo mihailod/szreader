@@ -189,7 +189,12 @@ public final class URLSessionDownloader: NSObject, FileDownloader, @unchecked Se
             }
             throw DownloadError.badStatus(http.statusCode)
         }
-        let expected = response.expectedContentLength
+        // What the server says, or what the host knew in advance when it says
+        // nothing. A streaming script sends no length and reports -1, which
+        // leaves the reader watching a bar that cannot move and a free-space
+        // check with nothing to check.
+        let declared = response.expectedContentLength
+        let expected = declared > 0 ? declared : (link.expectedBytes ?? declared)
 
         // Before the file is created, so a refusal leaves nothing behind.
         try check?(expected)

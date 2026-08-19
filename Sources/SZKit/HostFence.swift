@@ -39,6 +39,16 @@ public struct HostFence: Sendable, Equatable {
     /// `ia601403.us.archive.org` this week, something else next year.
     public static let archive = HostFence(hosts: [ArchiveOrg.host], name: "archive.org")
 
+    /// Comic Book Plus, which needs the bare domain and gets its subdomains
+    /// from the same entry: the site itself is on `comicbookplus.com`, and
+    /// every thumbnail, page image and file comes off `box01.comicbookplus.com`.
+    /// `admits` matches a leading dot, so one host covers both.
+    ///
+    /// The forum is inside the fence too, and has to be — signing in happens
+    /// at `/forum/?action=login`, and it is the same site.
+    public static let comicBookPlus =
+        HostFence(hosts: [ComicBookPlus.host], name: IssueSite.comicbookplus.display)
+
     /// Whether this browser may follow a link.
     ///
     /// Three separate refusals, and each of them has to be here:

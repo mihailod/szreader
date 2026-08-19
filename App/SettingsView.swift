@@ -165,40 +165,15 @@ private struct Acknowledgements: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Group {
-                    Text("StripZona (free account needed)").font(.headline)
-                    Text("This is an independent reader. It is not affiliated "
-                         + "with, endorsed by, or connected to stripzona.com, "
-                         + "and it hosts no StripZona content of its own. A stripzona.com "
-			 + "approved account is needed to access any content.")
-                }
-                Group {
-                    Text("RetroSpec").font(.headline)
-                    // Credited by name, unlike the other two: this one is one
-                    // person's work rather than an institution, and the whole
-                    // ex-Yugoslav computer press survives in readable form
-                    // because he scanned it.
-                    Text("The RetroSpec source is Tomaž Kac's archive of "
-                         + "scanned ex-Yugoslav (1972=2001) computer magazines and books at "
-                         + "retrospec.elite.org/users/tomcat/yu. "
-                         + "The app ships the index and only downloads each "
-                         + "issue from the archive on demand. This is "
-                         + "an independent reader, not affiliated with or "
-                         + "endorsed by RetroSpec, and it hosts none of its "
-                         + "scans.")
-                }
-                Group {
-                    Text("Internet Archive").font(.headline)
-                    // The same disclaimer, and it has to be here for the same
-                    // reason: the app ships a list of archive.org items and
-                    // fetches them on request. It is not affiliated with the
-                    // Internet Archive and stores none of their material.
-                    Text("The Archive.org source lists items hosted by the "
-                         + "Internet Archive, which are downloaded from "
-                         + "archive.org on demand. This reader is "
-                         + "not affiliated with or endorsed by the Internet "
-                         + "Archive, and hosts none of their material. Only "
-                         + "ex-YU Amiga fanzines are currently indexed.")
+                // One block per source, from `SourceCopy` — the same file
+                // the switches read, so a description cannot say one thing
+                // here and another there. Ordered as the switches are.
+                ForEach(IssueSite.allCases, id: \.self) { site in
+                    let copy = SourceCopy.of(site)
+                    Group {
+                        Text(copy.creditHeading).font(.headline)
+                        Text(copy.credit)
+                    }
                 }
                 Group {
                     Text("UnRAR").font(.headline)

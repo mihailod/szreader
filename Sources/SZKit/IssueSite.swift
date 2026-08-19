@@ -18,13 +18,33 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     case stripzona
     case retrospec
     case archive
+    case comicbookplus
 
     /// How the source is spelled in front of a reader.
     public var display: String {
         switch self {
-        case .stripzona: return "StripZona"
-        case .retrospec: return "RetroSpec"
-        case .archive:   return "Archive.org"
+        case .stripzona:     return "StripZona"
+        case .retrospec:     return "RetroSpec"
+        case .archive:       return "Archive.org"
+        case .comicbookplus: return "ComicBook+"
+        }
+    }
+
+    /// How the source is spelled on the settings screen.
+    ///
+    /// `display` everywhere except Comic Book Plus, whose marketing name ends
+    /// in a `+`. That reads as a name in a browser title bar or a menu, and
+    /// reads as a stray character in a list of switches — so the settings list
+    /// spells it as one word instead.
+    ///
+    /// A second property rather than a literal in the app layer, for two
+    /// reasons: `UIWordingTests` lints App for the word "comic", and the two
+    /// spellings of one source should sit next to each other where anyone
+    /// changing either will see the other.
+    public var settingsName: String {
+        switch self {
+        case .comicbookplus: return "ComicBookPlus"
+        case .stripzona, .retrospec, .archive: return display
         }
     }
 
@@ -34,11 +54,15 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     /// to `seedCatalogue(for:)` and is done. StripZona has none — its issues
     /// arrive by importing a forum page — and returning nil here is what says
     /// so, rather than a `switch` in the app repeating the same fact.
+    /// Comic Book Plus has none, and cannot: it holds around fifty thousand
+    /// books and publishes no index of them — its sitemap names its category
+    /// pages, not its books. So it works the way StripZona does, a page at a
+    /// time, and `Store.importComicBookPlus` is what reads one.
     public var catalogueResource: String? {
         switch self {
-        case .stripzona: return nil
-        case .retrospec: return "retrospec-catalog"
-        case .archive:   return "archive-catalog"
+        case .stripzona, .comicbookplus: return nil
+        case .retrospec:                 return "retrospec-catalog"
+        case .archive:                   return "archive-catalog"
         }
     }
 

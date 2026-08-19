@@ -9,7 +9,7 @@
   COMING SOON TO APPLE APP STORE!<br>
   (review in progress)<br>
   <br>
-  Coming in V1.1: support for RetroSpec and Archive.org<br>
+  Coming in V1.1: support for RetroSpec, Archive.org and ComicBook+<br>
 </th>
 </tr>
 </table>
@@ -31,9 +31,14 @@ and Amiga Bilten (September and October 1988). Second, **anything else searchabl
 Import gains a second entry that opens archive.org's search inside the app; find an item,
 and Import brings it onto the shelf.
 
-* **Browser fencing** Both browser views (StripZona, Archive.org) are fenced to their own site.
-The address line is read-only and links leading outside those domains are not followed.
-(The app embeds a view of two sites; it is not a full web browser, App Store compliance.)
+* **A fourth source:** **[ComicBook+](https://comicbookplus.com)**, an archive of public-domain
+Golden Age comics, pulp magazines, story papers and fanzines — around 50K items.
+You browse to a series title, and Import brings that whole run metadata onto the shelf.
+Reading on thesite is open to anyone but a free ComicBook+ account is needed for downloads.
+
+* **Browser fencing** All three browser views (StripZona, Archive.org, ComicBook+) are fenced to
+their own site. The address line is read-only and links leading outside those domains are not
+followed. (The app embeds a view of three sites; it is not a full web browser, App Store compliance.)
 
 * **Sources can be switched on and off** in Settings, or from the empty shelf on a first run.
 Switching one off hides it everywhere — shelf, search and filter menus — and never deletes
@@ -58,7 +63,7 @@ than arriving with hundreds of retro computer magazines a strictly comics lover 
 > [StripZona](https://www.stripzona.com) is a Serbian/ex-YU comics fan site. You browse its forum
 inside the app, import a topic page, and its issues become a searchable shelf — covers, series,
 hero, publisher and issue numbers, all read off the page in a convenient Kindle-style reader.
-Downloads and reading happen in the app.
+Downloads and reading happen in the app. You will need a free StripZona account.
 
 ---
 

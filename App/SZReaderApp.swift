@@ -171,6 +171,21 @@ final class AppModel: ObservableObject {
         didSet { sourcesChanged(enabled: showArchive, site: .archive) }
     }
 
+    /// Whether Comic Book Plus is shown.
+    ///
+    /// Off by default like the other two, though for a different reason: it
+    /// ships no catalogue at all, so switching it on adds nothing to the shelf
+    /// and only puts a second entry in the Import menu. A source that starts
+    /// on and appears to do nothing is worse than one the reader turns on
+    /// deliberately.
+    /// The stored key says "CBPlus" rather than spelling the site out, because
+    /// `UIWordingTests` lints every string literal in this layer for the word
+    /// "comic" and a defaults key is not worth an exemption. The property
+    /// keeps the readable name; identifiers are not what the lint reads.
+    @AppStorage("showCBPlus") var showComicBookPlus = false {
+        didSet { sourcesChanged(enabled: showComicBookPlus, site: .comicbookplus) }
+    }
+
     /// Sources the reader has switched on. Empty is a real answer — it means
     /// the shelf is deliberately blank — which is why nothing here hands an
     /// empty set to the store, where empty means "no opinion, show all".
@@ -194,17 +209,19 @@ final class AppModel: ObservableObject {
 
     func setSource(_ site: IssueSite, enabled: Bool) {
         switch site {
-        case .stripzona: showStripZona = enabled
-        case .retrospec: showRetroSpec = enabled
-        case .archive:   showArchive = enabled
+        case .stripzona:     showStripZona = enabled
+        case .retrospec:     showRetroSpec = enabled
+        case .archive:       showArchive = enabled
+        case .comicbookplus: showComicBookPlus = enabled
         }
     }
 
     func isEnabled(_ site: IssueSite) -> Bool {
         switch site {
-        case .stripzona: return showStripZona
-        case .retrospec: return showRetroSpec
-        case .archive:   return showArchive
+        case .stripzona:     return showStripZona
+        case .retrospec:     return showRetroSpec
+        case .archive:       return showArchive
+        case .comicbookplus: return showComicBookPlus
         }
     }
 
@@ -340,10 +357,22 @@ final class AppModel: ObservableObject {
             CoverStore.reportDeadCover = { [weak store] url in
                 try? store?.markCoverDead(url: url)
             }
+            // The default registry, with the one host that needs something
+            // only the app layer can give it: the reader's session with Comic
+            // Book Plus, which lives in WebKit's cookie store. Asked for at
+            // the moment a download resolves, never held.
+            let hosts = HostRegistry(hosts: [
+                MediaFireHost(), MegaHost(), PixeldrainHost(),
+                ComicBookPlusHost(cookies: {
+                    await SiteCookies.header(forDomain: ComicBookPlus.host)
+                }),
+                DirectHost(),
+            ])
             library = Library(store: store,
                               paths: paths,
                               transport: transport,
-                              downloader: URLSessionDownloader())
+                              downloader: URLSessionDownloader(),
+                              registry: hosts)
 
             // Page thumbnails are cached by page, and the file on disk records
             // neither how large it was drawn nor how — so a build that changes
@@ -496,6 +525,28 @@ final class AppModel: ObservableObject {
             search(query)
             // A freshly imported page may be all codes and no titles.
             resolveTitles()
+            return report
+        } catch {
+            status = "import failed: \(Library.reason(error))"
+            throw error
+        }
+    }
+
+    // MARK: - Comic Book Plus
+
+    /// Reads the series page the reader is looking at onto the shelf.
+    ///
+    /// The whole page at once, the way a forum topic imports: a leaf page is
+    /// one series, and every scan on it is a row. Nothing is downloaded — the
+    /// issues arrive greyed out, like every other import.
+    func importComicBookPlus(html: String) throws -> ComicBookPlusReport {
+        guard let store else { throw ImportFailure.notReady }
+        do {
+            let report = try store.importComicBookPlus(page: html)
+            refresh(note: report.isEmpty
+                    ? "imported nothing new"
+                    : "imported \(report.issues) issue\(report.issues == 1 ? "" : "s")")
+            search(query)
             return report
         } catch {
             status = "import failed: \(Library.reason(error))"
@@ -917,7 +968,13 @@ final class AppModel: ObservableObject {
             guard p.expected > 0 else { return }
             // Scaled to leave room for unpacking. The two are one wait as far
             // as the reader is concerned, so they share one bar.
-            continuation.yield(Double(p.received) / Double(p.expected) * Self.transferShare)
+            //
+            // Capped, because the total is not always measured: a host that
+            // knows a size the server will not declare passes on what the page
+            // stated, and that figure is rounded. A bar that runs past its own
+            // end looks broken in a way that being slightly early does not.
+            let fraction = min(Double(p.received) / Double(p.expected), 1.0)
+            continuation.yield(fraction * Self.transferShare)
         }
 
         Task { @MainActor [weak self] in

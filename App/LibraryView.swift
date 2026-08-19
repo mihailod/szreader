@@ -66,9 +66,9 @@ struct LibraryView: View {
     /// Which browser is open, if either.
     @State private var browsing: BrowseTarget?
     @State private var showingSettings = false
-    /// Set when Import was tapped with StripZona hidden, so the reader is
-    /// asked before importing into a source they cannot see.
-    @State private var confirmingStripZona = false
+    /// Set when Import was tapped with every source switched off, so the
+    /// reader is told why rather than shown a browser onto nothing.
+    @State private var promptingForSource = false
     @AppStorage("libraryLayout") private var layoutRaw = LibraryLayout.grid.rawValue
     @State private var pending: PendingAction?
 
@@ -121,26 +121,41 @@ struct LibraryView: View {
         // last of them ever presents anything.
         .fullScreenCover(item: $browsing) { target in
             switch target {
-            case .stripzona: ImportView { html in try model.importPage(html: html) }
-            case .archive:   ArchiveBrowserView(model: model)
+            case .stripzona:     ImportView { html in try model.importPage(html: html) }
+            case .archive:       ArchiveBrowserView(model: model)
+            case .comicbookplus: ComicBookPlusBrowserView(model: model)
             }
         }
         .sheet(isPresented: $showingSettings) { SettingsView(model: model) }
-        // Importing into a hidden source would land a page of comics nowhere
-        // a reader can see them — the shelf would be exactly as empty
-        // afterwards, and nothing on screen would say why. Asked rather than
-        // switched on silently: the switch is theirs, and an import is not a
-        // reason to overrule it without saying so.
-        .alert("Enable StripZona?", isPresented: $confirmingStripZona) {
-            Button("Yes") {
-                model.setSource(.stripzona, enabled: true)
-                browsing = .stripzona
-            }
-            Button("No", role: .cancel) { }
-        } message: {
-            Text("StripZona is switched off, so anything you import will be "
-                 + "hidden. Switch it back on and import?")
-        }
+        // Importing into a hidden source would land a page of issues nowhere
+        // the reader can see them — the shelf would be exactly as empty
+        // afterwards, and nothing on screen would say why.
+        //
+        // Says that in general terms rather than naming one source. This used
+        // to offer to switch StripZona back on, from the days when it was the
+        // only thing Import could open; with four sources that sentence was
+        // simply wrong, and it named the forum at a reader who may have turned
+        // it off deliberately and be after something else entirely. Which
+        // source to enable is theirs to choose, so this opens the screen where
+        // they are all listed rather than choosing for them.
+        //
+        // On a view of its own, for the reason this file has already had to
+        // learn twice: SwiftUI honours one presentation modifier per view, and
+        // this line already carries a `.sheet` and a `.fullScreenCover`. An
+        // alert added beside them is not a bug you see — it is a button that
+        // silently does nothing.
+        .background(
+            Color.clear
+                .alert("No sources are switched on", isPresented: $promptingForSource) {
+                    Button("Open Settings") { showingSettings = true }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("Import brings issues in from a source, and every "
+                         + "source is hidden — so anything imported now would "
+                         + "land on a shelf that cannot show it. Switch one on "
+                         + "to continue.")
+                }
+        )
         // Shown wherever the switch was thrown. The empty shelf carries the
         // same switches, so a reader can enable a source without ever opening
         // Settings — and then needs telling what just arrived.
@@ -368,28 +383,66 @@ struct LibraryView: View {
             .menuStyle(.borderlessButton)
             .tint(filtering ? .accentColor : .secondary)
 
-            // With Archive.org switched on there are two places to import
-            // from, so the button asks which. With it off there is one, and
-            // the button stays exactly what it has always been — a tap that
-            // opens the forum — rather than a menu with a single entry.
-            if model.showArchive {
+            // Built from the sources that are actually switched on, and
+            // nothing else. Anything showing here opens something.
+            //
+            // This has been wrong twice in the same place. First it was `if
+            // model.showArchive`, which was right while there were two sources
+            // and silently wrong the moment a third arrived. Then it listed
+            // StripZona unconditionally, so a reader who had switched the
+            // forum off was still offered it — the one entry in the menu that
+            // led nowhere they had asked to go.
+            switch importSources.count {
+            case 0:
+                // Nothing on. The button still exists, because it is the one
+                // control the first screen is built around, and it says so
+                // rather than opening a browser onto a source the reader has
+                // hidden.
+                Button { promptForASource() } label: { importLabel }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(Device.isPhone ? .regular : .large)
+            case 1:
+                // One source is not a choice, so it is not a menu.
+                Button { browsing = BrowseTarget(importSources[0]) } label: { importLabel }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(Device.isPhone ? .regular : .large)
+            default:
                 Menu {
-                    Button { beginImport() } label: {
-                        Label("StripZona", systemImage: "text.bubble")
-                    }
-                    Button { browsing = .archive } label: {
-                        Label("Archive.org", systemImage: "building.columns")
+                    ForEach(importSources, id: \.self) { site in
+                        Button { browsing = BrowseTarget(site) } label: {
+                            Label(site.display, systemImage: Self.importIcon(site))
+                        }
                     }
                 } label: {
                     importLabel
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(Device.isPhone ? .regular : .large)
-            } else {
-                Button { beginImport() } label: { importLabel }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(Device.isPhone ? .regular : .large)
             }
+    }
+
+    /// The sources Import can actually open, in menu order.
+    ///
+    /// Two filters, and both matter. **Switched on**, because an entry for a
+    /// hidden source would import a page of issues onto a shelf that will not
+    /// show them. **Has something to browse**, which is what leaves RetroSpec
+    /// out: it is a source like the others and ships its whole index, so there
+    /// is no page to import from and an entry would open a browser onto
+    /// nothing.
+    ///
+    /// StripZona leads when it is here, because it is what the button has
+    /// meant since the app had one button.
+    private var importSources: [IssueSite] {
+        [.stripzona, .archive, .comicbookplus].filter(model.isEnabled)
+    }
+
+    private static func importIcon(_ site: IssueSite) -> String {
+        switch site {
+        case .archive:       return "building.columns"
+        case .comicbookplus: return "books.vertical"
+        case .stripzona:     return "text.bubble"
+        case .retrospec:     return "tray.full"
+        }
     }
 
     /// The icon goes on a phone. Even on its own row the controls came to
@@ -423,16 +476,15 @@ struct LibraryView: View {
 
     // MARK: - Actions
 
-    /// Import stays available whether or not StripZona is showing — it is the
-    /// button the first screen exists for, and disabling it would leave a
-    /// reader who has switched the source off with no way back in except a
-    /// settings screen they have no reason to open.
-    private func beginImport() {
-        if model.showStripZona {
-            browsing = .stripzona
-        } else {
-            confirmingStripZona = true
-        }
+    /// What Import does when there is nothing for it to open.
+    ///
+    /// The button stays on screen rather than being disabled: it is the
+    /// control the first screen is built around, and a greyed-out one leaves a
+    /// reader who has hidden every source with no route back except a settings
+    /// screen they have no reason to open. So it still answers — by saying
+    /// what is wrong and offering that screen.
+    private func promptForASource() {
+        promptingForSource = true
     }
 
     /// Which browser the Import button opens.
@@ -440,8 +492,23 @@ struct LibraryView: View {
     /// Identifiable so one `fullScreenCover(item:)` can present either — see
     /// the note on that modifier for why there is only one.
     enum BrowseTarget: String, Identifiable {
-        case stripzona, archive
+        case stripzona, archive, comicbookplus
         var id: String { rawValue }
+
+        /// The browser a source opens, for the menu that is built by
+        /// iterating sources rather than by naming each one.
+        ///
+        /// RetroSpec has no browser and never reaches here — see
+        /// `importSources` — so it falls back to the forum rather than
+        /// making this initialiser optional and every call site handle a nil
+        /// that cannot happen.
+        init(_ site: IssueSite) {
+            switch site {
+            case .archive:       self = .archive
+            case .comicbookplus: self = .comicbookplus
+            case .stripzona, .retrospec: self = .stripzona
+            }
+        }
     }
 
     /// One menu for both layouts — long-pressing cover art behaves identically
@@ -1005,15 +1072,40 @@ struct LibraryView: View {
         // was only ever right when there was one: a filter with no search text
         // — a series with nothing downloaded in it, say — rendered as
         // “Nothing in your 192 imported issues matches “”.”
-        // Every source named, because this is the one screen that says the app
-        // has more than one library in it, and the switches are right below.
-        // "Issues" throughout: two of the three sources are magazines.
-        return model.issueCount == 0
-            ? "Tap Import to bring issues in from the StripZona forum — or "
-              + "switch on RetroSpec for ex-Yugoslav computer magazines and "
-              + "books, or Archive.org for ex-Yugoslav Amiga fanzines and more."
-            : "Nothing in your library matches that search / filter."
+        // "Issues" throughout: most of the sources are not comics.
+        return model.issueCount == 0 ? firstRunInvitation
+                                     : "Nothing in your library matches that search / filter."
     }
+
+    /// What a brand-new shelf says.
+    ///
+    /// Every source named, because this is the one screen that says the app
+    /// has more than one library in it, and the switches are right below.
+    ///
+    /// Assembled from `SourceCopy` rather than written out. Spelled out, this
+    /// sentence named three sources and went stale the moment a fourth
+    /// arrived — a reader on a fresh install was told about RetroSpec and
+    /// Archive.org and never about the source sitting in the list under it.
+    private var firstRunInvitation: String {
+        let phrases = IssueSite.allCases.map { SourceCopy.of($0).shelfPhrase }
+        guard let last = phrases.last else { return "Switch on a source below to begin." }
+        let leading = phrases.dropLast().joined(separator: ", ")
+        return "Nothing here yet. Switch on a source below — \(leading) "
+             + "or \(last) — then Import to bring issues in."
+    }
+
+    /// Type sizes for the empty screen.
+    ///
+    /// The iPad keeps the numbers it shipped with, untouched. A phone gets
+    /// smaller ones: at 44pt "Nothing switched on" does not fit a 428pt screen
+    /// and was being clipped mid-word, and the sentence under it fared no
+    /// better. Wrapping alone was not enough — three lines of 44pt type is a
+    /// wall — so the size comes down as well.
+    private static var emptyTitleSize: CGFloat { Device.isPhone ? 32 : 44 }
+    private static var emptyDetailSize: CGFloat { Device.isPhone ? 19 : 26 }
+    /// The icon shrinks with them, or it dominates a screen whose text has
+    /// just got smaller.
+    private static var emptyIconSize: CGFloat { Device.isPhone ? 72 : 96 }
 
     /// Whether the empty screen should carry the source switches.
     ///
@@ -1028,14 +1120,23 @@ struct LibraryView: View {
     private var emptyState: some View {
         VStack(spacing: 22) {
             Image(systemName: emptyIcon)
-                .font(.system(size: 96)).foregroundStyle(.tertiary)
+                .font(.system(size: Self.emptyIconSize)).foregroundStyle(.tertiary)
             Text(emptyTitle)
-                .font(.system(size: 44, weight: .bold))
+                .font(.system(size: Self.emptyTitleSize, weight: .bold))
                 .multilineTextAlignment(.center)
+                // Both of these, and both are needed. Without `fixedSize` the
+                // stack hands the text one line's height and it truncates
+                // rather than wrapping — "Nothing switched on" rendered as
+                // "Nothing switch…" — and without the scale factor a long
+                // word still has nowhere to go on the narrowest phone.
+                .fixedSize(horizontal: false, vertical: true)
+                .minimumScaleFactor(0.6)
             Text(emptyDetail)
-                .font(.system(size: 26, weight: .semibold))
+                .font(.system(size: Self.emptyDetailSize, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .minimumScaleFactor(0.7)
                 .frame(maxWidth: 760)
             // The switches, on the one screen where a reader has no other way
             // to find them. Settings is a gear in the corner of a shelf that

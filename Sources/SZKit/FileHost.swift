@@ -22,9 +22,25 @@ public struct DirectLink: Equatable, Sendable {
     public let url: URL
     public let headers: [String: String]
     public let postProcess: PostProcess?
+    /// How large the file is, when the host knows and the server will not say.
+    ///
+    /// Most servers declare a length and this stays nil. Comic Book Plus does
+    /// not: its download is a PHP script that streams the bytes without a
+    /// `Content-Length`, so `expectedContentLength` comes back as -1 and there
+    /// is no total to show a progress bar — or to check free space against.
+    /// The book page states a size, so the host reads it there and passes it
+    /// down here.
+    ///
+    /// A hint, not a measurement: the page rounds to two decimals of a
+    /// megabyte, so it is out by up to a few hundred bytes. Fine for a bar and
+    /// for a space check with 3x headroom; not something to verify a transfer
+    /// against.
+    public let expectedBytes: Int64?
 
-    public init(url: URL, headers: [String: String] = [:], postProcess: PostProcess? = nil) {
-        self.url = url; self.headers = headers; self.postProcess = postProcess
+    public init(url: URL, headers: [String: String] = [:],
+                postProcess: PostProcess? = nil, expectedBytes: Int64? = nil) {
+        self.url = url; self.headers = headers
+        self.postProcess = postProcess; self.expectedBytes = expectedBytes
     }
 }
 
@@ -69,7 +85,7 @@ public struct HostRegistry: Sendable {
     /// Last is where a fallback belongs regardless, in case it is ever
     /// widened.
     public init(hosts: [FileHost] = [MediaFireHost(), MegaHost(), PixeldrainHost(),
-                                     DirectHost()]) {
+                                     ComicBookPlusHost(), DirectHost()]) {
         self.hosts = hosts
     }
 

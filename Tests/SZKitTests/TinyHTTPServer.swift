@@ -18,6 +18,7 @@ final class TinyHTTPServer: @unchecked Sendable {
     private let listener: NWListener
     private let queue = DispatchQueue(label: "tiny-http")
     private let routes: [String: Data]
+    private let omitContentLength: Bool
     /// How many of the first requests to answer with a 500 before serving.
     ///
     /// Not a fault-injection framework — one counter, because one archive
@@ -36,10 +37,17 @@ final class TinyHTTPServer: @unchecked Sendable {
     ///     404, which is what the eight dead archives look like.
     ///   - failFirst: answer this many requests with 500 first.
     ///   - refuseWith: answer every request 429 with this `Retry-After` value.
-    init(routes: [String: Data], failFirst: Int = 0, refuseWith: String? = nil) throws {
+    ///   - omitContentLength: answer without a `Content-Length`, closing the
+    ///     connection to mark the end instead. Comic Book Plus serves its
+    ///     downloads from a streaming script that does exactly this, and it is
+    ///     the case where `expectedContentLength` arrives as -1 and nothing
+    ///     downstream can learn a total.
+    init(routes: [String: Data], failFirst: Int = 0, refuseWith: String? = nil,
+         omitContentLength: Bool = false) throws {
         self.routes = routes
         self.failFirst = failFirst
         self.refuseWith = refuseWith
+        self.omitContentLength = omitContentLength
         listener = try NWListener(using: .tcp, on: .any)
 
         let ready = DispatchSemaphore(value: 0)
@@ -90,7 +98,8 @@ final class TinyHTTPServer: @unchecked Sendable {
                 response = Self.reply(status: "500 Internal Server Error",
                                       body: Data("later".utf8))
             } else if let body = self.routes[path] {
-                response = Self.reply(status: "200 OK", body: body)
+                response = Self.reply(status: "200 OK", body: body,
+                                      omitLength: self.omitContentLength)
             } else {
                 response = Self.reply(status: "404 Not Found", body: Data("no".utf8))
             }
@@ -107,13 +116,17 @@ final class TinyHTTPServer: @unchecked Sendable {
     }
 
     private static func reply(status: String, body: Data,
-                              headers: [String: String] = [:]) -> Data {
+                              headers: [String: String] = [:],
+                              omitLength: Bool = false) -> Data {
         let extra = headers.map { "\($0.key): \($0.value)\r\n" }.joined()
+        // HTTP/1.0 with `Connection: close` is a body delimited by the close
+        // itself, which is a legal way to answer without a length and is what
+        // a streaming script amounts to.
+        let length = omitLength ? "" : "Content-Length: \(body.count)\r\n"
         var out = Data("""
             HTTP/1.0 \(status)\r
             Content-Type: application/zip\r
-            Content-Length: \(body.count)\r
-            \(extra)Connection: close\r
+            \(length)\(extra)Connection: close\r
             \r\n
             """.utf8)
         out.append(body)

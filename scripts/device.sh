@@ -54,8 +54,16 @@ if [[ -z "$state" ]]; then
   echo "    plug it in, or set SZ_IPAD to another device identifier"
   exit 1
 fi
-if [[ "$state" != *connected* ]]; then
-  echo "==> iPad is paired but not connected — plug it in or enable network debugging"
+# Two states can be installed to, and only one of them says "connected":
+# a cabled device reports "connected", while one reachable over the network
+# reports "available (paired)". Checking for "connected" alone refused every
+# wireless deploy with a message telling you to enable the network debugging
+# that was already working.
+#
+# "unavailable" is the paired-but-out-of-reach case and is the one to refuse.
+if [[ "$state" != *connected* && "$state" != *available* ]]; then
+  echo "==> iPad is paired but not reachable — plug it in, or put it on the"
+  echo "    same network with Xcode's network debugging enabled"
   exit 1
 fi
 

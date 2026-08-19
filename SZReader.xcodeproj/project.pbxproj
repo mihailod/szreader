@@ -10,13 +10,16 @@
 		0AAA7ACFD7935BADE0E1AC10 /* ImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 640135922A53F0FDE2BFEDE9 /* ImportView.swift */; };
 		0C1E38893CAB2B217CA9D632 /* CoverViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6ECA8838FF66470193A9021 /* CoverViewer.swift */; };
 		13A8C6AB3E55AC67FEC8D747 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0919F3692489FEBE9A67D8D /* LibraryView.swift */; };
+		1942E909CACBE7CCEE801E92 /* SourceCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00E88A7E0A2672D5EDB73075 /* SourceCopy.swift */; };
 		1BAD08BEBBFB9D7731135C47 /* LandscapeReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */; };
+		1F8D8F7DCA48D2DA048550C2 /* SiteCookies.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E7EFF3E8C993DA1BBBF76B /* SiteCookies.swift */; };
 		4110343204827F1B5F4F7945 /* SZKit in Frameworks */ = {isa = PBXBuildFile; productRef = 3399FEF9FB0275D5FBB6A832 /* SZKit */; };
 		479F9C38B6D874A03A3CF29F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3F41C3389BD9E0C5FE60156A /* Assets.xcassets */; };
 		4DA39CCBA66CCAC30888EB87 /* BrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DA4EDA742DCFD028234085B /* BrowserView.swift */; };
 		670053E4B9842CA70D36D12D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 897256247FA21EB8FD55169C /* PrivacyInfo.xcprivacy */; };
 		8BAE8FA4A68B422E6C8F6C61 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29AF759576024F9476C06792 /* SettingsView.swift */; };
 		8D11AF31CC02487A4E530E0C /* Device.swift in Sources */ = {isa = PBXBuildFile; fileRef = F917A2E24F939F7AEBBCAC66 /* Device.swift */; };
+		8EA7D153B64D7FC686F85136 /* ComicBookPlusBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59EC0AC1675DCD565296E981 /* ComicBookPlusBrowserView.swift */; };
 		94082F888333404B61A3C818 /* SZReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */; };
 		95E0C572BF4994B77DDB41B0 /* CoverStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */; };
 		A0542A495542645E1D9C357D /* ReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A12CF237924287D34868EA /* ReaderView.swift */; };
@@ -28,6 +31,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		00E88A7E0A2672D5EDB73075 /* SourceCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceCopy.swift; sourceTree = "<group>"; };
 		09747345D1188621DE903027 /* PagePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PagePickerView.swift; sourceTree = "<group>"; };
 		0DA4EDA742DCFD028234085B /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
 		10A12CF237924287D34868EA /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
@@ -37,11 +41,13 @@
 		34748E5F97C1D524B809B9A6 /* LandscapeReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeReader.swift; sourceTree = "<group>"; };
 		3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverStore.swift; sourceTree = "<group>"; };
 		3F41C3389BD9E0C5FE60156A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		59EC0AC1675DCD565296E981 /* ComicBookPlusBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComicBookPlusBrowserView.swift; sourceTree = "<group>"; };
 		640135922A53F0FDE2BFEDE9 /* ImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportView.swift; sourceTree = "<group>"; };
 		8483FF3778C83E8A0ED613BC /* BrowserScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserScreen.swift; sourceTree = "<group>"; };
 		897256247FA21EB8FD55169C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		8BB52132DFB9CAD97122F6DD /* SZReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SZReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		98B96100C7CD082FD8703855 /* AppInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfo.swift; sourceTree = "<group>"; };
+		A1E7EFF3E8C993DA1BBBF76B /* SiteCookies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteCookies.swift; sourceTree = "<group>"; };
 		B0919F3692489FEBE9A67D8D /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SZReaderApp.swift; sourceTree = "<group>"; };
 		CCF6729017ACD258D0298D8F /* szreader */ = {isa = PBXFileReference; lastKnownFileType = folder; name = szreader; path = .; sourceTree = SOURCE_ROOT; };
@@ -78,6 +84,7 @@
 				3F41C3389BD9E0C5FE60156A /* Assets.xcassets */,
 				8483FF3778C83E8A0ED613BC /* BrowserScreen.swift */,
 				0DA4EDA742DCFD028234085B /* BrowserView.swift */,
+				59EC0AC1675DCD565296E981 /* ComicBookPlusBrowserView.swift */,
 				3CC6EFA659EB171CBEEE07CA /* CoverStore.swift */,
 				F6ECA8838FF66470193A9021 /* CoverViewer.swift */,
 				F917A2E24F939F7AEBBCAC66 /* Device.swift */,
@@ -88,6 +95,8 @@
 				897256247FA21EB8FD55169C /* PrivacyInfo.xcprivacy */,
 				10A12CF237924287D34868EA /* ReaderView.swift */,
 				29AF759576024F9476C06792 /* SettingsView.swift */,
+				A1E7EFF3E8C993DA1BBBF76B /* SiteCookies.swift */,
+				00E88A7E0A2672D5EDB73075 /* SourceCopy.swift */,
 				289683A4600939769465C523 /* SourceToggle.swift */,
 				C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */,
 			);
@@ -191,6 +200,7 @@
 				D8B69D7A078A37E310965586 /* ArchiveBrowserView.swift in Sources */,
 				E394C166FE3B68BDB594232D /* BrowserScreen.swift in Sources */,
 				4DA39CCBA66CCAC30888EB87 /* BrowserView.swift in Sources */,
+				8EA7D153B64D7FC686F85136 /* ComicBookPlusBrowserView.swift in Sources */,
 				95E0C572BF4994B77DDB41B0 /* CoverStore.swift in Sources */,
 				0C1E38893CAB2B217CA9D632 /* CoverViewer.swift in Sources */,
 				8D11AF31CC02487A4E530E0C /* Device.swift in Sources */,
@@ -201,6 +211,8 @@
 				A0542A495542645E1D9C357D /* ReaderView.swift in Sources */,
 				94082F888333404B61A3C818 /* SZReaderApp.swift in Sources */,
 				8BAE8FA4A68B422E6C8F6C61 /* SettingsView.swift in Sources */,
+				1F8D8F7DCA48D2DA048550C2 /* SiteCookies.swift in Sources */,
+				1942E909CACBE7CCEE801E92 /* SourceCopy.swift in Sources */,
 				F3E6287092C23A79A5D74554 /* SourceToggle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

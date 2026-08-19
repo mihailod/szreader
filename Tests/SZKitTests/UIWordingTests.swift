@@ -61,19 +61,59 @@ final class UIWordingTests: XCTestCase {
         }
     }
 
+    /// The interpolation skip, and the line it does not cross.
+    ///
+    /// Written with the extractor change, because "skip the expression" is one
+    /// edit away from "skip the whole literal" — and that edit would empty the
+    /// rule out while leaving every test above it green.
+    func testInterpolatedExpressionsAreSkippedButTheirTextIsNot() {
+        // The expression is code: what reaches a reader is the value.
+        let named = #"Text("\(IssueSite.comicbookplus.display) (free account needed)")"#
+        XCTAssertEqual(Self.stringLiterals(in: named), [" (free account needed)"])
+
+        // The prose around one is still read, and still an offence.
+        let offending = #"Text("Download this comic from \(site.display) now")"#
+        let literals = Self.stringLiterals(in: offending)
+        XCTAssertTrue(literals.contains { $0.lowercased().contains("comic") },
+                      "text beside an interpolation stopped being read")
+
+        // A nested call does not close the interpolation early.
+        let nested = #"Text("\(count(of: things.first(where: { $0.ok }))) left")"#
+        XCTAssertEqual(Self.stringLiterals(in: nested), [" left"])
+
+        // And an ordinary escape is still a character, not an interpolation.
+        let quoted = #"Text("a \"comic\" book")"#
+        XCTAssertTrue(Self.stringLiterals(in: quoted)
+                        .contains { $0.lowercased().contains("comic") })
+    }
+
     /// Every string literal in a Swift file, with comments left out.
     ///
     /// Hand-rolled because the alternative — a regex for `"…"` — cannot tell
     /// a literal from the same characters inside a comment, and the UI layer
     /// explains itself in prose that mentions comics throughout.
     ///
+    /// Interpolated expressions are skipped, for the same reason comments and
+    /// identifiers are: `\(IssueSite.comicbookplus.display)` is code, and what
+    /// it puts on screen is the *value*, not the property's name. Reading the
+    /// expression as prose made a source whose owners called it Comic Book
+    /// Plus unnameable in this layer by any route — interpolation included —
+    /// which is not what this rule is for.
+    ///
+    /// The literal text around an interpolation is still read, so
+    /// `"Download this comic from \(site.display)"` is still an offence.
+    ///
     /// No handling of raw strings (`#"…"#`): there are none in `App`, and the
     /// test above would fail loudly rather than quietly if that changed,
-    /// since a mis-parse there reads code as text.
+    /// since a mis-parse there reads code as text. A string literal *nested
+    /// inside* an interpolation is skipped with the rest of the expression —
+    /// the one known hole, and worth less than the parser it would take.
     static func stringLiterals(in source: String) -> [String] {
         var out: [String] = []
         var current = ""
         var inString = false, inLine = false, inBlock = false, escaped = false
+        /// Open parens inside `\( … )`, so a nested call does not end it early.
+        var interpolation = 0
         var previous: Character?
 
         for ch in source {
@@ -88,7 +128,18 @@ final class UIWordingTests: XCTestCase {
                 continue
             }
             if inString {
-                if escaped { escaped = false; current.append(ch) }
+                if interpolation > 0 {
+                    if ch == "(" { interpolation += 1 }
+                    else if ch == ")" { interpolation -= 1 }
+                    previous = ch
+                    continue
+                }
+                if escaped {
+                    escaped = false
+                    // `\(` opens an interpolation; every other escape is a
+                    // character of the text.
+                    if ch == "(" { interpolation = 1 } else { current.append(ch) }
+                }
                 else if ch == "\\" { escaped = true }
                 else if ch == "\"" { inString = false; out.append(current); current = "" }
                 else if ch == "\n" { inString = false; current = "" }  // unterminated

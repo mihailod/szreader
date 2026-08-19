@@ -58,10 +58,41 @@ final class HostFenceTests: XCTestCase {
             XCTAssertFalse(admits(.archive, address), address)
         }
 
-        // And each fence admits only its own site: the two browsers are two
+        // And each fence admits only its own site: the browsers are separate
         // fences, not one shared list.
         XCTAssertFalse(admits(.stripzona, "https://archive.org/details/x"))
         XCTAssertFalse(admits(.archive, "https://www.stripzona.com/port/index.php"))
+        XCTAssertFalse(admits(.comicBookPlus, "https://archive.org/details/x"))
+        XCTAssertFalse(admits(.archive, "https://comicbookplus.com/?cid=1751"))
+    }
+
+    /// Comic Book Plus is one entry covering two hosts that both have to work.
+    ///
+    /// The pages are on the bare domain and every thumbnail, page image and
+    /// file is on `box01` — so a fence naming only the domain it was written
+    /// for would show the reader a listing with no cover art on it. Signing in
+    /// happens under `/forum/`, which is the same host and needs no rule of
+    /// its own.
+    func testTheComicBookPlusFenceCoversItsFileSubdomain() {
+        for address in ["https://comicbookplus.com/",
+                        "https://comicbookplus.com/?cid=1751",
+                        "https://comicbookplus.com/?dlid=21035",
+                        "https://comicbookplus.com/forum/?action=login",
+                        "https://box01.comicbookplus.com/viewer/abc/mediumthumb.jpg",
+                        "https://box01.comicbookplus.com/dload/?f=abc&t=cbr",
+                        "https://COMICBOOKPLUS.COM/?cid=1",
+                        "https://Box01.ComicBookPlus.com/"] {
+            XCTAssertTrue(admits(.comicBookPlus, address), address)
+        }
+
+        // The same near misses that matter everywhere else. Every one of these
+        // is registrable by somebody who is not this site.
+        for address in ["https://notcomicbookplus.com/?cid=1",
+                        "https://comicbookplus.com.example.com/?cid=1",
+                        "https://comicbookplusx.com/",
+                        "https://example.com/comicbookplus.com/?cid=1"] {
+            XCTAssertFalse(admits(.comicBookPlus, address), address)
+        }
     }
 
     /// A way out of the fence that never touches a host name.
