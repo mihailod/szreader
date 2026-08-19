@@ -40,11 +40,18 @@ Reading on thesite is open to anyone but a free ComicBook+ account is needed for
 their own site. The address line is read-only and links leading outside those domains are not
 followed. (The app embeds a view of three sites; it is not a full web browser, App Store compliance.)
 
+* **Smart Zoom** trims the blank margins off each page before it is drawn, so the artwork fills
+more of the screen but without stretching. It detects scanner edges, paper margins, lone page numbers
+in an otherwise empty margin. On by default (switchable in Settings).
+
 * **Sources can be switched on and off** in Settings, or from the empty shelf on a first run.
 Switching one off hides it everywhere — shelf, search and filter menus — and never deletes
 anything: what you have read and downloaded is exactly as you left it when you switch it back on.
 RetroSpec and Archive.org start switched off, so the app opens on an empty shelf and asks rather
 than arriving with hundreds of retro computer magazines a strictly comics lover might not care about.
+
+* **Bug fixes, UI/UX tweaks and additions** including more natural zoom, sort by Recently Open, and
+Page Preview Grid.
 
 ---
 

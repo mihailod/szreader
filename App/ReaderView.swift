@@ -44,6 +44,52 @@ struct ReaderView: View {
     /// Which of the two vertical scrubbers is being dragged, if either.
     @State private var scrubbingSide: HorizontalEdge?
 
+    /// Whether pages arrive with their margins already trimmed.
+    ///
+    /// The whole feature lives on this side of the decode: with it off, not one
+    /// line below this changes, because the page that reaches the cache is the
+    /// page the archive holds. Off by default — it is a judgement about someone
+    /// else's scan, and a reader who has not asked for it should get the page
+    /// as it was made.
+    ///
+    /// `@AppStorage`, so it is one answer for the whole app rather than a
+    /// per-issue habit to re-establish. Settings reads the same key, from the
+    /// same two constants.
+    @AppStorage(SmartZoom.settingKey) private var smartZoom = SmartZoom.onByDefault
+
+    /// The build that last put the offer below, whatever came of it. Empty
+    /// until one has.
+    ///
+    /// A build stamp rather than a flag, so each installed build gets to
+    /// mention the feature once. Remembered any further than that it would
+    /// reach almost nobody: the switch is on by default now, so the only
+    /// reader who can be offered anything is one who has turned it off, and a
+    /// flag kept for ever means that reader is asked once in their life and
+    /// then never again through every release after it.
+    ///
+    /// Deliberately *not* a record of why it is off. A reader who switched it
+    /// off last year and a reader who never touched it look the same here, on
+    /// purpose — one sentence per build install is not a nag, and telling the
+    /// two apart would cost a second stored answer to buy nothing.
+    ///
+    /// Written when the offer is *answered*, never when it is raised.
+    ///
+    /// The difference is not academic. Raising an alert while the reader is
+    /// still sliding up over the shelf is a thing SwiftUI drops on the floor
+    /// without a word, and stamping on the way up spent the build's one offer
+    /// on an alert nobody saw — which is indistinguishable, from the outside,
+    /// from a feature that does not work. Stamped on the answer, a dropped
+    /// alert costs nothing: the next page to be decoded tries again.
+    @AppStorage("smartZoomOfferedIn") private var smartZoomOfferedIn = ""
+
+    /// Up now.
+    @State private var offeringSmartZoom = false
+
+    /// Whether this reader has already put one up, so two pages decoding at
+    /// once do not both raise it. Deliberately not stored: a fresh reader
+    /// gets another go, which is what makes a dropped alert recoverable.
+    @State private var offerRaised = false
+
     private var pageCount: Int { document?.pageCount ?? 0 }
 
     var body: some View {
@@ -76,6 +122,16 @@ struct ReaderView: View {
             if chromeVisible { chrome }
         }
         .statusBarHidden(!chromeVisible)
+        // Once per install, on a page where it would visibly help. A reader
+        // who has switched this off is not asked at all — the offer exists for
+        // the one who has never met it.
+        .alert("Smart Zoom", isPresented: $offeringSmartZoom) {
+            Button("Smart Zoom ON") { answerSmartZoomOffer(turningOn: true) }
+            Button("Maybe Later", role: .cancel) { answerSmartZoomOffer(turningOn: false) }
+        } message: {
+            Text("Smart Zoom would make reading this page easier. "
+                 + "Turn it ON now or later in Settings.")
+        }
         // Driven by the document arriving rather than by onAppear: the reader
         // is on screen first, and there is nothing to resume to until then.
         .onChange(of: document == nil) { stillOpening in
@@ -86,6 +142,13 @@ struct ReaderView: View {
             guard pageCount > 0 else { return }
             model.rememberPlace(issueID: comicID, page: page)
             if page >= pageCount - 1 { markFinished() }
+        }
+        // The cache holds pages cropped the way the switch was when they were
+        // decoded, so throwing it away is the whole of applying the change —
+        // and the page on screen is decoded first, so the reader sees it move.
+        .onChange(of: smartZoom) { _ in
+            cache.removeAll()
+            load(around: index)
         }
     }
 
@@ -192,6 +255,7 @@ struct ReaderView: View {
                 Button { dismiss() } label: {
                     Label("Close", systemImage: "xmark.circle.fill").font(.title2)
                 }
+                smartZoomSwitch
                 Spacer()
                 Text(title).font(.headline)
                 Spacer()
@@ -218,6 +282,31 @@ struct ReaderView: View {
             // scrubbers are down the sides instead.
             if pageCount > 1 && !landscape { scrubber }
         }
+    }
+
+    /// Trims the margins off every page, for as long as it is on.
+    ///
+    /// Next to Close because that is where the reader's own controls are —
+    /// everything to the right of the title describes the comic, and this
+    /// describes how it is being shown.
+    ///
+    /// `fixedSize` so it keeps its width when the title beside it is long: the
+    /// title is the flexible one in this row and always has been, and a switch
+    /// squeezed to nothing is a switch nobody can throw. The words are dropped
+    /// on a phone, where the row is already the whole screen wide — the iPad
+    /// keeps the layout it shipped with, plus this.
+    @ViewBuilder private var smartZoomSwitch: some View {
+        Toggle(isOn: $smartZoom) {
+            if Device.isPhone {
+                Image(systemName: "viewfinder")
+            } else {
+                Label("Smart Zoom", systemImage: "viewfinder")
+            }
+        }
+        .toggleStyle(.switch)
+        .font(.subheadline)
+        .fixedSize()
+        .padding(.leading, Device.isPhone ? 8 : 16)
     }
 
     /// Drag to any page.
@@ -285,6 +374,28 @@ struct ReaderView: View {
         return Self.thumbRadius + span * CGFloat(scrubTarget / last)
     }
 
+    /// Puts the offer up, once the reader is done arriving.
+    ///
+    /// The delay is the whole point of the method. A page decodes fast enough
+    /// that this can land in the middle of the reader's own presentation, and
+    /// an alert asked for during a transition is dropped — no alert, no error,
+    /// nothing. The comic slides up over about a third of a second; this waits
+    /// comfortably past that and then asks.
+    private func raiseSmartZoomOffer() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            // Not if the reader has meanwhile switched it on themselves, or
+            // left the comic.
+            guard !smartZoom, document != nil else { return }
+            offeringSmartZoom = true
+        }
+    }
+
+    /// Spends the build's one offer, whichever way it was answered.
+    private func answerSmartZoomOffer(turningOn: Bool) {
+        smartZoomOfferedIn = AppInfo.versionAndBuild
+        if turningOn { smartZoom = true }
+    }
+
     /// Decode the current page plus a small window either side, so a back-flip
     /// is as smooth as a forward one.
     /// `keeping` is the page the cache is trimmed around, which is not always
@@ -300,10 +411,36 @@ struct ReaderView: View {
         let scale = UIScreen.main.scale
         let maxPixel = Int(max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * scale)
 
+        // Read once, off the decode: the switch may be thrown while these are
+        // in flight, and a page cropped the old way must not land in a cache
+        // that has just been emptied for the new one.
+        let trimming = smartZoom
+        // Switched off and not yet asked about *by this build* is the only
+        // state that measures a page it is not going to trim. Once the offer
+        // has been put, off costs nothing again for the rest of the build's
+        // life — which is what keeps the promise that this feature is not
+        // there at all when it is off.
+        let asking = !trimming && smartZoomOfferedIn != AppInfo.versionAndBuild
         for i in wanted where cache[i] == nil {
             DispatchQueue.global(qos: .userInitiated).async {
                 guard let image = try? document.page(i, maxPixelSize: maxPixel) else { return }
-                DispatchQueue.main.async { cache[i] = image }
+                // Off the main thread, beside the decode it belongs to. It
+                // reads a few tens of thousands of sampled pixels, which is
+                // nothing next to unpacking the page, but it is not nothing to
+                // do sixty times a second on the thread drawing the comic.
+                let shown = trimming ? SmartZoom.cropped(image) : image
+                let worthMentioning = asking && SmartZoom.wouldHelp(image)
+                DispatchQueue.main.async {
+                    guard trimming == smartZoom else { return }
+                    cache[i] = shown
+                    // Only for the page the reader is actually on. A prefetch
+                    // two pages ahead is not "this page", and the sentence
+                    // says this page.
+                    guard worthMentioning, i == index, !offerRaised,
+                          smartZoomOfferedIn != AppInfo.versionAndBuild else { return }
+                    offerRaised = true
+                    raiseSmartZoomOffer()
+                }
             }
         }
         // Keep the cache bounded by count, not bytes — each page is expensive.

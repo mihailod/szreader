@@ -10,6 +10,10 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var model: AppModel
 
+    /// The same switch the reader carries, reading the same key from the same
+    /// two constants — see `SmartZoom.settingKey`.
+    @AppStorage(SmartZoom.settingKey) private var smartZoom = SmartZoom.onByDefault
+
     var body: some View {
         NavigationStack {
             // The scroll view is a safety net for large Dynamic Type, not the
@@ -20,6 +24,9 @@ struct SettingsView: View {
             ScrollView {
             VStack(spacing: 10) {
                 header
+                    .padding(.top, 8)
+
+                reading
                     .padding(.top, 8)
 
                 sources
@@ -110,6 +117,43 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 16)
+        .frame(maxWidth: 560)
+    }
+
+    /// How pages are shown.
+    ///
+    /// Built like `sources` below rather than as a `Form`: this screen is a
+    /// sheet of plain rows on a rounded card, and one grouped list among them
+    /// would be the only thing on it drawn by a different set of rules.
+    private var reading: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("READING")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+
+            Toggle(isOn: $smartZoom) {
+                Text("Smart Zoom")
+                    .font(.headline)
+                    // As on the source rows: on a narrow phone the stack
+                    // offers one line's height and the sentence below
+                    // truncates rather than wrapping.
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color(.secondarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Text("Trims the blank margins off each page so the artwork fills more of the screen.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+        }
+        .multilineTextAlignment(.leading)
         .frame(maxWidth: 560)
     }
 
