@@ -1,15 +1,20 @@
 <table><tr>
 <th>
+  <a href="https://apps.apple.com/us/app/streamzine/id6801719481">
   <img src=https://raw.githubusercontent.com/mihailod/szreader/refs/heads/master/App/Assets.xcassets/AppIcon.appiconset/icon_1024.png width=200>
+  </a>
 </th>
 <th>
-  StreamZine for iOS<br><br>
-  Comics & magazines reader that supports StripZona forum<br>
   <br>
-  COMING SOON TO APPLE APP STORE!<br>
-  (review in progress)<br>
-  <br>
-  Coming in V1.1: support for RetroSpec, Archive.org and ComicBook+<br>
+  StreamZine 1.0<br><br>
+  Comics & magazines reader<br>
+  that supports StripZona forum.<br><br>
+  20. August 2026<br>
+  Now on App Store!<br><br>
+  <a href="https://apps.apple.com/us/app/streamzine/id6801719481" float="left">
+    <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&releaseDate=1276560000&h=7e7b68fad19738b5649a1bfb78ff46e9" alt="Download on the App Store"><br></a><br>
+  Coming soon in 1.1: support for<br>
+  RetroSpec, Archive.org and ComicBook+
 </th>
 </tr>
 </table>
@@ -49,7 +54,10 @@ Page Preview Grid.
 
 ---
 
-## 1.0 Features (App Store review in progress)
+## 1.0 Features
+
+  <a href="https://apps.apple.com/us/app/streamzine/id6801719481" float="left">
+    <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&releaseDate=1276560000&h=7e7b68fad19738b5649a1bfb78ff46e9" alt="Download on the App Store"><br></a>
 
 - **Imports a liked StripZona forum page** and turns its posts into library entries.
 - **Finds cover art** from the page itself, or by resolving against stripovi.com.
@@ -84,3 +92,6 @@ to each source's domain — the app is a specialized reader, not a general web b
 **Code:** Copyright © Mihailo Despotovic, 2026. Licensed under [PolyForm Noncommercial 1.0.0](LICENSE).
 * 🟢 **Free to use** for personal, educational, research, and non-commercial projects.
 * 🔴 **Commercial use prohibited.** If you intend to use my code in any way in any revenue-generating product, you must contact me for a commercial license.
+
+<a href="https://apps.apple.com/us/app/streamzine/id6801719481" float="left">
+    <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&releaseDate=1276560000&h=7e7b68fad19738b5649a1bfb78ff46e9" alt="Download on the App Store"></a>
