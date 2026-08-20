@@ -49,7 +49,7 @@ Page Preview Grid.
 
 ---
 
-## 1.0 Features
+## 1.0 Features (App Store review in progress)
 
 - **Imports a liked StripZona forum page** and turns its posts into library entries.
 - **Finds cover art** from the page itself, or by resolving against stripovi.com.
@@ -65,28 +65,22 @@ Page Preview Grid.
 inside the app, import a topic page, and its issues become a searchable shelf — covers, series,
 hero, publisher and issue numbers, all read off the page in a convenient Kindle-style reader.
 Downloads and reading happen in the app. You will need a free StripZona account.
+[StripZona Support Details](StripZonaSupport.md) (How logging in works, the heroes, series, editions and publishers this has been tested
+against, and what happens to a topic written some other way.)
 
 ---
 
-## StripZona Support Details
-
-How logging in works, the heroes, series, editions and publishers this has been tested
-against, and what happens to a topic written some other way —
-**[StripZonaSupport.md](StripZonaSupport.md)**.
+[Development Notes](DevNotes.md) (Building and running, test fixtures, shipped indexes, etc.)
 
 ---
 
-## Development Notes
+## StreamZine License
 
-Building and running, where the test fixtures live, and how the shipped RetroSpec and
-Archive.org indexes are rebuilt — **[DevNotes.md](DevNotes.md)**.
-
----
-
-## StreamZine Licence
-
-**Content:** there is no content. The app is a reader — it hosts nothing and ships no content.
+**Content:** there is no content. The app is a reader — it doesn't host, bundle, or ship any content.
+Content is downloaded at the user's request from freely accessible sources.
+Some sources require a free account, created on their own site. Browsing happens in views fenced
+to each source's domain — the app is a specialized reader, not a general web browser.
 
 **Code:** Copyright © Mihailo Despotovic, 2026. Licensed under [PolyForm Noncommercial 1.0.0](LICENSE).
 * 🟢 **Free to use** for personal, educational, research, and non-commercial projects.
-* 🔴 **Commercial use prohibited.** If you intend to use my code in any way in any revenue-generating product, contact me for a commercial license.
+* 🔴 **Commercial use prohibited.** If you intend to use my code in any way in any revenue-generating product, you must contact me for a commercial license.
