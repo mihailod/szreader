@@ -32,7 +32,7 @@ machines in seven switchable sub-sources: Magazines (Commodore, Amiga,
 Other), Books, Hardware Manuals, Video Games-related,
 Other (newsletters, applications, advertising).
 
-* **Bug fixes and various improvements including performance optimizations and  Source panel enhancements.
+* **Bug fixes and various improvements** including performance optimizations and  Source panel enhancements.
 
 ---
 
