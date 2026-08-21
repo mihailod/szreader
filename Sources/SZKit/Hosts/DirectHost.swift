@@ -30,7 +30,14 @@ public struct DirectHost: FileHost {
     /// Defaults to the archives the shipped catalogues point at. Taken as a
     /// parameter so a test can stand up its own server, and so an archive
     /// moving is a one-line change rather than a new host implementation.
-    public init(hosts: Set<String> = ["retrospec.elite.org", "archive.org"]) {
+    ///
+    /// Every one of these is a plain file server, which is the whole point of
+    /// this host: nothing to resolve, nothing signed, nothing that expires.
+    /// A catalogue whose host is missing from this list is not a broken
+    /// download — it is `noHostFor` on every single issue in it, which is how
+    /// the bombjack catalogue shipped the first time.
+    public init(hosts: Set<String> = ["retrospec.elite.org", "archive.org",
+                                     "commodore.bombjack.org", "arcarc.xmission.com"]) {
         self.hosts = Set(hosts.map { $0.lowercased() })
     }
 

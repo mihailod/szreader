@@ -32,7 +32,8 @@ public extension Store {
     /// case is the second one — the stamp matches, nothing is decoded, and the
     /// whole thing costs one row read.
     @discardableResult
-    func seedCatalogue(for site: IssueSite) throws -> SeedReport {
+    func seedCatalogue(for site: IssueSite,
+                       progress: (@Sendable (Int, Int) -> Void)? = nil) throws -> SeedReport {
         guard let resource = site.catalogueResource,
               let url = Bundle.module.url(forResource: resource, withExtension: "json") else {
             throw SeedError.catalogueMissing(site)
@@ -44,7 +45,7 @@ public extension Store {
         // build that introduced them. Every device that had already seeded
         // would have skipped the correction and kept the damage.
         return try seed(try ShippedCatalog.decode(data), site: site,
-                        stamp: Self.digest(data))
+                        stamp: Self.digest(data), progress: progress)
     }
 
     /// A stable fingerprint of the shipped file.
@@ -64,7 +65,8 @@ public extension Store {
     /// changes nothing, and the stamp would otherwise make that vacuous.
     @discardableResult
     func seed(_ file: ShippedCatalog, site: IssueSite = .retrospec,
-              force: Bool = false, stamp: String? = nil) throws -> SeedReport {
+              force: Bool = false, stamp: String? = nil,
+              progress: (@Sendable (Int, Int) -> Void)? = nil) throws -> SeedReport {
         guard file.version <= ShippedCatalog.currentVersion else {
             throw SeedError.tooNew(file.version)
         }
@@ -75,20 +77,43 @@ public extension Store {
         let series = Dictionary(uniqueKeysWithValues: file.series.map { ($0.key, $0) })
         var inserted = 0, updated = 0
 
-        // One transaction for the whole catalogue. RetroSpec's is 653 issues,
-        // and six hundred separate commits on a phone's flash is the
-        // difference between a launch that pauses and one that does not.
-        try db.transaction {
-            for issue in file.issues {
-                guard let run = series[issue.series] else { continue }
-                let existing = try catalogueID(site: site, code: issue.id)
-                let id = try writeCatalogued(issue, run: run, site: site,
-                                             base: file.base, existing: existing)
-                if existing == nil { inserted += 1 } else { updated += 1 }
-                try writeCatalogueMirror(issue, base: file.base, issueID: id)
+        // Batches, not one transaction for the lot.
+        //
+        // This was a single transaction, which was right when the largest
+        // catalogue was RetroSpec's 653 issues: six hundred separate commits
+        // on a phone's flash is slower than one. At eighteen thousand it is a
+        // different question, and the old shape had two failure modes that
+        // only appear at that size.
+        //
+        // It took fifteen seconds — and being one transaction, being killed
+        // part-way rolled *everything* back, the stamp included. So the next
+        // launch started from nothing and was killed at the same point, for
+        // ever. Committing in batches means an interrupted seed keeps what it
+        // finished, and the pass that follows updates those rows rather than
+        // redoing them.
+        //
+        // The size is a compromise: large enough that the per-commit cost is
+        // noise, small enough that no single commit is long.
+        let batch = 400
+        var index = 0
+        while index < file.issues.count {
+            let slice = Array(file.issues[index..<min(index + batch, file.issues.count)])
+            try db.transaction {
+                for issue in slice {
+                    guard let run = series[issue.series] else { continue }
+                    let existing = try catalogueID(site: site, code: issue.id)
+                    let id = try writeCatalogued(issue, run: run, site: site,
+                                                 base: file.base, existing: existing)
+                    if existing == nil { inserted += 1 } else { updated += 1 }
+                    try writeCatalogueMirror(issue, base: file.base, issueID: id)
+                }
             }
-            try setMeta(key, stamp)
+            index += slice.count
+            progress?(index, file.issues.count)
         }
+        // Last, and on its own: the stamp means "all of this is in", so it
+        // must not be written until it is.
+        try setMeta(key, stamp)
         return SeedReport(inserted: inserted, updated: updated, skipped: false)
     }
 

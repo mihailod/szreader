@@ -44,3 +44,62 @@ struct SourceToggle: View {
 
     private var detail: String { copy.detail }
 }
+
+/// The list of sources, wherever it is shown.
+///
+/// Shared by Settings and the empty shelf, which have always carried the same
+/// switches — and now have to carry them in the same *shape*, because
+/// BombJack is seven of them. Flat, that reads as seven peers of StripZona;
+/// grouped under one heading with its description, it reads as one archive
+/// with parts, which is what it is.
+struct SourceList: View {
+    @ObservedObject var model: AppModel
+
+    /// The sources that stand on their own.
+    private var standalone: [IssueSite] {
+        IssueSite.allCases.filter { $0.bombjackCategory == nil }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(standalone, id: \.self) { site in
+                SourceToggle(site: site, model: model)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                Divider().padding(.leading, 16)
+            }
+            bombJackGroup
+        }
+    }
+
+    /// The seven, under one heading.
+    private var bombJackGroup: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("BombJack").font(.headline)
+                Text("Scanned computer magazines and books for many platforms — "
+                     + "Commodore 8bit, Amiga, Atari, Sinclair, MSX, etc.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+
+            ForEach(Array(IssueSite.bombjackSites.enumerated()), id: \.element) { index, site in
+                SourceToggle(site: site, model: model)
+                    // Indented, so the seven read as parts of the archive
+                    // above them rather than as more sources beside it.
+                    .padding(.leading, 32)
+                    .padding(.trailing, 16)
+                    .padding(.vertical, 8)
+                if index < IssueSite.bombjackSites.count - 1 {
+                    Divider().padding(.leading, 32)
+                }
+            }
+        }
+        .padding(.bottom, 4)
+    }
+}
+

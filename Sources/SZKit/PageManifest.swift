@@ -69,6 +69,20 @@ public enum PageManifest {
         }.sorted(by: naturalLess)
     }
 
+    /// Documents that are a whole comic in themselves.
+    ///
+    /// A PDF inside an archive is not a page and not an archive, so neither of
+    /// the two lists above sees it — and a zip whose only content is a PDF
+    /// therefore looked like an archive with nothing readable in it. That is
+    /// how bombjack packages most of its books, and how 60% of that catalogue
+    /// arrives.
+    public static func nestedDocuments(in entries: [String]) -> [String] {
+        entries.filter { path in
+            guard !isJunk(path), let ext = path.split(separator: ".").last else { return false }
+            return ext.lowercased() == "pdf"
+        }.sorted(by: naturalLess)
+    }
+
     /// Image entries only, in reading order.
     public static func pages(from entries: [String]) -> [String] {
         entries.filter { !isJunk($0) && isImage($0) }.sorted(by: naturalLess)

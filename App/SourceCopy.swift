@@ -41,6 +41,7 @@ struct SourceCopy {
         case .retrospec:     return retrospec
         case .archive:       return archive
         case .comicbookplus: return comicBookPlus
+        default:             return bombJack(site)
         }
     }
 
@@ -127,4 +128,54 @@ struct SourceCopy {
               + "reader, not affiliated with or endorsed by "
               + "\(IssueSite.comicbookplus.settingsName), and it hosts "
               + "none of their scans.")
+
+    /// The seven BombJack catalogues, described from their category.
+    ///
+    /// One shape rather than seven near-identical blocks: they differ in what
+    /// they hold and in nothing else, and seven copies of the same disclaimer
+    /// is seven chances for one of them to drift.
+    private static func bombJack(_ site: IssueSite) -> SourceCopy {
+        let what = site.bombjackCategory?.display ?? "BombJack"
+        return SourceCopy(
+            switchTitle: what,
+            detail: detail(for: site.bombjackCategory),
+            shelfPhrase: "scanned computer magazines and books",
+            creditHeading: "BombJack / DLH's Commodore Archive",
+            // One person's archive, like RetroSpec, and credited the same way
+            // for the same reason: this material is readable today because he
+            // scanned it. Joystik is called out because its scans are hosted
+            // elsewhere again, and that host deserves saying.
+            credit: "The BombJack source indexes DLH's archive of scanned computer "
+                  + "magazines and books at commodore.bombjack.org, and the Joystik "
+                  + "arcade magazine hosted at arcarc.xmission.com. The app ships "
+                  + "the index and downloads each issue from those sites on demand. "
+                  + "This is an independent reader, not affiliated with or endorsed "
+                  + "by either, and it hosts none of their scans.")
+    }
+
+    /// What one category holds, in the terms someone choosing would use.
+    private static func detail(for category: BombJack.Category?) -> String {
+        switch category {
+        case .commodoreMagazines:
+            return "Commodore 8-bit magazines — Ahoy, Compute's Gazette, RUN, "
+                 + "Transactor and more."
+        case .amigaMagazines:
+            return "Amiga magazines — Amazing Computing, Amiga Format and others."
+        case .otherMagazines:
+            return "Magazines for every other machine, and the cross-platform "
+                 + "computing press."
+        case .books:
+            return "Scanned computer books, by platform — programming, reference "
+                 + "and beginners' guides."
+        case .hardware:
+            return "Manuals and reference cards for machines, drives and "
+                 + "peripherals."
+        case .games:
+            return "Printed matter that came with games — manuals, box art, "
+                 + "reference cards and keyboard overlays. Not the games."
+        case .other, .none:
+            return "Newsletters, user-group bulletins, software manuals, "
+                 + "advertising and catalogues."
+        }
+    }
 }

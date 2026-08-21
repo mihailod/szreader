@@ -19,6 +19,22 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     case retrospec
     case archive
     case comicbookplus
+    // BombJack ships as seven catalogues rather than one.
+    //
+    // As a single source it was 18,219 rows: fifteen seconds to seed, which
+    // iOS kills an app for during launch, and a noticeable freeze every time
+    // the switch moved. Split by what the material *is*, the largest is 3,204
+    // and a reader takes only the parts they want. They are separate sites
+    // rather than one site with a category column because every mechanism
+    // this app already has — seed stamps, hiding, the filter menus, the wall
+    // in the natural key — is per-site and needs no new concept to work.
+    case bombjackCommodoreMagazines
+    case bombjackAmigaMagazines
+    case bombjackOtherMagazines
+    case bombjackBooks
+    case bombjackHardware
+    case bombjackGames
+    case bombjackOther
 
     /// How the source is spelled in front of a reader.
     public var display: String {
@@ -27,6 +43,13 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .retrospec:     return "RetroSpec"
         case .archive:       return "Archive.org"
         case .comicbookplus: return "ComicBook+"
+        default:
+            // "BombJack: Books" rather than "Books". This string is written
+            // into the publisher column and the search index of every seeded
+            // row, so it has to say where the issue came from — "Books" on its
+            // own in a publisher filter names nothing.
+            guard let category = bombjackCategory else { return rawValue }
+            return "BombJack: \(category.display)"
         }
     }
 
@@ -44,7 +67,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     public var settingsName: String {
         switch self {
         case .comicbookplus: return "ComicBookPlus"
-        case .stripzona, .retrospec, .archive: return display
+        default: return display
         }
     }
 
@@ -63,8 +86,36 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .stripzona, .comicbookplus: return nil
         case .retrospec:                 return "retrospec-catalog"
         case .archive:                   return "archive-catalog"
+        default:                         return bombjackCategory?.resource
         }
     }
+
+    /// The BombJack category this source carries, or nil if it is not one of
+    /// them.
+    ///
+    /// One place that knows the mapping, so a name, a file and a switch label
+    /// cannot drift apart.
+    public var bombjackCategory: BombJack.Category? {
+        switch self {
+        case .bombjackCommodoreMagazines: return .commodoreMagazines
+        case .bombjackAmigaMagazines:     return .amigaMagazines
+        case .bombjackOtherMagazines:     return .otherMagazines
+        case .bombjackBooks:              return .books
+        case .bombjackHardware:           return .hardware
+        case .bombjackGames:              return .games
+        case .bombjackOther:              return .other
+        case .stripzona, .retrospec, .archive, .comicbookplus: return nil
+        }
+    }
+
+    /// The seven that make up BombJack, in the order the settings list shows
+    /// them. Named `bombjackSites` rather than `bombjack` so it cannot be
+    /// mistaken for the single case it replaced — which is exactly what two
+    /// call sites did on the first build after the split.
+    public static let bombjackSites: [IssueSite] =
+        BombJack.Category.inMenuOrder.compactMap { category in
+            IssueSite.allCases.first { $0.bombjackCategory == category }
+        }
 
     /// What a row with no recorded source is.
     ///

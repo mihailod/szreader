@@ -136,6 +136,9 @@ let package = Package(
         .executableTarget(name: "archive-build", dependencies: ["SZKit"],
                           path: "Sources/ArchiveBuild",
                           swiftSettings: [.swiftLanguageMode(.v6)]),
+        .executableTarget(name: "bombjack-build", dependencies: ["SZKit"],
+                          path: "Sources/BombJackBuild",
+                          swiftSettings: [.swiftLanguageMode(.v6)]),
         // Still v5: the concurrency tests deliberately share one Store across
         // threads to prove the locking works, which mode 6 cannot see is safe.
         .testTarget(name: "SZKitTests", dependencies: ["SZKit"],

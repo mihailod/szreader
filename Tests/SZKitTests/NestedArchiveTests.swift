@@ -13,6 +13,48 @@ import XCTest
 /// an empty frame and a spinner that never resolved.
 final class NestedArchiveTests: XCTestCase {
 
+    /// An archive whose content is a PDF rather than pages.
+    ///
+    /// The other nesting convention. A scanlation is a zip inside a zip, which
+    /// this suite already covers; bombjack packages most of its books as a zip
+    /// whose single entry is the whole thing as a PDF. Neither the page list
+    /// nor the nested-archive list sees a PDF, so the document came out empty
+    /// and the reader reported the archive corrupt — on 60% of that source.
+    func testAZipHoldingOnlyAPDFOpensAsThatPDF() throws {
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("zipped-pdf-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        // Written here rather than shipped as a fixture, so the test cannot
+        // quietly skip itself for want of one — a skipped test proves nothing.
+        let inner = scratch.appendingPathComponent("Book.pdf")
+        var box = CGRect(x: 0, y: 0, width: 420, height: 595)
+        guard let context = CGContext(inner as CFURL, mediaBox: &box, nil) else {
+            throw XCTSkip("cannot write a PDF here")
+        }
+        for page in 0..<3 {
+            context.beginPage(mediaBox: &box)
+            context.setFillColor(gray: 0, alpha: 1)
+            context.fill(CGRect(x: 20, y: 20, width: 100, height: 20 + CGFloat(page) * 10))
+            context.endPage()
+        }
+        context.closePDF()
+
+        let archive = scratch.appendingPathComponent("Book.zip")
+        let zip = Process()
+        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        zip.arguments = ["-j", "-q", archive.path, inner.path]
+        try zip.run(); zip.waitUntilExit()
+        guard zip.terminationStatus == 0 else { throw XCTSkip("zip unavailable") }
+
+        let document = try ComicDocument(fileURL: archive,
+                                         workDirectory: scratch.appendingPathComponent("work"))
+        XCTAssertEqual(document.pageCount, 3,
+                       "a zip holding a PDF read back as an empty comic")
+    }
+
+
     private var root: URL!
 
     override func setUpWithError() throws {

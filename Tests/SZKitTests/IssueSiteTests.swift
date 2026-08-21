@@ -83,9 +83,15 @@ final class IssueSiteTests: XCTestCase {
                 <div>http://www.mediafire.com/?FAKEKEY003</div>
                 """)
             XCTAssertGreaterThan(store.issueCount, 0)
-            // Wind the schema back: the index has to go first, because the
-            // column it names cannot be dropped while it stands.
-            try store.db.execute("DROP INDEX IF EXISTS issue_identity_v3")
+            // Wind the schema back: every index naming the column has to go
+            // first, because SQLite will not drop a column one still stands
+            // on. A library old enough to lack `site` has none of these, so
+            // dropping them is part of simulating one — and this test is what
+            // says so, having failed the moment the menu indexes were added.
+            for index in ["issue_identity_v3", "issue_site_edition",
+                          "issue_site_publisher", "issue_site_hero"] {
+                try store.db.execute("DROP INDEX IF EXISTS \(index)")
+            }
             try store.db.execute("ALTER TABLE issue DROP COLUMN site")
         }
 

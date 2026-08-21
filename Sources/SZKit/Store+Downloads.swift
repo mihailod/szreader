@@ -14,11 +14,13 @@ extension Store {
             """)
         // SQLite has no ADD COLUMN IF NOT EXISTS; on a second open this
         // throws "duplicate column name", which is the success case.
-        try? db.execute("ALTER TABLE mirror ADD COLUMN dead INTEGER NOT NULL DEFAULT 0")
-        // When a mirror was last asked for its filename, whatever came back.
-        // Without this an unproductive probe is indistinguishable from one
-        // that never happened.
-        try? db.execute("ALTER TABLE mirror ADD COLUMN probed_at REAL")
+        try? addColumns(to: "mirror", [
+            // Whether a link has been found to 404. See `markMirrorDead`.
+            ("dead", "INTEGER NOT NULL DEFAULT 0"),
+            // When the host was last asked about the file, so a probe that
+            // never happened and one that found nothing are told apart.
+            ("probed_at", "REAL"),
+        ])
     }
 
     public func recordDownload(issueID: Int, mirrorURL: String,

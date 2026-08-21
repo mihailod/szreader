@@ -186,7 +186,28 @@ final class AppModel: ObservableObject {
         didSet { sourcesChanged(enabled: showComicBookPlus, site: .comicbookplus) }
     }
 
-    /// Sources the reader has switched on. Empty is a real answer — it means
+    /// Whether each BombJack catalogue is shown.
+    ///
+    /// Seven of them, so these are read from `UserDefaults` by name rather
+    /// than declared as seven `@AppStorage` properties. All off by default:
+    /// switching one on adds a few thousand rows, and nobody wants all
+    /// eighteen thousand.
+    ///
+    /// `objectWillChange` is sent by hand on write, which is the one thing
+    /// `@AppStorage` was doing for us.
+    static func defaultsKey(for site: IssueSite) -> String { "show_\(site.rawValue)" }
+
+    private func storedFlag(_ site: IssueSite) -> Bool {
+        UserDefaults.standard.bool(forKey: Self.defaultsKey(for: site))
+    }
+
+    private func storeFlag(_ site: IssueSite, _ enabled: Bool) {
+        objectWillChange.send()
+        UserDefaults.standard.set(enabled, forKey: Self.defaultsKey(for: site))
+        sourcesChanged(enabled: enabled, site: site)
+    }
+
+    /// Sources the reader has switched on.    /// Sources the reader has switched on. Empty is a real answer — it means
     /// the shelf is deliberately blank — which is why nothing here hands an
     /// empty set to the store, where empty means "no opinion, show all".
     var visibleSites: Set<IssueSite> {
@@ -213,6 +234,7 @@ final class AppModel: ObservableObject {
         case .retrospec:     showRetroSpec = enabled
         case .archive:       showArchive = enabled
         case .comicbookplus: showComicBookPlus = enabled
+        default:             storeFlag(site, enabled)
         }
     }
 
@@ -222,6 +244,7 @@ final class AppModel: ObservableObject {
         case .retrospec:     return showRetroSpec
         case .archive:       return showArchive
         case .comicbookplus: return showComicBookPlus
+        default:             return storedFlag(site)
         }
     }
 
@@ -233,52 +256,79 @@ final class AppModel: ObservableObject {
     /// reader; hiding a source is a view, not a purge, and switching it back
     /// on returns exactly what was there.
     private func sourcesChanged(enabled: Bool, site: IssueSite) {
-        if enabled, site.catalogueResource != nil, let store {
-            do {
-                let report = try store.seedCatalogue(for: site)
-                if report.inserted > 0 {
-                    // "issues", never "comics": these two catalogues are
-                    // magazines, and the word has to be true of both.
-                    sourceNotice = SourceNotice(
-                        site: site,
-                        message: "\(report.inserted) \(site.display) issues are now in "
-                               + "your library. You can hide them again in Settings.")
-                }
-            } catch {
-                status = "\(site.display) catalogue unavailable: \(Library.reason(error))"
-            }
+        if enabled, site.catalogueResource != nil {
+            // Not on this thread. Switching a source on used to seed it here
+            // and now, which froze the app solid for the length of the seed —
+            // fifteen seconds for the largest catalogue, with the settings
+            // sheet still on screen and nothing moving.
+            seedInBackground(site, announce: true)
         }
         // A filter naming a series from a source that is now hidden matches
         // nothing, and an empty shelf with no visible reason is the most
         // baffling state the app has. Dropping those selections keeps the
         // shelf explainable by what is actually on screen.
         refreshSourceMenus()
-        pruneHiddenSelections()
         issueCount = store?.issueCount ?? 0
         downloadedCount = store?.downloadedCount ?? 0
         search(query)
     }
 
+    /// Rebuilds the Series, Publisher and Hero menus.
+    ///
+    /// Off the main thread, because this is eight `DISTINCT` queries over the
+    /// whole issue table and the table is now twenty thousand rows deep.
+    /// Switching a source *off* does no work at all beyond this — no seeding,
+    /// nothing to write — and still froze the app solid, because every one of
+    /// those queries ran here before the switch could redraw.
+    ///
+    /// The queries are also indexed now, so this is fast as well as
+    /// non-blocking; the two together are what make the switch feel like a
+    /// switch. The results land back on the main actor, which is where the
+    /// `@Published` properties live.
     private func refreshSourceMenus() {
         let sites = visibleSites
-        guard !sites.isEmpty else {
+        guard let store, !sites.isEmpty else {
             availableSeries = []; availablePublishers = []; availableHeroes = []
             seriesBySite = [:]
             return
         }
-        availableSeries = (try? store?.editions(sites: sites)) ?? []
-        availablePublishers = (try? store?.publishers(sites: sites)) ?? []
-        availableHeroes = (try? store?.heroes(sites: sites)) ?? []
-        // Asked per source as well as together. The menu needs them grouped
-        // and the filters need them pooled, and deriving one from the other
-        // would mean knowing which source a series name came from — which is
-        // exactly what the second query answers and a name cannot.
-        var grouped: [IssueSite: [String]] = [:]
-        for site in sites {
-            let names = (try? store?.editions(sites: [site])) ?? []
-            if !names.isEmpty { grouped[site] = names }
+        Task { @MainActor [weak self] in
+            let menus = await Task.detached(priority: .userInitiated) { () -> Menus in
+                // Asked per source as well as together. The menu needs them
+                // grouped and the filters need them pooled, and deriving one
+                // from the other would mean knowing which source a series name
+                // came from — which is exactly what the second query answers
+                // and a name cannot.
+                var grouped: [IssueSite: [String]] = [:]
+                for site in sites {
+                    let names = (try? store.editions(sites: [site])) ?? []
+                    if !names.isEmpty { grouped[site] = names }
+                }
+                return Menus(series: (try? store.editions(sites: sites)) ?? [],
+                             publishers: (try? store.publishers(sites: sites)) ?? [],
+                             heroes: (try? store.heroes(sites: sites)) ?? [],
+                             bySite: grouped)
+            }.value
+
+            guard let self else { return }
+            self.availableSeries = menus.series
+            self.availablePublishers = menus.publishers
+            self.availableHeroes = menus.heroes
+            self.seriesBySite = menus.bySite
+            // Only once the menus are known: a selection is pruned against
+            // what is actually on offer, and pruning against a stale list
+            // drops a filter the reader can still see.
+            self.pruneHiddenSelections()
         }
-        seriesBySite = grouped
+    }
+
+    /// One trip's worth of menu contents, so the background pass hands back a
+    /// single value rather than reaching for four properties from off-actor.
+    private struct Menus: Sendable {
+        let series: [String]
+        let publishers: [String]
+        let heroes: [String]
+        let bySite: [IssueSite: [String]]
     }
 
     private func pruneHiddenSelections() {
@@ -407,13 +457,23 @@ final class AppModel: ObservableObject {
             //
             // A failure is not fatal. The forum library is the app's original
             // reason to exist and works with or without either of these.
+            // Off the main thread, and not waited on.
+            //
+            // This used to seed every enabled catalogue here, synchronously,
+            // before the first frame. That was survivable at RetroSpec's 653
+            // issues and fatal at eighteen thousand: the seed takes fifteen
+            // seconds, iOS kills an app that blocks its launch for about
+            // twenty, and the kill rolled the transaction back — so the next
+            // launch started over and was killed again. The app could not be
+            // opened at all, and the switch that would have turned the source
+            // off was on the other side of the launch.
+            //
+            // Now the shelf comes up first and the catalogue fills in behind
+            // it. `Store` serialises its own statements, so this is safe from
+            // any thread.
             for site in IssueSite.allCases
             where site.catalogueResource != nil && isEnabled(site) {
-                do {
-                    try store.seedCatalogue(for: site)
-                } catch {
-                    status = "\(site.display) catalogue unavailable: \(Library.reason(error))"
-                }
+                seedInBackground(site, announce: false)
             }
 
             #if DEBUG
@@ -427,6 +487,11 @@ final class AppModel: ObservableObject {
             refreshSourceMenus()
             search("")
             resolveTitles()
+            // Anything downloaded whose artwork went away since. See the
+            // method: the capture at download time only ever fires once, and
+            // a cover that dies later leaves a comic on the device showing a
+            // grey rectangle for good.
+            captureMissingCovers()
         } catch {
             status = "failed: \(error)"
         }
@@ -529,6 +594,87 @@ final class AppModel: ObservableObject {
         } catch {
             status = "import failed: \(Library.reason(error))"
             throw error
+        }
+    }
+
+    /// Gives a cover to downloaded issues that have none.
+    ///
+    /// A cover is normally captured the moment a download finishes, but only
+    /// when the issue had no artwork *at that moment*. Anything whose remote
+    /// cover dies later than that — a hotlinked image on a host that stops
+    /// answering — keeps its file, keeps its pages, and shows a grey rectangle
+    /// for good, because nothing ever asks again.
+    ///
+    /// This is what asks again. A trickle rather than a sweep: each capture
+    /// opens an archive and renders a page, and a library of twenty thousand
+    /// should not do that at launch.
+    func captureMissingCovers() {
+        guard let store, let library else { return }
+        Task { @MainActor [weak self] in
+            let waiting = (try? store.downloadedIssuesLackingCover()) ?? []
+            guard !waiting.isEmpty else { return }
+            var captured = 0
+            for issueID in waiting {
+                let art = try? await Task.detached(priority: .utility) {
+                    try library.captureCover(issueID: issueID)
+                }.value
+                if let art {
+                    try? store.setCoverURL(art, issueID: issueID)
+                    captured += 1
+                }
+            }
+            guard let self, captured > 0 else { return }
+            self.search(self.query)
+        }
+    }
+
+    /// Reads a shipped catalogue into the library without holding the app up.
+    ///
+    /// The seed reports as it goes and the shelf is rebuilt at the end, so a
+    /// large source arrives visibly rather than as a freeze followed by
+    /// eighteen thousand rows. `announce` is for the switch — a reader who has
+    /// just thrown it should be told what landed — and is off at launch, where
+    /// nothing has changed and there is nothing to say.
+    func seedInBackground(_ site: IssueSite, announce: Bool) {
+        guard let store else { return }
+        status = "loading \(site.display)…"
+        Task { @MainActor [weak self] in
+            let outcome: Result<SeedReport, Error>
+            do {
+                let report = try await Task.detached(priority: .utility) {
+                    try store.seedCatalogue(for: site) { done, total in
+                        // Cheap and rate-limited by the batch size: one
+                        // message per four hundred rows, not per row.
+                        Task { @MainActor [weak self] in
+                            guard let self, done < total else { return }
+                            self.status = "loading \(site.display)… \(done) of \(total)"
+                        }
+                    }
+                }.value
+                outcome = .success(report)
+            } catch {
+                outcome = .failure(error)
+            }
+            guard let self else { return }
+            switch outcome {
+            case .success(let report):
+                if announce, report.inserted > 0 {
+                    // "issues", never "comics": these catalogues are
+                    // magazines, and the word has to be true of both.
+                    self.sourceNotice = SourceNotice(
+                        site: site,
+                        message: "\(report.inserted) \(site.display) issues are now in "
+                               + "your library. You can hide them again in Settings.")
+                }
+                self.status = report.isEmpty ? "" : "\(site.display) ready"
+            case .failure(let error):
+                self.status = "\(site.display) catalogue unavailable: "
+                            + "\(Library.reason(error))"
+            }
+            self.refreshSourceMenus()
+            self.issueCount = self.store?.issueCount ?? 0
+            self.downloadedCount = self.store?.downloadedCount ?? 0
+            self.search(self.query)
         }
     }
 

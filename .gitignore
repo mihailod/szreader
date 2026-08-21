@@ -6,6 +6,9 @@ spike/fixtures/
 spike/*.json
 spike/*.csv
 
+# bombjack cache
+.bombjack-cache/
+
 # Pages and archive headers `retrospec-build` has already fetched, so a
 # rebuild asks the site for each one once. Everything here is a copy of a
 # public static page — it is ignored because it is derived and bulky, not

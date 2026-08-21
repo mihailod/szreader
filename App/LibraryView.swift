@@ -146,14 +146,13 @@ struct LibraryView: View {
         // silently does nothing.
         .background(
             Color.clear
-                .alert("No sources are switched on", isPresented: $promptingForSource) {
+                .alert("No Importable Sources", isPresented: $promptingForSource) {
                     Button("Open Settings") { showingSettings = true }
                     Button("Cancel", role: .cancel) { }
                 } message: {
-                    Text("Import brings issues in from a source, and every "
-                         + "source is hidden — so anything imported now would "
-                         + "land on a shelf that cannot show it. Switch one on "
-                         + "to continue.")
+                    Text("Import brings content from an importable source and every "
+                         + "importable source is turned off. "
+                         + "Turn them ON in Settings.")
                 }
         )
         // Shown wherever the switch was thrown. The empty shelf carries the
@@ -442,6 +441,7 @@ struct LibraryView: View {
         case .comicbookplus: return "books.vertical"
         case .stripzona:     return "text.bubble"
         case .retrospec:     return "tray.full"
+        default:             return "desktopcomputer"
         }
     }
 
@@ -498,15 +498,17 @@ struct LibraryView: View {
         /// The browser a source opens, for the menu that is built by
         /// iterating sources rather than by naming each one.
         ///
-        /// RetroSpec has no browser and never reaches here — see
-        /// `importSources` — so it falls back to the forum rather than
+        /// RetroSpec and BombJack have no browser and never reach here — see
+        /// `importSources` — so they fall back to the forum rather than
         /// making this initialiser optional and every call site handle a nil
         /// that cannot happen.
         init(_ site: IssueSite) {
             switch site {
             case .archive:       self = .archive
             case .comicbookplus: self = .comicbookplus
-            case .stripzona, .retrospec: self = .stripzona
+            // RetroSpec and the BombJack catalogues have no browser and
+            // never reach here — see `importSources`.
+            default: self = .stripzona
             }
         }
     }
@@ -1062,8 +1064,8 @@ struct LibraryView: View {
 
     private var emptyDetail: String {
         if allSourcesOff {
-            return "Every source is switched off. Switch one back on below, "
-                 + "or in Settings, to see your issues again."
+            return "Every source is switched off. Switch them on in "
+                 + "Settings."
         }
         if nothingDownloaded {
             return "Turn off the Downloaded filter and download some issues!"
@@ -1087,10 +1089,22 @@ struct LibraryView: View {
     /// arrived — a reader on a fresh install was told about RetroSpec and
     /// Archive.org and never about the source sitting in the list under it.
     private var firstRunInvitation: String {
-        let phrases = IssueSite.allCases.map { SourceCopy.of($0).shelfPhrase }
-        guard let last = phrases.last else { return "Switch on a source below to begin." }
+        // Each phrase once. The seven BombJack catalogues share one — they are
+        // one archive split by category — and listing them separately repeated
+        // the same nine words seven times over.
+        var phrases: [String] = []
+        for site in IssueSite.allCases {
+            let phrase = SourceCopy.of(site).shelfPhrase
+            if !phrases.contains(phrase) { phrases.append(phrase) }
+        }
+        guard let last = phrases.last, phrases.count > 1 else {
+            return "Nothing here yet. Open Settings to switch on a source."
+        }
         let leading = phrases.dropLast().joined(separator: ", ")
-        return "Nothing here yet. Switch on a source below — \(leading) "
+        // "In Settings", not "below": the switches used to sit under this
+        // sentence and now do not — there are eleven of them and they did not
+        // fit on a screen that cannot scroll.
+        return "Nothing here yet. In Settings you can switch on \(leading) "
              + "or \(last) — then Import to bring issues in."
     }
 
@@ -1107,12 +1121,12 @@ struct LibraryView: View {
     /// just got smaller.
     private static var emptyIconSize: CGFloat { Device.isPhone ? 72 : 96 }
 
-    /// Whether the empty screen should carry the source switches.
+    /// Whether the empty screen should offer the way to Settings.
     ///
-    /// Only where they are the way out of it. A reader whose search matched
-    /// nothing does not need to be offered a second library — they need to
-    /// clear the search — and putting the switches under every empty shelf
-    /// would make them look like part of the search UI.
+    /// Only where it is the way out. A reader whose search matched nothing
+    /// does not need to be offered another library — they need to clear the
+    /// search — and a Settings button under every empty shelf would read as
+    /// part of the search UI.
     private var offersSourceSwitches: Bool {
         allSourcesOff || (model.issueCount == 0 && !nothingDownloaded)
     }
@@ -1142,25 +1156,34 @@ struct LibraryView: View {
             // to find them. Settings is a gear in the corner of a shelf that
             // is currently blank, which is a poor place to discover that the
             // app has a second library in it at all.
-            if offersSourceSwitches { sourceSwitches }
+            if offersSourceSwitches { openSettingsButton }
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var sourceSwitches: some View {
-        VStack(spacing: 0) {
-            ForEach(IssueSite.allCases, id: \.self) { site in
-                SourceToggle(site: site, model: model)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 14)
-                if site != IssueSite.allCases.last { Divider().padding(.leading, 20) }
-            }
+    /// The way in to the sources, on the one screen with no other route to
+    /// them.
+    ///
+    /// This was the switches themselves, inline, and that was right while
+    /// there were three of them: Settings is a gear in the corner of a blank
+    /// shelf, which is a poor place to discover that the app has other
+    /// libraries in it at all.
+    ///
+    /// It stopped being right at eleven. The screen does not scroll, so the
+    /// last two switches sat below the bottom of the display with no way to
+    /// reach them — the one screen whose whole job is to offer a way out, and
+    /// half the exits were off-screen. A button costs one row and leads
+    /// somewhere that can hold them all.
+    private var openSettingsButton: some View {
+        Button { showingSettings = true } label: {
+            Label("Open Settings", systemImage: "gearshape")
+                .font(.system(size: Device.isPhone ? 17 : 20, weight: .semibold))
+                .padding(.horizontal, 8)
         }
-        .frame(maxWidth: 520)
-        .background(Color(.secondarySystemBackground),
-                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .padding(.top, 8)
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .padding(.top, 4)
     }
 
     private var summaryLine: String {
@@ -1487,6 +1510,34 @@ struct IssueDetail: View {
                         }
                     }
                     LabeledContent("Number", value: issue.number.map(String.init) ?? "—")
+                }
+                // Between the issue and where its file comes from, because
+                // that is the order the two answer in: what this is, then
+                // whose archive it came out of, then the address it is
+                // fetched from.
+                //
+                // Worth a section of its own now there are ten sources. The
+                // shelf shows the source only as a publisher — and for the
+                // BombJack catalogues that column reads "BombJack: Books",
+                // which says the archive but not that the row was seeded
+                // rather than imported.
+                Section("Source") {
+                    LabeledContent("Archive", value: issue.site.display)
+                    // The source's own name for it: a StripZona code, an
+                    // archive.org identifier, a Comic Book Plus `dlid`, or the
+                    // path bombjack keeps the file under. It is what a reader
+                    // would search for on the source's own site, and it is the
+                    // key this app files the issue under.
+                    if let code = issue.code, !code.isEmpty {
+                        LabeledContent("Reference") {
+                            Text(code)
+                                .font(.body.monospaced())
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                    LabeledContent("Arrived by",
+                                   value: issue.site.catalogueResource == nil
+                                        ? "Imported" : "Shipped index")
                 }
                 Section("Mirrors") {
                     ForEach(Array(mirrors.enumerated()), id: \.offset) { index, mirror in

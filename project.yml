@@ -84,6 +84,15 @@ targets:
             stripovi.com:
               NSIncludesSubdomains: true
               NSExceptionAllowsInsecureHTTPLoads: true
+            # BombJack's arcade side, which is where the ten Joystik covers
+            # live. It serves no TLS at all — not a bad certificate, no HTTPS
+            # listener — so this is the only way to show those covers, and the
+            # alternative is ten grey rectangles. Only the covers: every
+            # download in that catalogue is https on commodore.bombjack.org,
+            # which needs no exception and does not get one.
+            bombjack.org:
+              NSIncludesSubdomains: true
+              NSExceptionAllowsInsecureHTTPLoads: true
 
     settings:
       base:

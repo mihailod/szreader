@@ -256,6 +256,28 @@ public final class ComicDocument {
         for depth in 0..<2 {
             let entries = try current.entries()
             if !PageManifest.pages(from: entries).isEmpty { break }
+
+            // An archive holding a PDF rather than pages.
+            //
+            // The loop below unwraps an archive inside an archive, which is
+            // the scanlation convention. This is the other one: a zip whose
+            // single entry is the whole book as a PDF, which is how bombjack
+            // packages most of what it has. Neither `pages` nor
+            // `nestedArchives` sees a PDF, so the document came out with
+            // nothing in it and the reader called the archive corrupt.
+            if PageManifest.nestedArchives(in: entries).isEmpty,
+               let document = PageManifest.nestedDocuments(in: entries).first {
+                try FileManager.default.createDirectory(at: work,
+                                                        withIntermediateDirectories: true)
+                let extracted = work.appendingPathComponent(
+                    "nested-\(depth)-" + (document as NSString).lastPathComponent)
+                if !FileManager.default.fileExists(atPath: extracted.path) {
+                    try current.data(for: document).write(to: extracted, options: .atomic)
+                }
+                try self.init(pdfAt: extracted)
+                return
+            }
+
             guard let nested = PageManifest.nestedArchives(in: entries).first else { break }
 
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)

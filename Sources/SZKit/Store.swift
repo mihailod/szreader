@@ -245,55 +245,59 @@ public final class Store: @unchecked Sendable {
             CREATE VIRTUAL TABLE IF NOT EXISTS issue_fts USING fts5(search_text);
             """)
 
-        // Added after the first release of the schema; ALTER has no
-        // IF NOT EXISTS, so a duplicate-column error is the success case.
-        try? db.execute("ALTER TABLE issue ADD COLUMN context TEXT")
-        try? db.execute("ALTER TABLE issue ADD COLUMN search_text TEXT")
-        try? db.execute("ALTER TABLE issue ADD COLUMN cover_url TEXT")
-        try? db.execute("ALTER TABLE issue ADD COLUMN hero TEXT")
-        try? db.execute("ALTER TABLE issue ADD COLUMN edition TEXT")
-        try? db.execute("ALTER TABLE issue ADD COLUMN publisher TEXT")
-        try? db.execute("ALTER TABLE issue ADD COLUMN read_at REAL")
-        try? db.execute("ALTER TABLE issue ADD COLUMN last_page INTEGER")
-        try? db.execute("ALTER TABLE issue ADD COLUMN download_failed_at REAL")
-        try? db.execute("ALTER TABLE issue ADD COLUMN started_at REAL")
-        // When the catalogue was last asked for a cover this page did not
-        // link. Without it a miss is asked again on every pass.
-        try? db.execute("ALTER TABLE issue ADD COLUMN cover_asked_at REAL")
-        // The far end of a double issue: one magazine printed as "121/122".
-        try? db.execute("ALTER TABLE issue ADD COLUMN number_to INTEGER")
-        // Which archive a row came from. NOT NULL with a default, so every
-        // issue that existed before the column is a StripZona issue — which
-        // is what they all are — without a second statement to backfill them.
-        try? db.execute("""
-            ALTER TABLE issue ADD COLUMN site TEXT NOT NULL DEFAULT 'stripzona'
-            """)
-        // How many scanned pages the archive holds, where the source says so.
-        // Nil for everything imported from the forum, which never states it.
-        try? db.execute("ALTER TABLE issue ADD COLUMN page_count INTEGER")
-        // Where another edition files the same issue: "(SS 305)" on a topic
-        // that numbers it 02. Deliberately *not* part of the natural key —
-        // it describes the issue rather than identifying it, and putting it
-        // in the key would make every row that gains one a new row.
-        try? db.execute("ALTER TABLE issue ADD COLUMN catalogue_code TEXT")
-        try? db.execute("ALTER TABLE issue ADD COLUMN catalogue_number INTEGER")
-        // When a cover URL was found to lead nowhere.
+        // Columns added after the first release of the schema.
         //
-        // A cover that 404s is not a cover, but it is not nothing either: the
-        // row still holds the URL, so every "does this issue need artwork"
-        // question answered "no" and the issue sat there showing an empty
-        // frame for good. The URL is kept rather than cleared — re-importing
-        // the page would only write it back — and this marks it as spent.
-        try? db.execute("ALTER TABLE issue ADD COLUMN cover_dead_at REAL")
+        // `ALTER TABLE` has no `IF NOT EXISTS`, so these used to be fired
+        // blind with `try?` — a duplicate-column error *was* the success case.
+        // That worked, and printed twenty failures into the log on every
+        // single launch: SQLite writes its own error log before the Swift
+        // error is swallowed, so nothing the app catches can quiet them, and
+        // anything real was buried under them.
+        //
+        // Asking which columns exist first costs one read and issues only the
+        // statements that will do something.
+        try? addColumns(to: "issue", [
+            ("context", "TEXT"),
+            ("search_text", "TEXT"),
+            ("cover_url", "TEXT"),
+            ("hero", "TEXT"),
+            ("edition", "TEXT"),
+            ("publisher", "TEXT"),
+            ("read_at", "REAL"),
+            ("last_page", "INTEGER"),
+            ("download_failed_at", "REAL"),
+            ("started_at", "REAL"),
+            // When the catalogue was last asked for a cover this page did not
+            // link. Without it a miss is asked again on every pass.
+            ("cover_asked_at", "REAL"),
+            // The far end of a double issue: one magazine printed as "121/122".
+            ("number_to", "INTEGER"),
+            // Which archive a row came from. NOT NULL with a default, so every
+            // issue that existed before the column is a StripZona issue —
+            // which is what they all are — without a second statement to
+            // backfill them.
+            ("site", "TEXT NOT NULL DEFAULT 'stripzona'"),
+            // How many scanned pages the archive holds, where the source says
+            // so. Nil for everything imported from the forum, which never
+            // states it.
+            ("page_count", "INTEGER"),
+            // Where another edition files the same issue: "(SS 305)" on a
+            // topic that numbers it 02. Deliberately *not* part of the natural
+            // key.
+            ("catalogue_code", "TEXT"),
+            ("catalogue_number", "INTEGER"),
+            // When a cover was found to be gone for good.
+            ("cover_dead_at", "REAL"),
+            // Deliberately independent of the read columns beside it.
+            // `started_at` is sticky and `read_at` is cleared by unmarking;
+            // this is neither — it is simply the last time the issue was on
+            // screen, which is the one question "what was I reading lately"
+            // actually asks. Reopening a finished issue to check one panel
+            // moves this and nothing else.
+            ("opened_at", "REAL"),
+        ])
         // When the reader last opened this issue in the reader.
         //
-        // Deliberately independent of the read columns beside it. `started_at`
-        // is sticky and `read_at` is cleared by unmarking; this is neither —
-        // it is simply the last time the issue was on screen, which is the one
-        // question "what was I reading lately" actually asks. Reopening a
-        // finished issue to check one panel moves this and nothing else.
-        try? db.execute("ALTER TABLE issue ADD COLUMN opened_at REAL")
-
         // Small facts about the library itself rather than about any issue —
         // currently just which build of the shipped catalogue has been
         // applied, so re-seeding an unchanged one costs a single read.
@@ -318,11 +322,46 @@ public final class Store: @unchecked Sendable {
         // column to a unique index only ever admits more rows than the
         // narrower index did, so anything v2 accepted v3 accepts too.
         try db.execute("""
+            -- The filter menus, which are eight DISTINCT scans of this table
+            -- every time a source is switched on or off. Invisible at a few
+            -- hundred rows; at twenty thousand it froze the app, because each
+            -- one reads every row, groups it case-insensitively and sorts.
+            --
+            -- Leading with `site` because every one of those queries filters
+            -- on it first, and the grouped column follows, so the index can
+            -- answer them without touching the table.
+            --
+            -- Down here for the same reason `issue_identity_v3` is: `edition`,
+            -- `publisher` and `hero` arrive by migration above, so an index
+            -- named earlier would work on every library that already exists
+            -- and fail on every new one.
+            CREATE INDEX IF NOT EXISTS issue_site_edition ON issue (site, edition);
+            CREATE INDEX IF NOT EXISTS issue_site_publisher ON issue (site, publisher);
+            CREATE INDEX IF NOT EXISTS issue_site_hero ON issue (site, hero);
+
             CREATE UNIQUE INDEX IF NOT EXISTS issue_identity_v3
               ON issue (site, IFNULL(code,''), IFNULL(number,-1), title_folded,
                         IFNULL(series,''));
             DROP INDEX IF EXISTS issue_identity_v2;
             """)
+
+        // BombJack used to be one source of 18,219 rows and is now seven.
+        //
+        // The old rows name a site that no longer exists, so nothing can
+        // filter, hide or delete them — they would sit in the library for
+        // good, invisible and counted. Removed here so the seven arrive as if
+        // freshly installed, which is also what makes switching them on
+        // meaningful rather than a no-op against rows already present.
+        //
+        // Safe to lose: everything about them came from a shipped catalogue
+        // and comes back the moment a switch is thrown. A downloaded file
+        // survives on disk; its row returns when its category is enabled.
+        try? db.run("DELETE FROM issue_fts WHERE rowid IN "
+                  + "(SELECT id FROM issue WHERE site = 'bombjack')")
+        try? db.run("DELETE FROM mirror WHERE issue_id IN "
+                  + "(SELECT id FROM issue WHERE site = 'bombjack')")
+        try? db.run("DELETE FROM issue WHERE site = 'bombjack'")
+        try? db.run("DELETE FROM meta WHERE key = 'bombjack_catalogue'")
 
         for change in Self.coverQuestions { try? reopenCoverQuestion(change) }
 
@@ -501,6 +540,25 @@ public final class Store: @unchecked Sendable {
         if let series { parts.append(series) }
         if let context { parts.append(context) }
         return Fold.fold(parts.joined(separator: " "))
+    }
+
+    /// The columns a table already has.
+    private func columns(of table: String) throws -> Set<String> {
+        var found: Set<String> = []
+        // The table name is never caller-supplied — the two call sites pass
+        // literals — so interpolating it cannot carry anything from outside.
+        try db.query("PRAGMA table_info(\(table))") { row in
+            if let name = row.string(1) { found.insert(name) }
+        }
+        return found
+    }
+
+    /// Adds the columns a table is missing, and only those.
+    func addColumns(to table: String, _ wanted: [(String, String)]) throws {
+        let existing = try columns(of: table)
+        for (name, definition) in wanted where !existing.contains(name) {
+            try db.execute("ALTER TABLE \(table) ADD COLUMN \(name) \(definition)")
+        }
     }
 
     // MARK: - Ingest

@@ -8,6 +8,65 @@ import XCTest
 /// that no pass ever touches what the reader owns.
 final class RetroSpecSeedTests: XCTestCase {
 
+    // MARK: - Seeding in batches
+
+    /// Rows land as the seed goes, and the stamp only at the end.
+    ///
+    /// This is the property that stops a large catalogue bricking the app. The
+    /// seed used to be one transaction: killed part-way — which iOS will do to
+    /// anything that blocks a launch for twenty seconds — it rolled back the
+    /// rows *and* the stamp, so the next launch started from nothing and was
+    /// killed at the same place, for ever.
+    func testRowsArePresentBeforeTheStampIs() throws {
+        let store = try Store()
+        let file = Self.catalogue(issues: 900)
+
+        var sawRowsMidway = false
+        var sawStampMidway = false
+        try store.seed(file, site: .retrospec, force: true) { done, total in
+            guard done > 0, done < total, !sawRowsMidway else { return }
+            sawRowsMidway = store.issueCount > 0
+            sawStampMidway = (try? store.meta(Store.catalogueStamp(for: .retrospec))) != nil
+        }
+
+        XCTAssertTrue(sawRowsMidway, "nothing was committed until the very end")
+        XCTAssertFalse(sawStampMidway, "the stamp was written before the rows were all in")
+        XCTAssertNotNil(try store.meta(Store.catalogueStamp(for: .retrospec)),
+                        "a finished seed left no stamp")
+    }
+
+    /// And picking it up again finishes the job rather than duplicating it.
+    func testResumingASeedDoesNotDuplicate() throws {
+        let store = try Store()
+        let file = Self.catalogue(issues: 900)
+
+        try store.seed(file, site: .retrospec, force: true)
+        let afterFirst = store.issueCount
+        XCTAssertEqual(afterFirst, 900)
+
+        // What a resumed seed does: the rows are already there, so the second
+        // pass updates them.
+        let again = try store.seed(file, site: .retrospec, force: true)
+        XCTAssertEqual(again.inserted, 0)
+        XCTAssertEqual(again.updated, 900)
+        XCTAssertEqual(store.issueCount, afterFirst)
+    }
+
+    /// A catalogue of `issues` rows, big enough to span several batches.
+    private static func catalogue(issues: Int) -> ShippedCatalog {
+        let run = ShippedCatalog.Series(key: "run", name: "Run", code: "RUN", language: "en")
+        let rows = (0..<issues).map { n in
+            ShippedCatalog.Issue(id: "id-\(n)", series: "run", number: n + 1,
+                                 title: "Issue \(n + 1)", year: 1984, month: nil,
+                                 zip: "https://example.invalid/\(n).zip", cover: nil,
+                                 thumb: nil, bytes: nil, pages: nil, dead: nil)
+        }
+        return ShippedCatalog(version: ShippedCatalog.currentVersion,
+                              generated: "2026-01-01", base: "",
+                              series: [run], issues: rows)
+    }
+
+
     private func bundledCatalogue() throws -> ShippedCatalog {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "retrospec-catalog",
                                                   withExtension: "json"))

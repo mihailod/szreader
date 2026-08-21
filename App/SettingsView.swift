@@ -170,16 +170,7 @@ struct SettingsView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
 
-            VStack(spacing: 0) {
-                ForEach(IssueSite.allCases, id: \.self) { site in
-                    SourceToggle(site: site, model: model)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                    if site != IssueSite.allCases.last {
-                        Divider().padding(.leading, 16)
-                    }
-                }
-            }
+            SourceList(model: model)
             .background(Color(.secondarySystemBackground),
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 

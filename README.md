@@ -21,7 +21,22 @@
 
 <img src="screenshot.png" alt="Screenshot" width="350">
 
-## New in 1.1 (work in progress)
+## New in 1.2 (work in progress)
+
+* **Added content sources:**
+
+  * **[BombJack](https://commodore.bombjack.org)** — DLH's Archive,
+of scanned vintage computer magazines, books and manuals covering
+Commodore 8-bit, Amiga, Atari, Apple, MSX, Timex-Sinclair, Oric, Osborne and a dozen more
+machines in seven switchable sub-sources: Magazines (Commodore, Amiga,
+Other), Books, Hardware Manuals, Video Games-related,
+Other (newsletters, applications, advertising).
+
+* **Bug fixes and various improvements including performance optimizations and  Source panel enhancements.
+
+---
+
+## New in 1.1 (Apple approval in progress)
 
 * **Added content sources:**
 
@@ -39,7 +54,6 @@ and Import metadata onto the shelf. To download you need a (free) ComicBook+ acc
 
   * **All sources can now be switched ON / OFF in Settings.**
 Switching a source hides it everywhere but never deletes anything.
-
 
 * **Browser fencing** All three browser views (StripZona, Archive.org, ComicBook+) are fenced to
 their own site. The address line is read-only and links leading outside those domains are not

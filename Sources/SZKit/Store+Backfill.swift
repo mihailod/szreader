@@ -432,6 +432,34 @@ extension Store {
                    [.int(Int64(issueID))])
     }
 
+    /// Downloaded issues with nothing to show for artwork.
+    ///
+    /// A cover is captured from a comic's own first page when its download
+    /// finishes — but only if it had no cover *at that moment*. An issue whose
+    /// remote artwork dies later than that falls through the gap: the file is
+    /// on the device, the pages are right there, and the shelf shows a grey
+    /// rectangle for ever because nothing ever asks again.
+    ///
+    /// That is what happened to Joystik, whose covers are hotlinked from a
+    /// host the shelf could not reach, and it will happen to any source whose
+    /// images move or go away.
+    ///
+    /// Limited per pass. Each one opens an archive and renders a page, so this
+    /// is deliberately a trickle rather than a job that runs over a library of
+    /// twenty thousand at launch.
+    public func downloadedIssuesLackingCover(limit: Int = 12) throws -> [Int] {
+        var found: [Int] = []
+        try db.query("""
+            SELECT i.id FROM issue i
+            JOIN download d ON d.issue_id = i.id
+            WHERE (i.cover_url IS NULL OR i.cover_dead_at IS NOT NULL)
+            ORDER BY i.id DESC LIMIT ?
+            """, [.int(Int64(limit))]) { row in
+            if let id = row.int(0) { found.append(id) }
+        }
+        return found
+    }
+
     /// Issues that could still gain a cover from the catalogue.
     public var coverlessIssueCount: Int {
         (try? db.scalarInt("""

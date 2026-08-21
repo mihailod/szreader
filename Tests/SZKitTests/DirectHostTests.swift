@@ -4,6 +4,28 @@ import XCTest
 /// Downloading a plain file off a web server.
 final class DirectHostTests: XCTestCase {
 
+
+    /// Every host a shipped catalogue points at must be claimed by something,
+    /// or the source arrives on the shelf and refuses to download a single
+    /// issue. That is exactly how the bombjack catalogue shipped the first
+    /// time: 18,973 rows, every one of them `noHostFor`.
+    func testEveryShippedCatalogueHostIsClaimed() throws {
+        let registry = HostRegistry()
+        for resource in ["retrospec-catalog", "archive-catalog", "bombjack-catalog"] {
+            guard let url = Bundle.module.url(forResource: resource, withExtension: "json")
+            else { continue }
+            let file = try ShippedCatalog.decode(try Data(contentsOf: url))
+            var unclaimed: Set<String> = []
+            for issue in file.issues {
+                guard let address = URL(string: issue.zipURL(base: file.base)),
+                      let host = address.host else { continue }
+                if registry.host(for: address) == nil { unclaimed.insert(host) }
+            }
+            XCTAssertTrue(unclaimed.isEmpty,
+                          "\(resource) points at hosts nothing can fetch: \(unclaimed.sorted())")
+        }
+    }
+
     private let host = DirectHost()
 
     // MARK: - What it claims
