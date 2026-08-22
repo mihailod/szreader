@@ -1,7 +1,8 @@
+- batcave loading not working
+
+
+
 additional sources:
-
-- https://batcave.biz/
-
 
 - Image comics first issues
 https://imagecomics.com/comics/read-first-issues

@@ -19,6 +19,11 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     case retrospec
     case archive
     case comicbookplus
+    // Like StripZona and Comic Book Plus, a source with no shipped index:
+    // the site publishes tens of thousands of issues and no catalogue of
+    // them, so it arrives a page at a time through the browser. Unlike
+    // either, one page is one issue rather than a run — see `BatCavePage`.
+    case batcave
     // BombJack ships as seven catalogues rather than one.
     //
     // As a single source it was 18,219 rows: fifteen seconds to seed, which
@@ -43,6 +48,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .retrospec:     return "RetroSpec"
         case .archive:       return "Archive.org"
         case .comicbookplus: return "ComicBook+"
+        case .batcave:       return "BatCave"
         default:
             // "BombJack: Books" rather than "Books". This string is written
             // into the publisher column and the search index of every seeded
@@ -83,7 +89,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     /// time, and `Store.importComicBookPlus` is what reads one.
     public var catalogueResource: String? {
         switch self {
-        case .stripzona, .comicbookplus: return nil
+        case .stripzona, .comicbookplus, .batcave: return nil
         case .retrospec:                 return "retrospec-catalog"
         case .archive:                   return "archive-catalog"
         default:                         return bombjackCategory?.resource
@@ -104,7 +110,8 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .bombjackHardware:           return .hardware
         case .bombjackGames:              return .games
         case .bombjackOther:              return .other
-        case .stripzona, .retrospec, .archive, .comicbookplus: return nil
+        case .stripzona, .retrospec, .archive, .comicbookplus, .batcave:
+            return nil
         }
     }
 

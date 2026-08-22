@@ -200,14 +200,18 @@ private struct Acknowledgements: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // One block per source, from `SourceCopy` — the same file
-                // the switches read, so a description cannot say one thing
-                // here and another there. Ordered as the switches are.
-                ForEach(IssueSite.allCases, id: \.self) { site in
-                    let copy = SourceCopy.of(site)
+                // One block per credit, from `SourceCopy` — the same file the
+                // switches read, so a description cannot say one thing here
+                // and another there. Ordered as the switches are.
+                //
+                // Per credit rather than per source: the seven BombJack
+                // catalogues share one archive and one paragraph, and this
+                // screen used to print it seven times. `SourceCopy.credits`
+                // is where that is decided.
+                ForEach(SourceCopy.credits) { credit in
                     Group {
-                        Text(copy.creditHeading).font(.headline)
-                        Text(copy.credit)
+                        Text(credit.heading).font(.headline)
+                        Text(credit.body)
                     }
                 }
                 Group {

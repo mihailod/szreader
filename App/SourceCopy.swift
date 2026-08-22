@@ -41,8 +41,43 @@ struct SourceCopy {
         case .retrospec:     return retrospec
         case .archive:       return archive
         case .comicbookplus: return comicBookPlus
+        case .batcave:       return batcave
         default:             return bombJack(site)
         }
+    }
+
+    /// One acknowledgement, as the screen shows it.
+    struct Credit: Identifiable {
+        let heading: String
+        let body: String
+        /// Both halves, so two entries count as one only when they are
+        /// genuinely the same block. Keying on the heading alone would hide a
+        /// real difference the day two sources share a name.
+        var id: String { heading + "\u{0}" + body }
+    }
+
+    /// The acknowledgements, each said once, in the order the switches are.
+    ///
+    /// Iterating the sources directly printed the BombJack paragraph seven
+    /// times. The seven catalogues are one archive split for seeding — they
+    /// differ in what they hold and in nothing else, so `bombJack(_:)` returns
+    /// the same heading and the same credit for all of them, and the
+    /// Acknowledgements screen faithfully showed all seven.
+    ///
+    /// Deduplicated here rather than in the view because this is the file that
+    /// owns the copy: the view should not have to know which sources happen to
+    /// share a credit, and the answer changes whenever one is added.
+    static var credits: [Credit] {
+        var seen: Set<String> = []
+        var out: [Credit] = []
+        for site in IssueSite.allCases {
+            let copy = of(site)
+            let credit = Credit(heading: copy.creditHeading, body: copy.credit)
+            // First occurrence wins, which puts the shared block where the
+            // first source carrying it sits.
+            if seen.insert(credit.id).inserted { out.append(credit) }
+        }
+        return out
     }
 
     // MARK: - The sources
@@ -128,6 +163,33 @@ struct SourceCopy {
               + "reader, not affiliated with or endorsed by "
               + "\(IssueSite.comicbookplus.settingsName), and it hosts "
               + "none of their scans.")
+
+    /// BatCave.
+    ///
+    /// "comics and magazines" rather than "comics" alone throughout, which is
+    /// the same exception the Comic Book Plus entry above takes and the only
+    /// one the house rule allows: `UIWordingTests` fails any literal in this
+    /// layer that says "comic" without naming magazines beside it, and the
+    /// site does carry both — Zagor and its stablemates are magazine-format
+    /// serials, not comic books.
+    ///
+    /// No count and no shelf claim, because switching this on adds nothing:
+    /// there is no index to seed. What it adds is an entry in the Import menu,
+    /// which is what the second sentence says.
+    private static let batcave = SourceCopy(
+        switchTitle: IssueSite.batcave.settingsName,
+        detail: "A large open repository of comics and magazines. "
+              + "Browse the site and Import brings one issue onto the shelf.",
+        shelfPhrase: "a large open repository of comics and magazines",
+        creditHeading: "BatCave",
+        // The same disclaimer the other four carry. It is the sentence doing
+        // the protective work, so it is not abbreviated here.
+        credit: "BatCave is a public repository of various comics and magazines "
+              + "at \(BatCave.host). The app ships no index of it: you browse "
+              + "the site, Import records one issue's details, and it is "
+              + "fetched from there only when you ask for it. This is an "
+              + "independent reader, not affiliated with or endorsed by "
+              + "BatCave, and it hosts none of its content.")
 
     /// The seven BombJack catalogues, described from their category.
     ///

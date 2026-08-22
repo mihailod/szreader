@@ -143,6 +143,7 @@ struct LibraryView: View {
             case .stripzona:     ImportView { html in try model.importPage(html: html) }
             case .archive:       ArchiveBrowserView(model: model)
             case .comicbookplus: ComicBookPlusBrowserView(model: model)
+            case .batcave:       BatCaveBrowserView(model: model)
             }
         }
         .sheet(isPresented: $showingSettings) { SettingsView(model: model) }
@@ -451,13 +452,14 @@ struct LibraryView: View {
     /// StripZona leads when it is here, because it is what the button has
     /// meant since the app had one button.
     private var importSources: [IssueSite] {
-        [.stripzona, .archive, .comicbookplus].filter(model.isEnabled)
+        [.stripzona, .archive, .comicbookplus, .batcave].filter(model.isEnabled)
     }
 
     private static func importIcon(_ site: IssueSite) -> String {
         switch site {
         case .archive:       return "building.columns"
         case .comicbookplus: return "books.vertical"
+        case .batcave:       return "globe"
         case .stripzona:     return "text.bubble"
         case .retrospec:     return "tray.full"
         default:             return "desktopcomputer"
@@ -511,7 +513,7 @@ struct LibraryView: View {
     /// Identifiable so one `fullScreenCover(item:)` can present either — see
     /// the note on that modifier for why there is only one.
     enum BrowseTarget: String, Identifiable {
-        case stripzona, archive, comicbookplus
+        case stripzona, archive, comicbookplus, batcave
         var id: String { rawValue }
 
         /// The browser a source opens, for the menu that is built by
@@ -525,6 +527,7 @@ struct LibraryView: View {
             switch site {
             case .archive:       self = .archive
             case .comicbookplus: self = .comicbookplus
+            case .batcave:       self = .batcave
             // RetroSpec and the BombJack catalogues have no browser and
             // never reach here — see `importSources`.
             default: self = .stripzona

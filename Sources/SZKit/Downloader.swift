@@ -149,7 +149,14 @@ public enum RetryAfter {
     /// wait. A 503 counts only when it carries one: a bare 503 is a server
     /// having a moment, which is retried, while a 503 that names a wait is the
     /// same server asking not to be.
-    static func refusal(status: Int, header: String?, host: String) -> DownloadError? {
+    ///
+    /// Public because one source fetches its own bytes from the app layer:
+    /// BatCave has no archive to hand a file host, so its pages are requested
+    /// outside `URLSessionDownloader` entirely and would otherwise have no way
+    /// to read a refusal — or would grow a second, subtly different copy of
+    /// this, which is the failure this app has already had once with the
+    /// two spellings of a source name.
+    public static func refusal(status: Int, header: String?, host: String) -> DownloadError? {
         let wait = seconds(header)
         if status == 429 { return .rateLimited(host: host, retryAfter: wait) }
         if status == 503, wait != nil { return .rateLimited(host: host, retryAfter: wait) }

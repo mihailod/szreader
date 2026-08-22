@@ -49,6 +49,17 @@ public struct HostFence: Sendable, Equatable {
     public static let comicBookPlus =
         HostFence(hosts: [ComicBookPlus.host], name: IssueSite.comicbookplus.display)
 
+    /// BatCave, and whatever subdomain it serves images from.
+    ///
+    /// One entry rather than several because nothing here is known to sit
+    /// elsewhere and `admits` covers subdomains from the bare name anyway. The
+    /// fence matters more on this site than on the others: its pages carry
+    /// advertising that opens elsewhere, and an embedded view that followed it
+    /// would be a general-purpose browser pointed at whatever an ad network
+    /// sold this week.
+    public static let batcave =
+        HostFence(hosts: [BatCave.host], name: IssueSite.batcave.display)
+
     /// Whether this browser may follow a link.
     ///
     /// Three separate refusals, and each of them has to be here:

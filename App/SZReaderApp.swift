@@ -709,6 +709,28 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - BatCave
+
+    /// Reads the series page the reader is looking at onto the shelf.
+    ///
+    /// The same shape as Comic Book Plus above: one page is one run, and every
+    /// chapter on it is a row. Nothing is fetched — the issues arrive greyed
+    /// out, like every other import.
+    func importBatCave(html: String) throws -> BatCaveReport {
+        guard let store else { throw ImportFailure.notReady }
+        do {
+            let report = try store.importBatCave(page: html)
+            refresh(note: report.isEmpty
+                    ? "imported nothing new"
+                    : "imported \(report.issues) issue\(report.issues == 1 ? "" : "s")")
+            search(query)
+            return report
+        } catch {
+            status = "import failed: \(Library.reason(error))"
+            throw error
+        }
+    }
+
     // MARK: - Archive.org
 
     /// Asks archive.org what an item holds, while the reader browses.
@@ -1107,6 +1129,13 @@ final class AppModel: ObservableObject {
 
     func download(_ issue: StoredIssue, asSet: Bool = false) {
         guard let library, !downloading.contains(issue.id) else { return }
+        // BatCave has no archive behind it: the site serves a reader, and the
+        // pages are fetched one at a time by a web view. Nothing in the mirror
+        // and host machinery below applies, so it takes its own route.
+        if issue.site == .batcave {
+            downloadBatCave(issue, library: library)
+            return
+        }
         let issueID = issue.id
         let name = issue.title ?? issue.code ?? "issue"
         downloading.insert(issueID)
@@ -1216,6 +1245,109 @@ final class AppModel: ObservableObject {
                 self.failure = Failure(
                     title: "Download failed",
                     message: "“\(name)” could not be downloaded.\n\n"
+                           + Library.reason(error))
+            }
+        }
+    }
+
+    /// Fetches a BatCave issue page by page.
+    ///
+    /// The other sources download one file and unpack it. This one has no file
+    /// to download: the site serves a reader, so the pages are fetched
+    /// individually — by a web view, because the site refuses anything that is
+    /// not a browser — and written straight into the layout the reader already
+    /// opens. There is nothing to unpack afterwards, which is why the bar runs
+    /// the whole way here rather than stopping at `transferShare`.
+    ///
+    /// The bar is also honest for once: the page count is known before the
+    /// first request, so the fraction is pages done over pages there are,
+    /// rather than bytes against a length the server may not declare.
+    private func downloadBatCave(_ issue: StoredIssue, library: Library) {
+        guard let store else { return }
+        let issueID = issue.id
+        let name = issue.title ?? issue.code ?? "issue"
+
+        guard let mirror = (try? store.liveMirrors(forIssue: issueID))?.first else {
+            failure = Failure(title: "Download failed",
+                              message: "\u{201C}\(name)\u{201D} has no reader page recorded. "
+                                     + "Import the series again.")
+            return
+        }
+
+        downloading.insert(issueID)
+        progress[issueID] = 0
+        status = "fetching \u{201C}\(name)\u{201D}\u{2026}"
+
+        Task { @MainActor [weak self] in
+            // Held for the length of the fetch and released with it: a web
+            // view kept alive past its download is a web view still holding
+            // the site's page.
+            let fetcher = BatCavePageFetcher()
+            do {
+                let result = try await fetcher.fetch(
+                    readerURL: mirror.url,
+                    into: library.directory(forIssue: issueID)) { done, total in
+                        guard let self, total > 0 else { return }
+                        self.progress[issueID] = Double(done) / Double(total)
+                        self.status = "fetching \u{201C}\(name)\u{201D} \u{2014} page \(done) of \(total)"
+                    }
+
+                guard let self else { return }
+                try store.recordDownload(issueID: issueID, mirrorURL: mirror.url,
+                                         path: result.file, bytes: result.bytes)
+                self.downloading.remove(issueID)
+                self.progress[issueID] = nil
+                try? store.setDownloadFailed(false, issueID: issueID)
+
+                // The series poster stands in for every issue of a run until
+                // this replaces it with the issue's own first page.
+                let captured = try? await Task.detached(priority: .utility) {
+                    try library.captureCover(issueID: issueID)
+                }.value
+                if let captured { try? store.setCoverURL(captured, issueID: issueID) }
+
+                let mb = Double(result.bytes) / 1_048_576
+                self.refresh(note: String(format: "fetched %d pages, %.1f MB",
+                                          result.pages, mb))
+            } catch {
+                guard let self else { return }
+                self.downloading.remove(issueID)
+                self.progress[issueID] = nil
+
+                // A cancelled fetch is not a failure: the pages already on
+                // disk are kept and the next attempt resumes from them, so
+                // nothing is marked and nothing is said.
+                if error is CancellationError {
+                    self.search(self.query)
+                    self.status = "stopped"
+                    return
+                }
+
+                // The site asking for a pause is not a download that failed.
+                // Nothing is wrong with the issue, so nothing is marked on the
+                // shelf — a mark here would send the reader back to retry the
+                // one thing that must not be retried. The pages already
+                // fetched stay on disk, so trying again after the wait costs
+                // only what is left.
+                if let refusal = error as? DownloadError, refusal.isRateLimited {
+                    self.search(self.query)
+                    self.status = "asked to wait"
+                    self.failure = Failure(
+                        title: "Too many requests",
+                        message: "\u{201C}\(name)\u{201D} was not finished.\n\n"
+                               + refusal.description
+                               + "\n\nThe pages already fetched are kept — "
+                               + "starting again after that will carry on from "
+                               + "where it stopped.")
+                    return
+                }
+
+                try? store.setDownloadFailed(true, issueID: issueID)
+                self.search(self.query)
+                self.status = "download failed"
+                self.failure = Failure(
+                    title: "Download failed",
+                    message: "\u{201C}\(name)\u{201D} could not be fetched.\n\n"
                            + Library.reason(error))
             }
         }

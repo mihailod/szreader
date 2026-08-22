@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0A2205E1F7B517DCB8FF7C8C /* BatCavePageFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A786BC66B42D273DE08C29E3 /* BatCavePageFetcher.swift */; };
 		0AAA7ACFD7935BADE0E1AC10 /* ImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 640135922A53F0FDE2BFEDE9 /* ImportView.swift */; };
 		0C1E38893CAB2B217CA9D632 /* CoverViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6ECA8838FF66470193A9021 /* CoverViewer.swift */; };
 		13A8C6AB3E55AC67FEC8D747 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0919F3692489FEBE9A67D8D /* LibraryView.swift */; };
@@ -17,6 +18,7 @@
 		479F9C38B6D874A03A3CF29F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3F41C3389BD9E0C5FE60156A /* Assets.xcassets */; };
 		4DA39CCBA66CCAC30888EB87 /* BrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DA4EDA742DCFD028234085B /* BrowserView.swift */; };
 		670053E4B9842CA70D36D12D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 897256247FA21EB8FD55169C /* PrivacyInfo.xcprivacy */; };
+		83F3E5819531738DA88C0C86 /* BatCaveBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A81AFE209214A6FAAC8BAC60 /* BatCaveBrowserView.swift */; };
 		8BAE8FA4A68B422E6C8F6C61 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29AF759576024F9476C06792 /* SettingsView.swift */; };
 		8D11AF31CC02487A4E530E0C /* Device.swift in Sources */ = {isa = PBXBuildFile; fileRef = F917A2E24F939F7AEBBCAC66 /* Device.swift */; };
 		8EA7D153B64D7FC686F85136 /* ComicBookPlusBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59EC0AC1675DCD565296E981 /* ComicBookPlusBrowserView.swift */; };
@@ -48,6 +50,8 @@
 		8BB52132DFB9CAD97122F6DD /* SZReader.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SZReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		98B96100C7CD082FD8703855 /* AppInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfo.swift; sourceTree = "<group>"; };
 		A1E7EFF3E8C993DA1BBBF76B /* SiteCookies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteCookies.swift; sourceTree = "<group>"; };
+		A786BC66B42D273DE08C29E3 /* BatCavePageFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatCavePageFetcher.swift; sourceTree = "<group>"; };
+		A81AFE209214A6FAAC8BAC60 /* BatCaveBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatCaveBrowserView.swift; sourceTree = "<group>"; };
 		B0919F3692489FEBE9A67D8D /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SZReaderApp.swift; sourceTree = "<group>"; };
 		CCF6729017ACD258D0298D8F /* szreader */ = {isa = PBXFileReference; lastKnownFileType = folder; name = szreader; path = .; sourceTree = SOURCE_ROOT; };
@@ -82,6 +86,8 @@
 				98B96100C7CD082FD8703855 /* AppInfo.swift */,
 				1ECEA8FA212E036CC702DFBD /* ArchiveBrowserView.swift */,
 				3F41C3389BD9E0C5FE60156A /* Assets.xcassets */,
+				A81AFE209214A6FAAC8BAC60 /* BatCaveBrowserView.swift */,
+				A786BC66B42D273DE08C29E3 /* BatCavePageFetcher.swift */,
 				8483FF3778C83E8A0ED613BC /* BrowserScreen.swift */,
 				0DA4EDA742DCFD028234085B /* BrowserView.swift */,
 				59EC0AC1675DCD565296E981 /* ComicBookPlusBrowserView.swift */,
@@ -198,6 +204,8 @@
 			files = (
 				C60D7220DE77EEC3D2B69C65 /* AppInfo.swift in Sources */,
 				D8B69D7A078A37E310965586 /* ArchiveBrowserView.swift in Sources */,
+				83F3E5819531738DA88C0C86 /* BatCaveBrowserView.swift in Sources */,
+				0A2205E1F7B517DCB8FF7C8C /* BatCavePageFetcher.swift in Sources */,
 				E394C166FE3B68BDB594232D /* BrowserScreen.swift in Sources */,
 				4DA39CCBA66CCAC30888EB87 /* BrowserView.swift in Sources */,
 				8EA7D153B64D7FC686F85136 /* ComicBookPlusBrowserView.swift in Sources */,

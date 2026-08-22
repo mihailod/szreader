@@ -178,6 +178,7 @@ public extension Store {
 /// Why an import could not read the page it was handed.
 public enum ImportError: Error, CustomStringConvertible {
     case notALeafPage
+    case notASeriesPage
 
     public var description: String {
         switch self {
@@ -186,6 +187,11 @@ public enum ImportError: Error, CustomStringConvertible {
             // theirs: they are on a search result, a category, or a single
             // book, and the page that works is the one listing a series.
             return "This page does not list a series. Open a title, then Import."
+        case .notASeriesPage:
+            // Same shape, different site, and said in terms of what the reader
+            // can see: they are on the front page, a category or a search
+            // result, and the page that works is a title's own.
+            return "This page lists no issues. Open a title, then Import."
         }
     }
 }
