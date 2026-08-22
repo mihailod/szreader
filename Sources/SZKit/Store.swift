@@ -62,6 +62,16 @@ public struct StoredIssue: Equatable, Sendable {
     /// is the most recently opened thing on the shelf.
     public let openedAt: Date?
 
+    /// Whether this row was written by the seed from a catalogue shipped in
+    /// the app bundle.
+    ///
+    /// A fact about the row, not about its site: the shipped archive.org
+    /// index and an item the reader browsed to on archive.org are both
+    /// `.archive`, and only the first of the two was put on the shelf by the
+    /// app itself. The seed stamps `source` when it writes a row and this
+    /// reads that stamp back.
+    public let isCatalogued: Bool
+
     /// Spelled out rather than left to the compiler's memberwise one, so
     /// `site` can carry a default. Every issue in existence was StripZona's
     /// before this column, and the tests that build a row to check sorting or
@@ -76,7 +86,7 @@ public struct StoredIssue: Equatable, Sendable {
                 downloadFailed: Bool, style: LabelStyle, mirrorCount: Int,
                 coverURL: String?, isDownloaded: Bool,
                 site: IssueSite = .default, pageCount: Int? = nil,
-                openedAt: Date? = nil) {
+                openedAt: Date? = nil, isCatalogued: Bool = false) {
         self.id = id; self.code = code; self.number = number; self.title = title
         self.series = series; self.hero = hero; self.edition = edition
         self.publisher = publisher; self.isRead = isRead; self.lastPage = lastPage
@@ -85,6 +95,7 @@ public struct StoredIssue: Equatable, Sendable {
         self.mirrorCount = mirrorCount; self.coverURL = coverURL
         self.isDownloaded = isDownloaded; self.site = site
         self.pageCount = pageCount; self.openedAt = openedAt
+        self.isCatalogued = isCatalogued
     }
 
     /// Short form of the edition for the shelf: initials when it is several
@@ -841,7 +852,7 @@ public final class Store: @unchecked Sendable {
                    i.download_failed_at IS NOT NULL,
                    i.started_at IS NOT NULL,
                    i.number_to,
-                   i.site, i.page_count, i.opened_at
+                   i.site, i.page_count, i.opened_at, i.source
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
@@ -850,6 +861,7 @@ public final class Store: @unchecked Sendable {
             \(limit == nil ? "" : "LIMIT ?")
             """, table: "i"), [.text(match)] + terms.args
                   + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
+            let site = IssueSite(rawValue: row.string(17) ?? "") ?? .default
             out.append(StoredIssue(
                 id: row.int(0) ?? 0,
                 code: row.string(1),
@@ -867,9 +879,10 @@ public final class Store: @unchecked Sendable {
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
                 isDownloaded: (row.int(8) ?? 0) == 1,
-                site: IssueSite(rawValue: row.string(17) ?? "") ?? .default,
+                site: site,
                 pageCount: row.int(18),
-                openedAt: row.double(19).map(Date.init(timeIntervalSince1970:))))
+                openedAt: row.double(19).map(Date.init(timeIntervalSince1970:)),
+                isCatalogued: row.string(20) == Self.catalogueSource(for: site)))
         }
         return out
     }
@@ -1135,9 +1148,10 @@ public final class Store: @unchecked Sendable {
                    i.download_failed_at IS NOT NULL,
                    i.started_at IS NOT NULL,
                    i.number_to,
-                   i.site, i.page_count, i.opened_at
+                   i.site, i.page_count, i.opened_at, i.source
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
             """, table: "i"), terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
+            let site = IssueSite(rawValue: row.string(17) ?? "") ?? .default
             out.append(StoredIssue(
                 id: row.int(0) ?? 0, code: row.string(1), number: row.int(2),
                 title: row.string(3), series: row.string(4),
@@ -1152,9 +1166,10 @@ public final class Store: @unchecked Sendable {
                 mirrorCount: row.int(6) ?? 0,
                 coverURL: row.string(7),
                 isDownloaded: (row.int(8) ?? 0) == 1,
-                site: IssueSite(rawValue: row.string(17) ?? "") ?? .default,
+                site: site,
                 pageCount: row.int(18),
-                openedAt: row.double(19).map(Date.init(timeIntervalSince1970:))))
+                openedAt: row.double(19).map(Date.init(timeIntervalSince1970:)),
+                isCatalogued: row.string(20) == Self.catalogueSource(for: site)))
         }
         return out
     }

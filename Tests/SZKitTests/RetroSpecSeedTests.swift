@@ -92,6 +92,18 @@ final class RetroSpecSeedTests: XCTestCase {
         XCTAssertTrue(issues.allSatisfy { $0.site == .retrospec })
     }
 
+    /// What Delete reads before it refuses.
+    ///
+    /// Only the seed writes this stamp, so a row carrying it is one the app
+    /// put on the shelf itself — and one nothing can put back, since the
+    /// stamp on the library makes a second seed skip the whole file.
+    func testSeededRowsSayTheyCameFromAShippedCatalogue() throws {
+        let (store, _) = try seededStore()
+        let issues = try store.recent(limit: nil)
+        XCTAssertFalse(issues.isEmpty)
+        XCTAssertTrue(issues.allSatisfy(\.isCatalogued))
+    }
+
     func testAnIssueCarriesWhatTheShelfNeeds() throws {
         let (store, _) = try seededStore()
         let issues = try store.recent(limit: nil)

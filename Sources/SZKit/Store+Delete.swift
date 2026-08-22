@@ -46,7 +46,54 @@ extension Store {
         return files
     }
 
-    /// Empties the library. Returns every downloaded file to remove.
+    /// How many issues the seed put on the shelf.
+    ///
+    /// The complement of what a bulk delete may take: everything else on the
+    /// shelf arrived by an Import that can be run again.
+    public var shippedCount: Int {
+        let stamps = IssueSite.allCases.map { Self.catalogueSource(for: $0) }
+        let holes = stamps.map { _ in "?" }.joined(separator: ", ")
+        return (try? db.scalarInt("SELECT COUNT(*) FROM issue WHERE source IN (\(holes))",
+                                  stamps.map { SQLValue.text($0) })) ?? 0
+    }
+
+    /// Empties the library of everything an Import could bring back, leaving
+    /// the rows the seed wrote from a catalogue shipped in the app.
+    ///
+    /// Skipped rather than refused: those rows cannot be got back — the stamp
+    /// the seed leaves on the library makes a second pass skip the whole file
+    /// — so "delete everything" can only honestly mean everything that an
+    /// Import returns. Their downloads stay with them; Remove All is what
+    /// reclaims that space.
+    @discardableResult
+    public func deleteImported() throws -> [URL] {
+        let stamps = IssueSite.allCases.map { Self.catalogueSource(for: $0) }
+        let holes = stamps.map { _ in "?" }.joined(separator: ", ")
+        let args = stamps.map { SQLValue.text($0) }
+        // Every statement below reads this against the issue table, so the
+        // issues themselves must go last — after it, it names nothing.
+        let doomed = "SELECT id FROM issue WHERE IFNULL(source, '') NOT IN (\(holes))"
+
+        var files: [URL] = []
+        try db.query("SELECT path FROM download WHERE issue_id IN (\(doomed))", args) { row in
+            if let p = row.string(0) { files.append(resolvedURL(p)) }
+        }
+        try db.transaction {
+            try db.run("DELETE FROM issue_fts WHERE rowid IN (\(doomed))", args)
+            try db.run("DELETE FROM download WHERE issue_id IN (\(doomed))", args)
+            // Cascade would take these with the issues, but only while the
+            // issues are still there to cascade from.
+            try db.run("DELETE FROM mirror WHERE issue_id IN (\(doomed))", args)
+            try db.run("DELETE FROM issue WHERE id IN (\(doomed))", args)
+        }
+        return files
+    }
+
+    /// Empties the library, shipped rows and all.
+    ///
+    /// Not what the app's Delete Library does — that is `deleteImported`, which
+    /// leaves what no Import could bring back. This is the unconditional
+    /// primitive underneath it.
     @discardableResult
     public func deleteAll() throws -> [URL] {
         var files: [URL] = []

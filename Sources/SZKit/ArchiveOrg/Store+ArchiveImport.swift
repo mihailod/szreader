@@ -61,7 +61,7 @@ public extension Store {
     ///
     /// Matched rather than reconstructed at the call site so the two cannot
     /// drift: `Store+Catalogue` writes exactly this string.
-    static var catalogueSource: String { "\(IssueSite.archive.rawValue) catalogue" }
+    static var catalogueSource: String { catalogueSource(for: .archive) }
 
     /// Adds an archive.org item to the library, pointing at one of its files.
     ///

@@ -80,6 +80,52 @@ final class DeleteTests: XCTestCase {
         XCTAssertTrue(try store.recent().isEmpty)
     }
 
+    /// The rule the bulk deletes run on: what came with the app is passed
+    /// over, because no Import can bring it back.
+    func testDeleteImportedLeavesWhatTheAppShipped() throws {
+        let store = try populated()
+        try store.seed(Self.catalogue, site: .retrospec)
+        XCTAssertEqual(store.issueCount, 5)
+        XCTAssertEqual(store.shippedCount, 2)
+
+        let shipped = try XCTUnwrap(try store.search("shipped", sites: [.retrospec]).first)
+        let mine = try XCTUnwrap(try store.search("klark").first)
+        let kept = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString).cbz")
+        let doomed = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString).cbz")
+        try store.recordDownload(issueID: shipped.id, mirrorURL: "http://x/kept",
+                                 path: kept, bytes: 1)
+        try store.recordDownload(issueID: mine.id, mirrorURL: "http://x/doomed",
+                                 path: doomed, bytes: 1)
+
+        let files = try store.deleteImported()
+
+        XCTAssertEqual(store.issueCount, 2, "the shipped issues went with the rest")
+        XCTAssertEqual(store.mirrorCount, 2, "their mirrors went with them")
+        XCTAssertEqual(files.map(\.lastPathComponent), [doomed.lastPathComponent],
+                       "the download of a shipped issue was reported as orphaned")
+        XCTAssertEqual(store.downloadedCount, 1, "a shipped issue lost its download")
+        XCTAssertTrue(try store.search("klark").isEmpty, "an imported issue survived")
+        XCTAssertFalse(try store.search("shipped").isEmpty,
+                       "a shipped issue stopped being searchable")
+    }
+
+    /// Two issues under one run, standing in for a catalogue the app ships.
+    private static let catalogue: ShippedCatalog = {
+        let run = ShippedCatalog.Series(key: "run", name: "Shipped Run",
+                                        code: "SR", language: "en")
+        let issues = (0..<2).map { n in
+            ShippedCatalog.Issue(id: "ship-\(n)", series: "run", number: n + 1,
+                                 title: "Shipped \(n + 1)", year: 1984, month: nil,
+                                 zip: "https://example.invalid/\(n).zip", cover: nil,
+                                 thumb: nil, bytes: nil, pages: nil, dead: nil)
+        }
+        return ShippedCatalog(version: ShippedCatalog.currentVersion,
+                              generated: "2026-01-01", base: "",
+                              series: [run], issues: issues)
+    }()
+
     /// Deleting must not poison the store: re-importing has to work after.
     func testLibraryIsUsableAfterDeleteAll() throws {
         let store = try populated()

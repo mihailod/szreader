@@ -1,8 +1,3 @@
-- we should not allow delete of content shipped with index -- no way to recover it ever? maybe we need recover in settings?
-
-
-------------------------
-
 additional sources:
 
 - https://batcave.biz/

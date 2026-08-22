@@ -59,6 +59,12 @@ final class AppModel: ObservableObject {
     }
     @Published var issueCount = 0
     @Published var downloadedCount = 0
+    /// How many of those the app seeded from a catalogue it ships.
+    ///
+    /// Published because the bulk deletes leave them where they are, so both
+    /// their counts and their warnings have to say how much is actually
+    /// going.
+    @Published var shippedCount = 0
     /// 0...1 per issue being fetched, for the progress bar.
     @Published var progress: [Int: Double] = [:]
     /// Series the reader has narrowed to. Empty means every series.
@@ -270,6 +276,7 @@ final class AppModel: ObservableObject {
         refreshSourceMenus()
         issueCount = store?.issueCount ?? 0
         downloadedCount = store?.downloadedCount ?? 0
+        shippedCount = store?.shippedCount ?? 0
         search(query)
     }
 
@@ -482,6 +489,7 @@ final class AppModel: ObservableObject {
 
             issueCount = store.issueCount
             downloadedCount = store.downloadedCount
+            shippedCount = store.shippedCount
             diskUsage = library?.diskUsage ?? 0
             freeSpace = Self.freeSpace()
             refreshSourceMenus()
@@ -674,6 +682,7 @@ final class AppModel: ObservableObject {
             self.refreshSourceMenus()
             self.issueCount = self.store?.issueCount ?? 0
             self.downloadedCount = self.store?.downloadedCount ?? 0
+            self.shippedCount = self.store?.shippedCount ?? 0
             self.search(self.query)
         }
     }
@@ -1263,6 +1272,12 @@ final class AppModel: ObservableObject {
     /// How many of the comics currently on the shelf are downloaded.
     var visibleDownloadedCount: Int { results.filter(\.isDownloaded).count }
 
+    /// How many issues in the whole library a delete may actually take.
+    var deletableCount: Int { max(issueCount - shippedCount, 0) }
+
+    /// The same question about the shelf as it stands.
+    var visibleDeletableCount: Int { results.filter { !$0.isCatalogued }.count }
+
     /// Whether any downloaded comic on the shelf belongs to a set, so the
     /// warning can say that removing it reaches issues that are not shown.
     var visibleDownloadsTouchASet: Bool {
@@ -1308,7 +1323,11 @@ final class AppModel: ObservableObject {
             // Snapshotted before the first delete: `results` is republished by
             // anything that touches the library, and a loop over a collection
             // being rebuilt underneath it would miss rows.
-            let doomed = results
+            //
+            // Shipped rows are passed over rather than refused: nothing can
+            // bring one back, so a bulk delete takes only what an Import
+            // returns.
+            let doomed = results.filter { !$0.isCatalogued }
             for issue in doomed {
                 removeFromDisk(try store.delete(issueID: issue.id))
                 library?.discardPageThumbnails(forIssue: issue.id)
@@ -1322,10 +1341,13 @@ final class AppModel: ObservableObject {
     func deleteEverything() {
         guard let store else { return }
         do {
-            let count = store.issueCount
-            for file in try store.deleteAll() { removeFromDisk(file) }
+            let count = store.issueCount - store.shippedCount
+            for file in try store.deleteImported() { removeFromDisk(file) }
+            // Thumbnails for what is left are rebuilt from the archives still
+            // on disk, so discarding the lot costs a redraw and never a
+            // download.
             library?.discardAllPageThumbnails()
-            refresh(note: "deleted all \(count) issues")
+            refresh(note: "deleted \(count) issue\(count == 1 ? "" : "s")")
         } catch {
             status = "delete failed: \(error)"
         }
@@ -1343,6 +1365,7 @@ final class AppModel: ObservableObject {
     private func refresh(note: String) {
         issueCount = store?.issueCount ?? 0
         downloadedCount = store?.downloadedCount ?? 0
+        shippedCount = store?.shippedCount ?? 0
         diskUsage = library?.diskUsage ?? 0
         freeSpace = Self.freeSpace()
         // A newly imported page can bring a series the menu has not offered.

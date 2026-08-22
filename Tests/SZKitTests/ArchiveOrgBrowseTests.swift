@@ -466,6 +466,19 @@ final class ArchiveOrgBrowseTests: XCTestCase {
         XCTAssertEqual(try store.search("1988 jun", sites: [.archive]).first?.id, done.issueID)
     }
 
+    /// The other half of what Delete reads.
+    ///
+    /// archive.org is both a shipped index and a source the reader browses,
+    /// so the stamp has to separate the two: an item imported from the
+    /// browser can be imported again, and deleting it is allowed.
+    func testABrowsedItemDoesNotCarryTheCatalogueStamp() throws {
+        let store = try Store()
+        let comic = try item(comicBookItem)
+        _ = try store.importArchiveItem(comic, file: comic.readableIssues[0].best)
+        let row = try XCTUnwrap(try store.recent().first)
+        XCTAssertFalse(row.isCatalogued)
+    }
+
     /// An item that holds one issue keeps the identifier as its key, so a
     /// reader who browses to a shipped item still finds the copy they have.
     func testASingleIssueItemIsStillKeyedOnItsIdentifier() throws {

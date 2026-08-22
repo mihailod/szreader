@@ -32,15 +32,33 @@ func beginRemoveDownload(_ issue: StoredIssue, model: AppModel, pending: inout P
     }
 }
 
+/// Deleting one issue, or explaining why this one cannot be deleted.
+///
+/// A row the app seeded from a catalogue it ships is the one thing on the
+/// shelf with no way back: the seed writes its stamp once and skips a library
+/// that already carries it, so a deleted seeded row stays deleted for the life
+/// of the install, and no import reaches it. Rather than a permanently greyed
+/// out Delete button — which says nothing about why — the action is offered
+/// and answers.
+@MainActor
+func beginDelete(_ issue: StoredIssue, model: AppModel, pending: inout PendingAction?) {
+    pending = issue.isCatalogued ? .undeletable(issue) : .remove(issue)
+}
+
 enum PendingAction: Identifiable {
     case deleteDownload(StoredIssue)
     case remove(StoredIssue)
+    /// Delete asked for on an issue that came out of a shipped catalogue.
+    case undeletable(StoredIssue)
     case removeAllDownloads(Int)
-    case deleteAll(Int)
+    /// The library, less what came with the app. Both numbers travel with the
+    /// case: the warning has to say how much is going and how much stays.
+    case deleteAll(count: Int, shipped: Int)
     /// Everything the shelf is currently showing. The count travels with the
     /// case so the warning can say how much is about to go.
     case removeVisibleDownloads(count: Int, touchesASet: Bool)
-    case deleteVisible(Int)
+    /// Likewise for the shelf as it stands.
+    case deleteVisible(count: Int, shipped: Int)
     /// Issues published as one download: taking or discarding any of them
     /// does the same to all of them, so both are asked about first.
     case downloadSet(StoredIssue, String)
@@ -52,6 +70,7 @@ enum PendingAction: Identifiable {
         case .removeSet(let i, _): return "set-rm-\(i.id)"
         case .deleteDownload(let i): return "dl-\(i.id)"
         case .remove(let i): return "rm-\(i.id)"
+        case .undeletable(let i): return "shipped-\(i.id)"
         case .removeAllDownloads: return "all-downloads"
         case .deleteAll: return "all"
         case .removeVisibleDownloads: return "visible-downloads"
@@ -581,17 +600,22 @@ struct LibraryView: View {
         Divider()
 
         Button(role: .destructive) {
-            pending = .remove(issue)
+            beginDelete(issue, model: model, pending: &pending)
         } label: { Label("Delete", systemImage: "xmark.bin") }
 
         Button(role: .destructive) {
-            pending = .deleteVisible(model.results.count)
+            pending = .deleteVisible(count: model.visibleDeletableCount,
+                                     shipped: model.results.count - model.visibleDeletableCount)
         } label: { Label("Delete Visible", systemImage: "xmark.bin.circle") }
-            .disabled(model.results.isEmpty)
+            // Nothing to do when the shelf holds only issues that came with
+            // the app, which is the usual state of a library nobody has
+            // imported into yet.
+            .disabled(model.visibleDeletableCount == 0)
 
         Button(role: .destructive) {
-            pending = .deleteAll(model.issueCount)
+            pending = .deleteAll(count: model.deletableCount, shipped: model.shippedCount)
         } label: { Label("Delete Library", systemImage: "trash.slash") }
+            .disabled(model.deletableCount == 0)
     }
 
     private func confirmation(for action: PendingAction) -> Alert {
@@ -611,19 +635,37 @@ struct LibraryView: View {
         case .deleteDownload(let issue):
             return Alert(
                 title: Text("Are you sure?"),
-                message: Text("Remove the downloaded files for “\(name(issue))”. "
-                              + "It stays in your library and can be "
-                              + "downloaded again."),
+                message: Text(Self.removeDownloadMessage(name(issue))),
                 primaryButton: .destructive(Text("Yes")) { model.deleteDownload(issue) },
                 secondaryButton: .cancel(Text("No")))
         case .remove(let issue):
             return Alert(
                 title: Text("Are you sure?"),
-                message: Text("Delete “\(name(issue))” from the library, including "
-                              + "any download. Getting it back means importing "
-                              + "its page again."),
+                message: Text(Self.deleteMessage(name(issue))),
                 primaryButton: .destructive(Text("Yes")) { model.delete(issue) },
                 secondaryButton: .cancel(Text("No")))
+        case .undeletable(let issue):
+            // The explanation alone when there is nothing on disk, and the
+            // action the reader was probably after when there is: what a
+            // delete on a downloaded issue mostly wants back is the space,
+            // and that much this row can give.
+            guard issue.isDownloaded else {
+                return Alert(title: Text("From the app index"),
+                             message: Text(Self.undeletableMessage(downloaded: false)),
+                             dismissButton: .default(Text("OK")))
+            }
+            return Alert(
+                title: Text("From the app index"),
+                message: Text(Self.undeletableMessage(downloaded: true)),
+                primaryButton: .destructive(Text("Remove Download")) {
+                    // Worked out here and handed over afterwards, so a set
+                    // still gets the whole-set warning it would have got from
+                    // the button on the shelf.
+                    var next: PendingAction?
+                    beginRemoveDownload(issue, model: model, pending: &next)
+                    handOver(to: next)
+                },
+                secondaryButton: .cancel(Text("Cancel")))
         case .removeAllDownloads(let count):
             return Alert(
                 title: Text("Are you sure?"),
@@ -638,21 +680,68 @@ struct LibraryView: View {
                 message: Text(Self.removeVisibleMessage(count, touchesASet: touchesASet)),
                 primaryButton: .destructive(Text("Yes")) { model.removeVisibleDownloads() },
                 secondaryButton: .cancel(Text("No")))
-        case .deleteVisible(let count):
+        case let .deleteVisible(count, shipped):
             return Alert(
                 title: Text(Self.deleteVisibleTitle(count)),
-                message: Text(Self.deleteVisibleMessage(count, wholeLibrary: count == model.issueCount)),
+                message: Text(Self.deleteVisibleMessage(count, shipped: shipped,
+                                                        wholeLibrary: count == model.deletableCount)),
                 primaryButton: .destructive(Text("Yes")) { model.deleteVisible() },
                 secondaryButton: .cancel(Text("No")))
-        case .deleteAll(let count):
+        case let .deleteAll(count, shipped):
             return Alert(
                 title: Text("Are you sure?"),
-                message: Text("Delete all \(count) issues and every download, "
-                              + "resetting the app to empty. This cannot "
-                              + "be undone."),
+                message: Text(Self.deleteAllMessage(count, shipped: shipped)),
                 primaryButton: .destructive(Text("Yes")) { model.deleteEverything() },
                 secondaryButton: .cancel(Text("No")))
         }
+    }
+
+    /// Raises the next alert once this one has finished going away.
+    ///
+    /// `.alert(item:)` clears its own binding as part of dismissing, so a case
+    /// set from inside a button's action is wiped again before SwiftUI reads
+    /// it and the second alert never appears. Waiting out the dismissal is
+    /// what makes the two read as one flow.
+    private func handOver(to action: PendingAction?) {
+        guard let action else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            pending = action
+        }
+    }
+
+    /// The name goes in only when there is one.
+    ///
+    /// A magazine listed as "Alef - SF magazin 01" has neither title nor code,
+    /// and `name` is nil for it — which read as `Optional("…")` on screen
+    /// when it was interpolated straight into the sentence. Unquoted "this
+    /// issue" is what a nameless one is called instead: quoting it, as the
+    /// old placeholder did, read as though the issue were actually titled
+    /// that.
+    static func removeDownloadMessage(_ name: String?) -> String {
+        let subject = name.map { "the downloaded files for “\($0)”" }
+            ?? "the downloaded files for this issue"
+        return "Remove \(subject). It stays in your library and can be "
+            + "downloaded again."
+    }
+
+    static func deleteMessage(_ name: String?) -> String {
+        let subject = name.map { "“\($0)”" } ?? "this issue"
+        return "Delete \(subject) from the library, including any download. "
+            + "Getting it back means importing its page again."
+    }
+
+    /// Why Delete refused, and what is still on offer.
+    ///
+    /// The second half only when there is a download to remove: telling a
+    /// reader they may free space they are not using explains nothing.
+    static func undeletableMessage(downloaded: Bool) -> String {
+        let refusal = "This item's location is shipped in the application's index "
+            + "and cannot be deleted since there would be no way to recover it "
+            + "(there is no Import for it)."
+        guard downloaded else { return refusal }
+        return refusal + " You can remove the download for it to free the space "
+            + "on your device but you cannot delete the entry."
     }
 
     // The wording for the two bulk actions, built as plain strings rather than
@@ -689,20 +778,59 @@ struct LibraryView: View {
             + "downloaded again."
     }
 
+    /// "Item" rather than "issue" through the two delete warnings, and only
+    /// them: what a delete acts on is an entry in the library — a row that may
+    /// stand for a whole set — and the pair reads as one alert only if its
+    /// title and its sentence use one word.
     static func deleteVisibleTitle(_ count: Int) -> String {
-        "Delete \(count) issue\(count == 1 ? "" : "s")?"
+        "Delete \(count) item\(count == 1 ? "" : "s")?"
     }
 
-    static func deleteVisibleMessage(_ count: Int, wholeLibrary: Bool) -> String {
-        let issues = count == 1 ? "the issue shown" : "the \(count) issues shown"
+    /// `shipped` is how many of the issues on screen a delete will pass over.
+    /// The count has to account for them: a warning that says "the 653 issues
+    /// shown" and then deletes four of them is worse than no warning at all.
+    ///
+    /// What it does not do is explain where those issues came from. The
+    /// distinction that matters to a reader is whether an Import can bring a
+    /// thing back, and that is all these say.
+    static func deleteVisibleMessage(_ count: Int, shipped: Int, wholeLibrary: Bool) -> String {
+        let items: String
+        if shipped == 0 {
+            items = count == 1 ? "the item shown" : "the \(count) items shown"
+        } else {
+            items = count == 1 ? "the one imported item shown"
+                               : "the \(count) imported items shown"
+        }
         // Worth saying plainly: with no search and no filters the shelf is the
         // whole library, and "delete the ones shown" is then not the narrower
         // thing it sounds like.
-        let scope = wholeLibrary ? " That is everything in the library." : ""
+        let scope: String
+        switch (wholeLibrary, shipped) {
+        case (false, _): scope = ""
+        case (true, 0):  scope = " That is everything in the library."
+        default:         scope = " That is every imported item in the library."
+        }
+        // Said only when something is actually being passed over. A caveat
+        // about what cannot happen here teaches a reader to stop reading
+        // these at all.
+        let kept = shipped == 0 ? "" : " Items that cannot be imported again stay."
         let back = count == 1 ? "it back means importing its page"
                               : "them back means importing their pages"
-        return "Delete \(issues) from the library, including any "
-            + "downloads.\(scope) Getting \(back) again."
+        return "Delete \(items) from the library, including any "
+            + "downloads.\(scope)\(kept) Getting \(back) again."
+    }
+
+    /// Delete Library, which reaches everything an Import can bring back and
+    /// nothing else.
+    static func deleteAllMessage(_ count: Int, shipped: Int) -> String {
+        guard shipped > 0 else {
+            let items = count == 1 ? "the one item" : "all \(count) items"
+            return "Delete \(items) and every download, resetting the app to "
+                + "empty. This cannot be undone."
+        }
+        let items = count == 1 ? "the one imported item" : "all \(count) imported items"
+        return "Delete \(items) and every download of them. Items that "
+            + "cannot be imported again stay. This cannot be undone."
     }
 
     /// The title, or the code when the post gave none.
@@ -910,7 +1038,7 @@ struct LibraryView: View {
                 .buttonStyle(.bordered)
                 .tint(.accentColor)
 
-                Button { pending = .remove(issue) } label: {
+                Button { beginDelete(issue, model: model, pending: &pending) } label: {
                     rowLabel("Delete", icon: "xmark.bin")
                 }
                 .buttonStyle(.bordered)
@@ -1535,9 +1663,11 @@ struct IssueDetail: View {
                                 .multilineTextAlignment(.trailing)
                         }
                     }
+                    // The row's own stamp, not its site: archive.org is both
+                    // a shipped index and a source the reader browses, and
+                    // only the rows the seed wrote came with the app.
                     LabeledContent("Arrived by",
-                                   value: issue.site.catalogueResource == nil
-                                        ? "Imported" : "Shipped index")
+                                   value: issue.isCatalogued ? "Shipped index" : "Imported")
                 }
                 Section("Mirrors") {
                     ForEach(Array(mirrors.enumerated()), id: \.offset) { index, mirror in

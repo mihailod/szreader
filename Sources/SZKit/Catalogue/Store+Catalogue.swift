@@ -48,6 +48,15 @@ public extension Store {
                         stamp: Self.digest(data), progress: progress)
     }
 
+    /// How a row written by the seed says which catalogue it came from.
+    ///
+    /// One spelling, read by `StoredIssue.isCatalogued` and by the archive.org
+    /// browser: a row that carries it was put on the shelf by the app, not by
+    /// the reader.
+    static func catalogueSource(for site: IssueSite) -> String {
+        "\(site.rawValue) catalogue"
+    }
+
     /// A stable fingerprint of the shipped file.
     ///
     /// Stable across launches is the whole requirement, which rules out
@@ -186,7 +195,7 @@ public extension Store {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, values + [.text(site.rawValue),
                                .text(LabelStyle.labeledBlock.rawValue),
-                               .text("\(site.rawValue) catalogue")])
+                               .text(Self.catalogueSource(for: site))])
         }
 
         // FTS is maintained by hand and keyed on rowid; deleting first is
