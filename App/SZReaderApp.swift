@@ -1165,6 +1165,14 @@ final class AppModel: ObservableObject {
             return
         }
 
+        // After the cooldown check above rather than beside BatCave's branch,
+        // so this source inherits it: its mirror is a page on stripovi.com, so
+        // the generic test already covers it and there is nothing to repeat.
+        if issue.site == .stripovi {
+            downloadStripovi(issue, library: library, cooldown: cooldown)
+            return
+        }
+
         downloading.insert(issueID)
         progress[issueID] = 0
         status = "downloading “\(name)”…"
@@ -1401,6 +1409,124 @@ final class AppModel: ObservableObject {
                                + "\(RetryAfter.phrase(left)) before trying again. "
                                + "The pages already fetched are kept, so it will "
                                + "carry on from where it stopped.")
+                    return
+                }
+
+                try? store.setDownloadFailed(true, issueID: issueID)
+                self.search(self.query)
+                self.status = "download failed"
+                self.failure = Failure(
+                    title: "Download failed",
+                    message: "\u{201C}\(name)\u{201D} could not be fetched.\n\n"
+                           + Library.reason(error))
+            }
+        }
+    }
+
+    /// Fetches a Stripovi comic, a page at a time.
+    ///
+    /// The simplest of the three fetchers, because this site is behind
+    /// nothing: no web view, no session, no challenge — just requests, spaced
+    /// out. Everything it needs is in the shipped index, including the rule
+    /// that builds each page's address.
+    ///
+    /// A dedicated transport rather than the shared throttled one. That
+    /// throttle spaces every host in the app 1.5 seconds apart, which is right
+    /// for probing file hosts and wrong for a run of 126 pages — it would turn
+    /// the longest comic into three minutes for no benefit to a site that has
+    /// never once refused us. `StripoviFetcher` does its own pacing.
+    private func downloadStripovi(_ issue: StoredIssue, library: Library,
+                                  cooldown: HostCooldown) {
+        guard let store else { return }
+        let issueID = issue.id
+        let name = issue.title ?? issue.code ?? "issue"
+
+        guard let code = issue.code, let comicID = Int(code),
+              let catalogue = try? StripoviCatalog.shipped(),
+              let comic = catalogue.comics.first(where: { $0.id == comicID }) else {
+            failure = Failure(
+                title: "Download failed",
+                message: "\u{201C}\(name)\u{201D} is not in the shipped index. "
+                       + "Switch the source off and on again to rebuild the shelf.")
+            return
+        }
+
+        downloading.insert(issueID)
+        progress[issueID] = 0
+        status = "fetching \u{201C}\(name)\u{201D}\u{2026}"
+
+        Task { @MainActor [weak self] in
+            do {
+                let fetcher = StripoviFetcher(transport: URLSessionTransport())
+                let result = try await fetcher.fetch(
+                    comic: comic, in: catalogue,
+                    into: library.directory(forIssue: issueID)) { done, total in
+                        Task { @MainActor [weak self] in
+                            guard let self, total > 0 else { return }
+                            self.progress[issueID] = Double(done) / Double(total)
+                            self.status = "fetching \u{201C}\(name)\u{201D} \u{2014} "
+                                        + "page \(done) of \(total)"
+                        }
+                    }
+
+                guard let self else { return }
+                try store.recordDownload(issueID: issueID, mirrorURL: issue.code ?? "",
+                                         path: result.file, bytes: result.bytes)
+                self.downloading.remove(issueID)
+                self.progress[issueID] = nil
+                try? store.setDownloadFailed(false, issueID: issueID)
+
+                // The site's listing tile stands in until the comic's own
+                // first page can replace it.
+                let captured = try? await Task.detached(priority: .utility) {
+                    try library.captureCover(issueID: issueID)
+                }.value
+                if let captured { try? store.setCoverURL(captured, issueID: issueID) }
+
+                let mb = Double(result.bytes) / 1_048_576
+                // The shipped rule having gone stale is said out loud. It is
+                // the only place anyone would ever find out, and the fix is a
+                // rebuilt catalogue rather than anything the reader can do.
+                var note = String(format: "fetched %d pages, %.1f MB", result.pages, mb)
+                // Pages the site counts but does not have. Said out loud
+                // because the comic really is short and a reader who counts
+                // will notice — and nothing here can fix it, the file is not
+                // on the server.
+                if !result.missingFromSource.isEmpty {
+                    let gone = result.missingFromSource.count
+                    note += " — \(gone) page\(gone == 1 ? "" : "s") "
+                          + "missing from the site"
+                }
+                if result.resolvedFromSite {
+                    note += " — page addresses read from the site, "
+                          + "the shipped index is out of date"
+                }
+                self.refresh(note: note)
+            } catch {
+                guard let self else { return }
+                self.downloading.remove(issueID)
+                self.progress[issueID] = nil
+
+                if error is CancellationError {
+                    self.search(self.query)
+                    self.status = "stopped"
+                    return
+                }
+
+                if let refusal = error as? DownloadError, refusal.isRateLimited {
+                    var stated: TimeInterval?
+                    if case .rateLimited(_, let wait) = refusal { stated = wait }
+                    cooldown.begin(forHost: Stripovi.host, wait: stated)
+                    self.search(self.query)
+                    self.status = "asked to wait"
+                    let left = cooldown.remaining(forHost: Stripovi.host) ?? 0
+                    self.failure = Failure(
+                        title: "Too many requests",
+                        message: "\u{201C}\(name)\u{201D} was not finished.\n\n"
+                               + refusal.description
+                               + "\n\nDownloads from \(Stripovi.host) will wait "
+                               + "\(RetryAfter.phrase(left)) before trying again. The "
+                               + "pages already fetched are kept.")
                     return
                 }
 

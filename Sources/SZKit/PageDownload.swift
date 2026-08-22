@@ -50,7 +50,7 @@ public enum ImageBytes {
 /// fetch that stops at page 40 of 94 therefore leaves an unreadable directory
 /// rather than a comic missing its second half — and `finish()` will not write
 /// the marker until every page is actually there.
-public final class BatCaveDownload {
+public final class PageDownload {
 
     private let directory: URL
     private let images: [String]
@@ -111,12 +111,12 @@ public final class BatCaveDownload {
     /// `has` would then skip for ever.
     public func write(_ data: Data, page: Int) throws {
         guard !data.isEmpty else {
-            throw BatCaveDownloadError.pageFailed(page: page, reason: "no bytes")
+            throw PageFetchError.pageFailed(page: page, reason: "no bytes")
         }
         guard ImageBytes.looksLikeImage(data) else {
             // Named for what it most likely is. The site answers a request it
             // does not like with a page of HTML and a 200.
-            throw BatCaveDownloadError.pageFailed(
+            throw PageFetchError.pageFailed(
                 page: page, reason: "the server sent something that is not an image")
         }
         let destination = url(page: page)
@@ -131,17 +131,34 @@ public final class BatCaveDownload {
     ///
     /// Refuses unless every page is present, because the marker is what tells
     /// the rest of the app this is a whole comic.
+    ///
+    /// - Parameter absentFromSource: pages the source itself does not have.
+    ///   Not the same thing as a page that failed to arrive, and the
+    ///   difference is the whole point of this parameter: a page the site is
+    ///   missing will never arrive however many times it is asked for, so
+    ///   refusing to finish would mean that comic could never be read at all.
+    ///   A page that merely failed is still expected, and still refuses.
+    ///
+    ///   Stripovi.com has exactly this: its own page menu counts twenty pages
+    ///   and its own markup links the eighteenth, and that file is not on the
+    ///   server. Twenty-four pages of a twenty-five page comic is worth having;
+    ///   nothing at all is not.
     @discardableResult
-    public func finish() throws -> Int64 {
-        let missing = (1...max(pageCount, 1)).filter { pageCount > 0 && !has(page: $0) }
-        guard pageCount > 0 else { throw BatCaveDownloadError.noPages }
+    public func finish(absentFromSource: Set<Int> = []) throws -> Int64 {
+        guard pageCount > 0 else { throw PageFetchError.noPages }
+        let expected = (1...pageCount).filter { !absentFromSource.contains($0) }
+        let missing = expected.filter { !has(page: $0) }
         guard missing.isEmpty else {
-            throw BatCaveDownloadError.pageFailed(
+            throw PageFetchError.pageFailed(
                 page: missing[0],
                 reason: "\(missing.count) of \(pageCount) pages did not arrive")
         }
+        // Every page this comic will ever have is gone, so there is no comic —
+        // and a marker written over an empty directory would claim otherwise.
+        guard !expected.isEmpty else { throw PageFetchError.noPages }
+
         var total: Int64 = 0
-        for page in 1...pageCount {
+        for page in expected {
             let size = (try? fileManager.attributesOfItem(atPath: url(page: page).path)[.size])
             total += Int64((size as? NSNumber)?.intValue ?? 0)
         }

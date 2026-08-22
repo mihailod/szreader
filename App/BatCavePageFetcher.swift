@@ -128,7 +128,7 @@ final class BatCavePageFetcher: NSObject {
                progress: @escaping @MainActor (Int, Int) -> Void) async throws -> Result {
 
         guard let url = URL(string: readerURL), HostFence.batcave.admits(url) else {
-            throw BatCaveDownloadError.notAReaderPage
+            throw PageFetchError.notAReaderPage
         }
 
         // In the window for the duration, and out again afterwards. See
@@ -139,11 +139,11 @@ final class BatCavePageFetcher: NSObject {
 
         let html = try await loadReader(url)
         guard let reading = BatCaveReaderPage.reading(html) else {
-            throw BatCaveDownloadError.notAReaderPage
+            throw PageFetchError.notAReaderPage
         }
         if let refusal = BatCaveReaderPage.refusal(reading) { throw refusal }
 
-        let download = try BatCaveDownload(directory: directory, images: reading.images)
+        let download = try PageDownload(directory: directory, images: reading.images)
         let total = download.pageCount
 
         // Stay on the reader page. It is the referring page for every one of
@@ -250,7 +250,7 @@ final class BatCavePageFetcher: NSObject {
     /// weaker.
     private func directImage(at address: String) async throws -> Data {
         guard let url = URL(string: address), let session else {
-            throw BatCaveDownloadError.notAReaderPage
+            throw PageFetchError.notAReaderPage
         }
         var request = URLRequest(url: url)
         request.setValue(session.userAgent, forHTTPHeaderField: "User-Agent")
@@ -293,7 +293,7 @@ final class BatCavePageFetcher: NSObject {
             throw DownloadError.rateLimited(host: url.host ?? BatCave.host, retryAfter: nil)
         }
         guard (200..<300).contains(http.statusCode) else {
-            throw BatCaveDownloadError.pageFailed(
+            throw PageFetchError.pageFailed(
                 page: 0, reason: "HTTP \(http.statusCode)")
         }
         pagesServed += 1
@@ -320,7 +320,7 @@ final class BatCavePageFetcher: NSObject {
                     throw ReaderTimedOut()
                 }
                 guard let html = try await group.next() else {
-                    throw BatCaveDownloadError.notAReaderPage
+                    throw PageFetchError.notAReaderPage
                 }
                 group.cancelAll()
                 return html
@@ -329,7 +329,7 @@ final class BatCavePageFetcher: NSObject {
             // "did not load in time" says nothing anyone can act on — it was
             // true of two completely different faults in a row here. What the
             // view is actually sitting on is the whole diagnosis.
-            throw BatCaveDownloadError.pageFailed(page: 0, reason: await whereItStopped())
+            throw PageFetchError.pageFailed(page: 0, reason: await whereItStopped())
         }
     }
 
@@ -578,7 +578,7 @@ final class BatCavePageFetcher: NSObject {
                 switch outcome {
                 case .success(let value):
                     guard let text = value as? String, !text.isEmpty else {
-                        throw BatCaveDownloadError.pageFailed(
+                        throw PageFetchError.pageFailed(
                             page: page, reason: "the page returned no data")
                     }
                     return text
@@ -586,17 +586,17 @@ final class BatCavePageFetcher: NSObject {
                     // Both refusals, because either one alone is misleading:
                     // the direct request and the page see different walls, and
                     // which of them moved is the whole diagnosis.
-                    throw BatCaveDownloadError.pageFailed(
+                    throw PageFetchError.pageFailed(
                         page: page,
                         reason: "direct: \(directRefusal); page: \(Self.scriptReason(error))")
                 }
             }
             group.addTask {
                 try await Task.sleep(for: Self.imageTimeout)
-                throw BatCaveDownloadError.pageFailed(page: page, reason: "timed out")
+                throw PageFetchError.pageFailed(page: page, reason: "timed out")
             }
             guard let value = try await group.next() else {
-                throw BatCaveDownloadError.pageFailed(page: page, reason: "no result")
+                throw PageFetchError.pageFailed(page: page, reason: "no result")
             }
             group.cancelAll()
             return value
@@ -613,7 +613,7 @@ final class BatCavePageFetcher: NSObject {
         }
 
         guard let data = Data(base64Encoded: payload), !data.isEmpty else {
-            throw BatCaveDownloadError.pageFailed(page: page, reason: "the bytes did not decode")
+            throw PageFetchError.pageFailed(page: page, reason: "the bytes did not decode")
         }
         return data
     }

@@ -24,6 +24,10 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     // them, so it arrives a page at a time through the browser. Unlike
     // either, one page is one issue rather than a run — see `BatCavePage`.
     case batcave
+    // A shipped index like RetroSpec's, but of loose page images rather than
+    // archives: 31 Croatian web comics, none of which is a file. Its
+    // catalogue is its own shape for that reason — see `StripoviCatalog`.
+    case stripovi
     // BombJack ships as seven catalogues rather than one.
     //
     // As a single source it was 18,219 rows: fifteen seconds to seed, which
@@ -49,6 +53,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .archive:       return "Archive.org"
         case .comicbookplus: return "ComicBook+"
         case .batcave:       return "BatCave"
+        case .stripovi:      return "Stripovi.com"
         default:
             // "BombJack: Books" rather than "Books". This string is written
             // into the publisher column and the search index of every seeded
@@ -90,6 +95,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     public var catalogueResource: String? {
         switch self {
         case .stripzona, .comicbookplus, .batcave: return nil
+        case .stripovi:                            return "stripovi-catalog"
         case .retrospec:                 return "retrospec-catalog"
         case .archive:                   return "archive-catalog"
         default:                         return bombjackCategory?.resource
@@ -110,7 +116,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .bombjackHardware:           return .hardware
         case .bombjackGames:              return .games
         case .bombjackOther:              return .other
-        case .stripzona, .retrospec, .archive, .comicbookplus, .batcave:
+        case .stripzona, .retrospec, .archive, .comicbookplus, .batcave, .stripovi:
             return nil
         }
     }

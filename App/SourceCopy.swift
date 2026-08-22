@@ -42,6 +42,7 @@ struct SourceCopy {
         case .archive:       return archive
         case .comicbookplus: return comicBookPlus
         case .batcave:       return batcave
+        case .stripovi:      return stripovi
         default:             return bombJack(site)
         }
     }
@@ -190,6 +191,35 @@ struct SourceCopy {
               + "fetched from there only when you ask for it. This is an "
               + "independent reader, not affiliated with or endorsed by "
               + "BatCave, and it hosts none of its content.")
+
+    /// Stripovi.com.
+    ///
+    /// "strips" throughout rather than the other word, and not to dodge the
+    /// house rule: these are newspaper-style strips and web strips, with not a
+    /// magazine among them, so the rule's one exception — naming both kinds
+    /// together — would be a claim about the shelf that is not true here.
+    /// "Strip" is also the word the site itself uses, and the word its readers
+    /// use.
+    ///
+    /// The count is stated because unlike the browse-and-import sources this
+    /// one puts every one of them on the shelf the moment it is switched on,
+    /// and thirty-one is a number that will not quietly date: the site has
+    /// added roughly one a year.
+    private static let stripovi = SourceCopy(
+        switchTitle: IssueSite.stripovi.settingsName,
+        // "strips", matching the two fields below it. The house rule bars
+        // "comic" in this layer unless magazines are named alongside, and
+        // there is not a magazine among these thirty-one — so the rule's one
+        // exception would be a claim about the shelf that is not true here.
+        detail: "Web graphic novels (in ex-YU languages) published for free by their authors.",
+        shelfPhrase: "free Croatian web strips",
+        creditHeading: "Stripovi.com",
+        credit: "The Stripovi.com source indexes the web strips published "
+              + "free at stripovi.com, together with the artwork the site "
+              + "made for them. The app ships that index and fetches a strip "
+              + "from the site only when you ask for it. This is an "
+              + "independent reader, not affiliated with or endorsed by "
+              + "Stripovi.com, and it hosts none of their work.")
 
     /// The seven BombJack catalogues, described from their category.
     ///

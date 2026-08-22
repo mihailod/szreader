@@ -1,5 +1,6 @@
-- batcave loading not working
+- check all stripovi.com pages
 
+- if a comic is downloaded and only has black white gray then we need to make some colorful visual cue that it is downloaded. maybe a multicolor border around it or "Downloaded" written in color at the top of the cover... find a nice solution. all stripovi.com are like that but make it general. for example archive.org indexed stuff is black and white.
 
 
 additional sources:

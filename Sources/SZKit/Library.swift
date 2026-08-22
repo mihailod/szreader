@@ -129,13 +129,13 @@ public final class Library {
         // 1" — the code with the message thrown away, which says nothing about
         // what actually went wrong.
         case let e as SQLiteError:    return "database: " + e.description
-        // Without this a failed page renders as "SZKit.BatCaveDownloadError
+        // Without this a failed page renders as "SZKit.PageFetchError
         // error 1" — and that one is the worst of the lot to lose, because
         // its whole payload is *which* page failed and why. The number is not
         // even a hint: an enum's cases with associated values are numbered
         // before the ones without, so `error 1` is `pageFailed` and not the
         // second case as written.
-        case let e as BatCaveDownloadError: return e.description
+        case let e as PageFetchError: return e.description
         default: break
         }
         let ns = error as NSError

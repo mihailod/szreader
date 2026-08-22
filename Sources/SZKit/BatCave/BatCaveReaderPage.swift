@@ -108,7 +108,7 @@ public enum BatCaveReaderPage {
     ///
     /// Checked before a single image is asked for, so a chapter that cannot
     /// work costs the site no requests and the reader no wait.
-    public static func refusal(_ reading: BatCaveReading) -> BatCaveDownloadError? {
+    public static func refusal(_ reading: BatCaveReading) -> PageFetchError? {
         if reading.isBroken { return .chapterIsBroken }
         if reading.images.isEmpty {
             return reading.usesAjax ? .imagesNotInlined : .noPages
@@ -126,7 +126,7 @@ public enum BatCaveReaderPage {
 }
 
 /// Why one chapter could not be fetched.
-public enum BatCaveDownloadError: Error, Equatable, CustomStringConvertible {
+public enum PageFetchError: Error, Equatable, CustomStringConvertible {
     case notAReaderPage
     case chapterIsBroken
     case noPages

@@ -6,7 +6,7 @@ import XCTest
 /// This source has no archive, so the pages go straight into the layout
 /// `ComicDocument(unpackedAt:)` reads. The two tests that matter are at the
 /// bottom: an interrupted fetch must not be readable, and a finished one must.
-final class BatCaveDownloadTests: XCTestCase {
+final class PageDownloadTests: XCTestCase {
 
     private var directory: URL!
 
@@ -28,8 +28,8 @@ final class BatCaveDownloadTests: XCTestCase {
         (1...count).map { "https://img.batcave.biz/img/5/11/22/\($0)-hash.\(ext)" }
     }
 
-    private func download(_ count: Int, ext: String = "jpg") throws -> BatCaveDownload {
-        try BatCaveDownload(directory: directory, images: addresses(count, ext: ext))
+    private func download(_ count: Int, ext: String = "jpg") throws -> PageDownload {
+        try PageDownload(directory: directory, images: addresses(count, ext: ext))
     }
 
     // MARK: - Names
@@ -49,8 +49,8 @@ final class BatCaveDownloadTests: XCTestCase {
     /// `UnpackedReader` finds pages by extension, so an address ending in
     /// something else must not produce a file the reader cannot see.
     func testAnUnreadableExtensionBecomesJPEG() {
-        XCTAssertEqual(BatCaveDownload.extension(of: "https://x/1-hash.php"), "jpg")
-        XCTAssertEqual(BatCaveDownload.extension(of: "https://x/1-hash"), "jpg")
+        XCTAssertEqual(PageDownload.extension(of: "https://x/1-hash.php"), "jpg")
+        XCTAssertEqual(PageDownload.extension(of: "https://x/1-hash"), "jpg")
     }
 
     // MARK: - What is refused
@@ -146,11 +146,11 @@ final class BatCaveDownloadTests: XCTestCase {
     /// Every failure here must arrive as its own sentence.
     ///
     /// `Library.reason` matches error types explicitly, so a new one added
-    /// without a line there renders as "SZKit.BatCaveDownloadError error 1" —
+    /// without a line there renders as "SZKit.PageFetchError error 1" —
     /// which is exactly what shipped, and which threw away the only thing this
     /// error carries: which page failed, and why.
     func testEveryFailureReachesTheReaderAsASentence() {
-        let all: [BatCaveDownloadError] = [
+        let all: [PageFetchError] = [
             .notAReaderPage, .chapterIsBroken, .noPages, .imagesNotInlined,
             .pageCountMismatch(stated: 94, listed: 40),
             .pageFailed(page: 7, reason: "timed out"),
@@ -165,7 +165,7 @@ final class BatCaveDownloadTests: XCTestCase {
     /// The failing page and its reason are the whole payload, so they have to
     /// survive the trip.
     func testTheFailingPageIsNamed() {
-        let reason = Library.reason(BatCaveDownloadError.pageFailed(
+        let reason = Library.reason(PageFetchError.pageFailed(
             page: 7, reason: "HTTP 403"))
         XCTAssertTrue(reason.contains("7"), reason)
         XCTAssertTrue(reason.contains("HTTP 403"), reason)
@@ -176,7 +176,7 @@ final class BatCaveDownloadTests: XCTestCase {
     /// `pageFailed` rather than the second case listed. Pinned because reading
     /// it as the second case sent a diagnosis after entirely the wrong bug.
     func testTheBridgedNumberIsNotTheCaseOrder() {
-        XCTAssertEqual((BatCaveDownloadError.pageFailed(page: 1, reason: "x") as NSError).code, 1)
-        XCTAssertEqual((BatCaveDownloadError.chapterIsBroken as NSError).code, 3)
+        XCTAssertEqual((PageFetchError.pageFailed(page: 1, reason: "x") as NSError).code, 1)
+        XCTAssertEqual((PageFetchError.chapterIsBroken as NSError).code, 3)
     }
 }

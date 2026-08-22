@@ -1473,7 +1473,21 @@ private struct CoverImage: View {
                 // Conditional rather than fitting everything: a portrait cover
                 // very slightly off 2:3 would gain hairline bars, and the
                 // iPad shelf as shipped is full-bleed.
-                if image.size.width > image.size.height {
+                // `>=`, not `>`: a *square* cover is not a portrait one.
+                //
+                // Stripovi.com's artwork is where that mattered — nineteen of
+                // its thirty-one tiles are exactly square (135x135, 145x145)
+                // and the other twelve are 2:1. Filling a 2:3 cell with a
+                // square scales it to one and a half times the cell's width,
+                // and the shelf came apart: tiles bled over their neighbours,
+                // the captions were painted on, and the leftmost column was
+                // pushed off the screen. The twelve landscape ones in the same
+                // grid were fine, which is what named the culprit.
+                //
+                // Fitting also keeps the whole picture. Filling a square into
+                // 2:3 throws away a third of its width, and on these tiles the
+                // whole tile *is* the artwork.
+                if image.size.width >= image.size.height {
                     // The frame is what it should fill. Fitting alone sizes
                     // the image from its own ideal dimensions, which left
                     // these sitting at about a third of the cell with the
@@ -1485,7 +1499,18 @@ private struct CoverImage: View {
                         .scaledToFit()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+                    // `.clipped()` so that filling can never paint outside the
+                    // cell whatever shape arrives. The rounded clip on the
+                    // tile above was doing this for artwork close to 2:3 and
+                    // stopped being enough once the shapes varied — and a
+                    // cover drawn over its neighbour is a worse failure than
+                    // any cropping, because it damages the tiles either side
+                    // of the one that is wrong.
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
                 }
             } else {
                 placeholder

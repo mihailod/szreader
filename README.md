@@ -30,11 +30,16 @@ of scanned vintage computer magazines, books and manuals covering
 Commodore 8-bit, Amiga, Atari, Apple, MSX, Timex-Sinclair, Oric, Osborne and a dozen more
 machines in seven switchable sub-sources: Magazines (Commodore, Amiga,
 Other), Books, Hardware Manuals, Video Games-related,
-Other (newsletters, applications, advertising).
+Other (newsletters, applications, advertising). Download individually to read.
 
-  * **[BatCave]()** — A large open repository of comics.
+  * **[BatCave](https://batcave.biz)** — A large open repository of comics.
+Import to browse and fetch metadata and Download to read.
 
-* **Bug fixes and various improvements** including performance optimizations and  Source panel enhancements.
+  * **[Stripovi.com](https://www.stripovi.com/index.asp?page=online-comics-frontpage)**
+— free Croatian web comics. Switch it on to see the index then  Download individually to read.
+
+* **Bug fixes and various improvements** including: performance optimizations, Source panel enhancements,
+honouring server cooldown periods, better square page cover handling.
 
 ---
 

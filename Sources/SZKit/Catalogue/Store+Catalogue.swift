@@ -39,6 +39,14 @@ public extension Store {
             throw SeedError.catalogueMissing(site)
         }
         let data = try Data(contentsOf: url)
+        // Stripovi ships a different shape, because its comics are not files.
+        // Routed here rather than from the app so that "this source has a
+        // shipped index" stays one question with one answer — `AppModel` asks
+        // `catalogueResource` and does not need to know there are two formats.
+        if site == .stripovi {
+            return try seedStripovi(try StripoviCatalog.decode(data),
+                                    stamp: Self.digest(data))
+        }
         // Stamped by content, not by the date inside it. `generated` is a
         // calendar day, so two builds on one day are indistinguishable — and
         // the build that fixed three broken titles was the same day as the
