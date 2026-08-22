@@ -32,7 +32,7 @@ machines in seven switchable sub-sources: Magazines (Commodore, Amiga,
 Other), Books, Hardware Manuals, Video Games-related,
 Other (newsletters, applications, advertising).
 
-  * **[BatCave]()** -- A large open repository of comics.
+  * **[BatCave]()** — A large open repository of comics.
 
 * **Bug fixes and various improvements** including performance optimizations and  Source panel enhancements.
 
@@ -101,7 +101,7 @@ against, and what happens to a topic written some other way.)
 ## StreamZine License
 
 **Content:** there is no content. The app is a reader — it doesn't host, bundle, or ship any content.
-Content is downloaded at the user's request from freely accessible sources.
+Content is downloaded at the user's request from freely accessible sources accessible to any web browser.
 Some sources require a free account, created on their own site. Browsing happens in views fenced
 to each source's domain — the app is a specialized reader, not a general web browser.
 
