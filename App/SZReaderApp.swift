@@ -1138,6 +1138,33 @@ final class AppModel: ObservableObject {
         }
         let issueID = issue.id
         let name = issue.title ?? issue.code ?? "issue"
+
+        // A host that has asked to be left alone is left alone here too, not
+        // only on the source that discovered the idea.
+        //
+        // **Only when every mirror is waiting.** Two links under one issue are
+        // usually alternatives on different hosts, and refusing the download
+        // because the first of them is resting would take away a download that
+        // used to succeed through the second. So this stops nothing that
+        // `Library.fetch` could still have completed — it only declines the
+        // case where there is no host left to ask.
+        let cooldown = HostCooldown()
+        let mirrors = (try? store?.liveMirrors(forIssue: issueID)) ?? []
+        let waits = mirrors.compactMap { mirror in
+            cooldown.remaining(forHost: URL(string: mirror.url)?.host ?? mirror.host)
+        }
+        if !mirrors.isEmpty, waits.count == mirrors.count, let longest = waits.max() {
+            failure = Failure(
+                title: "Still waiting",
+                message: (mirrors.count == 1
+                          ? "The host for “\(name)” asked to be left alone for a "
+                          : "Every host for “\(name)” asked to be left alone for a ")
+                       + "while, and there is \(RetryAfter.phrase(longest)) of that left."
+                       + "\n\nNothing is wrong with the issue — trying again "
+                       + "before then would only be refused.")
+            return
+        }
+
         downloading.insert(issueID)
         progress[issueID] = 0
         status = "downloading “\(name)”…"
@@ -1222,14 +1249,23 @@ final class AppModel: ObservableObject {
                 // shelf and the reader is told the one thing they can act on:
                 // how long to leave it.
                 if let refusal = error as? DownloadError, refusal.isRateLimited {
+                    // Written down rather than only announced. This sentence
+                    // used to say that trying again would be refused, while
+                    // doing nothing whatever to prevent it — which left the
+                    // reader's obvious next tap as the one action that turns a
+                    // throttle into a block.
+                    if case .rateLimited(let host, let wait) = refusal {
+                        cooldown.begin(forHost: host, wait: wait)
+                    }
                     self.search(self.query)
                     self.status = "asked to wait"
                     self.failure = Failure(
                         title: "Too many requests",
                         message: "“\(name)” was not downloaded.\n\n"
                                + refusal.description
-                               + "\n\nNothing is wrong with the issue — trying "
-                               + "again before then will be refused too.")
+                               + "\n\nNothing is wrong with the issue. Downloads "
+                               + "from that host will wait until then before "
+                               + "trying again.")
                     return
                 }
 
@@ -1271,6 +1307,22 @@ final class AppModel: ObservableObject {
             failure = Failure(title: "Download failed",
                               message: "\u{201C}\(name)\u{201D} has no reader page recorded. "
                                      + "Import the series again.")
+            return
+        }
+
+        // The wait, actually waited. Before this the refusal ended at the
+        // alert and nothing stopped the reader tapping Download again a second
+        // later — which is the one action that turns "slow down" into
+        // "blocked". Checked here so no request leaves the device at all.
+        let cooldown = HostCooldown()
+        if let left = cooldown.remaining(forHost: BatCave.host) {
+            failure = Failure(
+                title: "Still waiting",
+                message: "\(BatCave.host) asked to be left alone for a while, "
+                       + "and there is \(RetryAfter.phrase(left)) of that left.\n\n"
+                       + "Nothing is wrong with \u{201C}\(name)\u{201D} — any pages "
+                       + "already fetched are kept, and it will carry on from "
+                       + "there afterwards.")
             return
         }
 
@@ -1330,15 +1382,25 @@ final class AppModel: ObservableObject {
                 // fetched stay on disk, so trying again after the wait costs
                 // only what is left.
                 if let refusal = error as? DownloadError, refusal.isRateLimited {
+                    // Written down, not just announced. The server's own
+                    // number when it gave one; otherwise `HostCooldown`
+                    // supplies the wait, because this site refuses with a bare
+                    // 403 and names nothing.
+                    var stated: TimeInterval?
+                    if case .rateLimited(_, let wait) = refusal { stated = wait }
+                    cooldown.begin(forHost: BatCave.host, wait: stated)
+
                     self.search(self.query)
                     self.status = "asked to wait"
+                    let left = cooldown.remaining(forHost: BatCave.host) ?? 0
                     self.failure = Failure(
                         title: "Too many requests",
                         message: "\u{201C}\(name)\u{201D} was not finished.\n\n"
                                + refusal.description
-                               + "\n\nThe pages already fetched are kept — "
-                               + "starting again after that will carry on from "
-                               + "where it stopped.")
+                               + "\n\nDownloads from \(BatCave.host) will wait "
+                               + "\(RetryAfter.phrase(left)) before trying again. "
+                               + "The pages already fetched are kept, so it will "
+                               + "carry on from where it stopped.")
                     return
                 }
 
