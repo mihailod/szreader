@@ -139,6 +139,13 @@ let package = Package(
         .executableTarget(name: "bombjack-build", dependencies: ["SZKit"],
                           path: "Sources/BombJackBuild",
                           swiftSettings: [.swiftLanguageMode(.v6)]),
+        // Unlike the three above, this one reports rather than builds: ZXDB is
+        // an index of where scans live, not a store of them, and `--probe`
+        // says how much of it is actually reachable before a catalogue is
+        // written against it.
+        .executableTarget(name: "spectrum-build", dependencies: ["SZKit"],
+                          path: "Sources/SpectrumBuild",
+                          swiftSettings: [.swiftLanguageMode(.v6)]),
         // Still v5: the concurrency tests deliberately share one Store across
         // threads to prove the locking works, which mode 6 cannot see is safe.
         .testTarget(name: "SZKitTests", dependencies: ["SZKit"],

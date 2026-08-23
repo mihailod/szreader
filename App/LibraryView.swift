@@ -1658,8 +1658,8 @@ struct IssueDetail: View {
                         HStack {
                             ProgressView()
                             Text(model.progress[current.id].map {
-                                String(format: "downloading… %.0f%%", $0 * 100)
-                            } ?? "downloading…")
+                                String(format: "Downloading… %.0f%%", $0 * 100)
+                            } ?? "Downloading…")
                             .foregroundStyle(.secondary)
                         }
                     } else {

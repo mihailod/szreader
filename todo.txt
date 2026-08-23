@@ -1,3 +1,5 @@
+- clear xcode warnings
+
 additional sources:
 
 - Image comics first issues

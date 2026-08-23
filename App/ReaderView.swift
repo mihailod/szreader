@@ -31,7 +31,6 @@ struct ReaderView: View {
     /// Where the scrubber's thumb is, which is only the same as `index` when
     /// the user is not dragging it.
     @State private var scrubTarget: Double = 0
-    @State private var scrubbing = false
     /// Fired once per sitting: turning back a page and forward again is not
     /// finishing it a second time.
     @State private var finished = false
@@ -337,9 +336,18 @@ struct ReaderView: View {
                         .position(x: thumbX(width: geo.size.width),
                                   y: geo.size.height / 2)
                 }
-                // Lifted while dragging, so the label you are steering by
-                // stands out from the one that is merely reporting.
-                .opacity(scrubbing ? 1 : 0.85)
+                // Lifted while the thumb points at a page other than the
+                // one on screen, so the label you are steering by stands out
+                // from the one that is merely reporting.
+                //
+                // Worked out from the thumb rather than remembered, because
+                // the slider's own account of whether it is being dragged
+                // cannot be trusted: it ends a drag by reporting `false` and
+                // then, in the same millisecond, reports `true` again with no
+                // matching end. Kept in a flag, that left "a finger is on it"
+                // stuck on for the rest of the sitting.
+                .opacity(steering ? 1 : 0.85)
+                .animation(.easeOut(duration: 0.12), value: steering)
             }
             .frame(height: 44)
 
@@ -348,7 +356,6 @@ struct ReaderView: View {
                 in: 0...Double(max(pageCount - 1, 1)),
                 step: 1,
                 onEditingChanged: { editing in
-                    withAnimation(.easeOut(duration: 0.12)) { scrubbing = editing }
                     if !editing { index = Int(scrubTarget) }
                 }
             )
@@ -358,13 +365,24 @@ struct ReaderView: View {
         .padding(.bottom, 10)
         .background(.ultraThinMaterial)
         // Keep the thumb honest when pages are turned by swiping instead.
+        // Unconditional: a drag moves the thumb without moving `index` — the
+        // page is only committed on release — so following the page can never
+        // fight the finger, and there is nothing here worth guarding. The
+        // guard that used to be here is what broke this: it asked the slider
+        // whether it was being dragged, was told "yes" for ever, and from the
+        // first scrub onwards every swiped page turn was dropped. The counter
+        // in the chrome kept up, which is what made the two disagree.
         // Single-parameter form: the two-parameter onChange is iOS 17+, and
         // this app targets 16.
         .onChange(of: index) { page in
-            if !scrubbing { scrubTarget = Double(page) }
+            scrubTarget = Double(page)
         }
         .onAppear { scrubTarget = Double(index) }
     }
+
+    /// Whether the thumb is pointing somewhere other than the page on screen —
+    /// the reader choosing, rather than being told where they are.
+    private var steering: Bool { Int(scrubTarget) != index }
 
     private static let thumbRadius: CGFloat = 15
 

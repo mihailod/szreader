@@ -15,6 +15,11 @@ spike/*.csv
 # because it is sensitive. The catalogue built *from* it is committed.
 .retrospec-cache/
 
+# The ZXDB dump `spectrum-build` probes — one 27 MB zip fetched from the
+# project's own repo. Derived and bulky, same as the two above; delete the
+# directory to ask for a newer dump.
+.zxdb-cache/
+
 # --- Build artefacts ---------------------------------------------------
 .build/
 .swiftpm/
