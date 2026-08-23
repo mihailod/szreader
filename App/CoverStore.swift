@@ -40,6 +40,18 @@ final class CoverStore: @unchecked Sendable {
     nonisolated(unsafe) static var reportDeadCover: (@Sendable (String) -> Void)?
 
     private let memory = NSCache<NSString, UIImage>()
+
+    /// Which covers carry no colour of their own.
+    ///
+    /// Its own cache because `memory` is typed to images, and its own entry
+    /// rather than a property on one because the answer outlives any
+    /// particular decode — `NSCache` evicts pictures freely, and re-deciding
+    /// this while scrolling would mean re-drawing the picture to do it.
+    ///
+    /// Computed where the colour variant is stored, so every path that
+    /// produces a cover answers it once, as a by-product of work already
+    /// being done. See `CoverColour`.
+    private let colourCast = NSCache<NSString, NSNumber>()
     private let directory: URL
     private let session: URLSession
     private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
@@ -275,6 +287,24 @@ final class CoverStore: @unchecked Sendable {
     private func store(_ image: UIImage, url: String, grayscale: Bool) {
         let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
         memory.setObject(image, forKey: key(url, grayscale) as NSString, cost: cost)
+        // Only the colour variant can answer this — the grey one is grey by
+        // construction and would say every cover in the library is colourless.
+        if !grayscale, colourCast.object(forKey: url as NSString) == nil,
+           let cg = image.cgImage {
+            colourCast.setObject(NSNumber(value: CoverColour.isMonochrome(cg)),
+                                 forKey: url as NSString)
+        }
+    }
+
+    /// Whether this cover is grey enough that showing it in colour says
+    /// nothing.
+    ///
+    /// Answers false until the colour variant has been through `store`, which
+    /// is the honest default: unknown artwork gets the ordinary treatment
+    /// rather than a badge about a picture nobody has looked at yet.
+    func isMonochrome(_ url: String?) -> Bool {
+        guard let url else { return false }
+        return colourCast.object(forKey: url as NSString)?.boolValue ?? false
     }
 
     // MARK: - Keys

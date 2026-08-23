@@ -931,7 +931,7 @@ struct LibraryView: View {
     private func row(_ issue: StoredIssue) -> some View {
         HStack(spacing: 16) {
             // Long-pressing the artwork gives the same menu as the grid.
-            cover(issue)
+            cover(issue, cornerRadius: 6)
                 .frame(width: 58, height: 82)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .contentShape(Rectangle())
@@ -1119,10 +1119,11 @@ struct LibraryView: View {
         }
     }
 
-    private func cover(_ issue: StoredIssue) -> some View {
+    private func cover(_ issue: StoredIssue, cornerRadius: CGFloat = 8) -> some View {
         CoverImage(url: issue.coverURL, number: issue.number,
                    grayscale: !issue.isDownloaded,
-                   awaitingDownload: !issue.isDownloaded)
+                   awaitingDownload: !issue.isDownloaded,
+                   cornerRadius: cornerRadius)
             .opacity(issue.isDownloaded ? 1 : 0.75)
             .overlay(alignment: .bottom) {
                 // These are ~80 MB over throttled third-party hosts, so a
@@ -1443,18 +1444,27 @@ private struct CoverImage: View {
     /// Whether the comic is still to be fetched, which decides what the
     /// empty frame should say.
     var awaitingDownload = true
+    /// Matched to whatever the caller clips this to, so the cue below traces
+    /// the same corner rather than cutting across it: 8 in the grid, 6 on a
+    /// list row.
+    var cornerRadius: CGFloat = 8
 
     @State private var image: UIImage?
     /// Set once asking for the cover has come back empty, which is what tells
     /// "still arriving" apart from "not coming".
     @State private var fetchFailed = false
+    /// Whether this artwork has no colour of its own — see `CoverColour`.
+    @State private var isMonochrome = false
 
-    init(url: String?, number: Int?, grayscale: Bool, awaitingDownload: Bool = true) {
+    init(url: String?, number: Int?, grayscale: Bool,
+         awaitingDownload: Bool = true, cornerRadius: CGFloat = 8) {
         self.url = url
         self.number = number
         self.grayscale = grayscale
         self.awaitingDownload = awaitingDownload
+        self.cornerRadius = cornerRadius
         _image = State(initialValue: CoverStore.shared.cached(url, grayscale: grayscale))
+        _isMonochrome = State(initialValue: CoverStore.shared.isMonochrome(url))
     }
 
     var body: some View {
@@ -1517,6 +1527,7 @@ private struct CoverImage: View {
             }
         }
         .background(Color(.tertiarySystemFill))
+        .overlay { downloadedCue }
         // Keyed on the variant, so finishing a download re-runs this and the
         // cover turns colour immediately. It must NOT bail on a non-nil image:
         // that is exactly the case where a grey one is already showing.
@@ -1527,11 +1538,46 @@ private struct CoverImage: View {
             fetchFailed = false
             if let hit = CoverStore.shared.cached(url, grayscale: grayscale) {
                 image = hit          // both variants are cached, so this is instant
+                isMonochrome = CoverStore.shared.isMonochrome(url)
                 return
             }
             let fetched = await CoverStore.shared.image(url, grayscale: grayscale)
             image = fetched
             fetchFailed = fetched == nil
+            // Read after the cover has landed, because that is when the store
+            // has had a colour variant to judge. Asking any earlier answers
+            // false for every cover on a cold launch.
+            isMonochrome = CoverStore.shared.isMonochrome(url)
+        }
+    }
+
+    /// The sign that a *colourless* cover is downloaded.
+    ///
+    /// The shelf's whole vocabulary for this is colour: a downloaded comic
+    /// shows its cover in colour and one still to fetch shows it grey. On
+    /// artwork with no colour of its own that says nothing at all — a scanned
+    /// strip, an archive.org card, every Stripovi.com tile — and the two
+    /// states are indistinguishable.
+    ///
+    /// So those covers get the statement made for them, in the same language:
+    /// a band of colour around the artwork rather than in it. Deliberately not
+    /// a tick or a badge — the top-trailing corner already carries the read
+    /// mark and the in-progress dots, and a third small round thing there
+    /// would be one more mark competing with two that mean something else.
+    /// A border occupies a place nothing else uses, covers none of the
+    /// picture, and reads at a glance down a scrolling grid.
+    ///
+    /// Shown only where it is needed: a cover with colour of its own already
+    /// says this, and giving it a border too would make the shelf noisier
+    /// while saying nothing new.
+    @ViewBuilder private var downloadedCue: some View {
+        if isMonochrome, !awaitingDownload, image != nil {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.orange, .pink, .purple, .blue, .teal],
+                        startPoint: .topLeading, endPoint: .bottomTrailing),
+                    lineWidth: 3)
         }
     }
 
