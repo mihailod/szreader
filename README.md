@@ -38,6 +38,13 @@ Import to browse and fetch metadata and Download to read.
   * **[Stripovi.com](https://www.stripovi.com/index.asp?page=online-comics-frontpage)**
 — free Croatian web comics. Switch it on to see the index then  Download individually to read.
 
+  * **[Spectrum Computing](https://spectrumcomputing.co.uk)** — English-language scans
+for the Sinclair machines (ZX Spectrum, ZX81, QL), indexed from the open ZXDB database
+and downloaded from the Internet Archive, in three switchable sub-sources:
+Magazines (Crash, Your Sinclair, Sinclair User, ZX Computing and the wider 8-bit press),
+Fanzines, and Books by imprint (Usborne, Interface, Melbourne House and more).
+Download individually to read.
+
 * **Bug fixes and various improvements** including: performance optimizations, Source panel enhancements,
 honouring server cooldown periods, better square page cover handling.
 

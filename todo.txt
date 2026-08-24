@@ -1,5 +1,7 @@
 - clear xcode warnings
 
+-------------
+
 additional sources:
 
 - Image comics first issues
@@ -11,5 +13,42 @@ no account, index everything offline like retrospec
 - Digital Comics Museum https://digitalcomicmuseum.com
 waiting for activation email
 
+
+-------------------
+
+Tier 1 — best fit, verified
+
+1. Vintage Apple — vintageapple.org · Shape A · this is the one I'd do first
+Byte (1975–1998), Macworld (1984–2005), MacUser (1984–1997), Softalk (1980–1984), Apple develop, PC World. I confirmed the issue pages are chronological tables with thumbnail, title, year and scan date, and that they link direct PDFs with a self-describing filename (/byte/pdf/197509_Byte_Magazine_Vol_00-01_....pdf) — no account, no captcha. That is RetroSpec's exact shape: swift run vintageapple-build against a handful of index pages, year and month parsed off the filename, six series. It also fills BombJack's biggest hole — BombJack is Commodore/Amiga/8-bit, and Byte + the Apple press is the other half of the era.
+
+2. Archive.org, as a collection browser — Shape C, but with no HTML parsing at all
+You already ship ArchiveOrgClient/ArchiveOrgFiles/ArchiveOrgItem and a hand-picked 4-item index. The upgrade is to point the existing browser at advancedsearch.php?...&output=json scoped to a curated allowlist of collections and let a reader search on device. Sizes I measured today: computermagazines = 46,228 items, magazine_rack = 647,703. No shipped catalogue, no rebuild step, no new download path — the import already handles a scanned magazine item. Highest content-per-line-of-code by a wide margin, and the domain fence is already written.
+
+3. Digital Comics Museum — already on your todo · Shape C, not A
+Worth recording what I found while you wait on that activation email: digitalcomicmuseum.com returns 403 to a plain fetch (Cloudflare). So a dcm-build tool would be fighting a bot wall on every rebuild, while a WKWebView won't notice. Build it as ComicBookPlus's twin — same Golden Age public-domain material, same free-account-to-download model, so ComicBookPlusPage.swift + Store+ComicBookPlusImport.swift are close to a straight copy.
+
+Tier 2 — strong content, more work
+
+4. Spectrum Computing — spectrumcomputing.co.uk · Shape A, sourced from a database rather than scraped
+The magazine index lists 282 paper magazines, 69 newsletters/zines and 98 electronic magazines, most marked complete. The important part: the site is a front end for ZXDB, an open database (github.com/zxdb/ZXDB, ODbL 1.0) that has a magazines table and ships as a MySQL dump. So spectrum-build could read a published database instead of ~1,300 page fetches — by far the cleanest generator in the project. Needs one probe to confirm the dump carries download paths, not just metadata.
+
+5. Out-of-Print Archive — outofprintarchive.com · Shape A
+Games magazines, free, and it hands out CBZ — your native format, zero new decoding. They self-restrict to titles out of print for 10+ years unless the publisher says otherwise, which is a cleaner posture than most scan sites.
+
+6. Amiga Magazine Rack — amr.abime.net · Shape B (Stripovi's shape)
+100+ titles: Amiga Format, CU Amiga, Amiga Power, The One, Zzap, plus international editions. No account. But it serves indexed page images, not PDFs, so it's the loose-pages path, not the archive path. Note the overlap with BombJack's Amiga category — check how much before committing.
+
+7. Atarimania — atarimania.com · shape unknown
+Advertises 122,388 magazine pages and 80,331 book/doc pages. My probe of the magazine section 404'd, so I can't tell you yet whether it's downloadable PDFs or an on-site viewer. One hour of probing decides whether it's a Shape A or a Shape B.
+
+Tier 3 — a different flavour: currently-published, licence-clean
+
+These are worth having precisely because they're unambiguous — a source you can name in an App Store review reply without a paragraph of explanation.
+
+8. Full Circle Magazine — fullcirclemagazine.org · Shape A, near-trivial
+Currently at issue 231 (July 2026), Creative Commons Share-Alike, and the URLs are guessable: dl.fullcirclemagazine.org/issue231_en.pdf (and .epub). The catalogue generator is a loop and a HEAD request. Monthly, still running, so the shelf gains an issue without a rebuild if you allow a small probe-ahead.
+
+9. Raspberry Pi Press — magazine.raspberrypi.com · Shape A
+Raspberry Pi Official Magazine (ex-MagPi, 168+ issues) offers free PDF downloads; HackSpace and Hello World are the same model, all CC-licensed. Caveat I hit: Wireframe is gone — wireframe.raspberrypi.com now 301s to whynowgaming.com. Its ~60 issues were the gaming-magazine one, so if you want them, find where the PDFs landed before building against that host.
 		
 

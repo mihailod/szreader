@@ -1,0 +1,2115 @@
+{
+  "base" : "https://archive.org/download/",
+  "generated" : "2026-08-23",
+  "issues" : [
+    {
+      "bytes" : 114874005,
+      "cover" : "explorers-guide-to-the-zx-spectrum-and-zx-81-kasper-boonacme/page/n0_w1024.jpg",
+      "id" : "book-2000471",
+      "number" : 1,
+      "series" : "addison-wesley-productions",
+      "thumb" : "explorers-guide-to-the-zx-spectrum-and-zx-81-kasper-boonacme/__ia_thumb.jpg",
+      "title" : "Explorer's Guide to the ZX Spectrum and ZX81",
+      "zip" : "explorers-guide-to-the-zx-spectrum-and-zx-81-kasper-boonacme/Explorers_guide_to_the_ZX_Spectrum_and_ZX81(Kasper_BOON)(acme).pdf"
+    },
+    {
+      "bytes" : 78427659,
+      "cover" : "timex-sinclair-computer-games-programs/page/n0_w1024.jpg",
+      "id" : "book-2001095",
+      "number" : 1,
+      "series" : "arcsoft-publishers",
+      "thumb" : "timex-sinclair-computer-games-programs/__ia_thumb.jpg",
+      "title" : "Timex/Sinclair Computer Games Programs",
+      "zip" : "timex-sinclair-computer-games-programs/Timex%20Sinclair%20Computer%20Games%20Programs.pdf"
+    },
+    {
+      "bytes" : 16181416,
+      "cover" : "page-1983-101-timex-sinclair-programming-tricks/page/n0_w1024.jpg",
+      "id" : "book-2001668",
+      "number" : 2,
+      "series" : "arcsoft-publishers",
+      "thumb" : "page-1983-101-timex-sinclair-programming-tricks/__ia_thumb.jpg",
+      "title" : "101 Timex 1000/Sinclair ZX-81 Programming Tips & Tricks",
+      "zip" : "page-1983-101-timex-sinclair-programming-tricks/page-1983-101-timex-sinclair-programming-tricks.pdf"
+    },
+    {
+      "bytes" : 8695702,
+      "cover" : "tk-90-x-primeiros-passos/page/n0_w1024.jpg",
+      "id" : "book-2000141",
+      "number" : 1,
+      "series" : "armada",
+      "thumb" : "tk-90-x-primeiros-passos/__ia_thumb.jpg",
+      "title" : "First Steps with Your Spectrum volume 1",
+      "zip" : "tk-90-x-primeiros-passos/TK90X-PrimeirosPassos.pdf"
+    },
+    {
+      "bytes" : 1814264,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000033",
+      "number" : 1,
+      "series" : "bernard-babani-publishing-ltd",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "The Art of Programming the 16K ZX81",
+      "zip" : "zx-books-img/ArtOfProgrammingThe16KZX81The(ZX81-16K-LerenProgrammeren)(DeMuiderkringB.V.).pdf"
+    },
+    {
+      "bytes" : 16091578,
+      "cover" : "art-of-programming-the-zx-spectrum/page/n0_w1024.jpg",
+      "id" : "book-2000034",
+      "number" : 2,
+      "series" : "bernard-babani-publishing-ltd",
+      "thumb" : "art-of-programming-the-zx-spectrum/__ia_thumb.jpg",
+      "title" : "The Art of Programming the ZX Spectrum",
+      "zip" : "art-of-programming-the-zx-spectrum/Art%20of%20Programming%20the%20ZX%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 35959220,
+      "cover" : "an-introduction-to-computer-communications-ra-penfoldacme/page/n0_w1024.jpg",
+      "id" : "book-2000197",
+      "number" : 3,
+      "series" : "bernard-babani-publishing-ltd",
+      "thumb" : "an-introduction-to-computer-communications-ra-penfoldacme/__ia_thumb.jpg",
+      "title" : "An Introduction to Computer Communications",
+      "zip" : "an-introduction-to-computer-communications-ra-penfoldacme/An_introduction_to_computer_communications(RA_PENFOLD)(acme).pdf"
+    },
+    {
+      "bytes" : 45036030,
+      "cover" : "an-introduction-to-z-80-machine-code-ra-jw-penfoldacme/page/n0_w1024.jpg",
+      "id" : "book-2000478",
+      "number" : 4,
+      "series" : "bernard-babani-publishing-ltd",
+      "thumb" : "an-introduction-to-z-80-machine-code-ra-jw-penfoldacme/__ia_thumb.jpg",
+      "title" : "An Introduction to Z80 Machine Code",
+      "zip" : "an-introduction-to-z-80-machine-code-ra-jw-penfoldacme/An_introduction_to_Z80_machine_code(RA_JW_PENFOLD(acme).pdf"
+    },
+    {
+      "bytes" : 61215189,
+      "cover" : "a-z-80-workshop-manual-e-a-parracme/page/n0_w1024.jpg",
+      "id" : "book-2001096",
+      "number" : 5,
+      "series" : "bernard-babani-publishing-ltd",
+      "thumb" : "a-z-80-workshop-manual-e-a-parracme/__ia_thumb.jpg",
+      "title" : "A Z-80 Workshop Manual",
+      "zip" : "a-z-80-workshop-manual-e-a-parracme/A_Z-80_Workshop_Manual(E_A_PARR)(acme).pdf"
+    },
+    {
+      "bytes" : 77060155,
+      "cover" : "the-complete-sinclair-database-admas-beardsmore-giblertacme/page/n0_w1024.jpg",
+      "id" : "book-2000595",
+      "number" : 1,
+      "series" : "big-brother-publications",
+      "thumb" : "the-complete-sinclair-database-admas-beardsmore-giblertacme/__ia_thumb.jpg",
+      "title" : "The Complete Sinclair Database",
+      "zip" : "the-complete-sinclair-database-admas-beardsmore-giblertacme/The_complete_SINCLAIR_Database(ADMAS_BEARDSMORE_GIBLERT)(acme).pdf"
+    },
+    {
+      "bytes" : 34688887,
+      "cover" : "NH2021_z88userguide.pdf/page/n0_w1024.jpg",
+      "id" : "book-2001607",
+      "number" : 1,
+      "series" : "cambridge-computer",
+      "thumb" : "NH2021_z88userguide.pdf/__ia_thumb.jpg",
+      "title" : "Z88 User Manual",
+      "zip" : "NH2021_z88userguide.pdf/z88userguide.pdf"
+    },
+    {
+      "bytes" : 87542846,
+      "cover" : "zx-spectrum-manual-del-programador-john-y-catherine-grant/page/n0_w1024.jpg",
+      "id" : "book-2000434",
+      "number" : 1,
+      "series" : "cambridge-university-press",
+      "thumb" : "zx-spectrum-manual-del-programador-john-y-catherine-grant/__ia_thumb.jpg",
+      "title" : "The ZX Programmer's Companion",
+      "zip" : "zx-spectrum-manual-del-programador-john-y-catherine-grant/ZX_Spectrum_Manual_del_Programador,_John_y_Catherine_Grant.pdf"
+    },
+    {
+      "bytes" : 77230977,
+      "cover" : "zx-books-UK/page/n0_w1024.jpg",
+      "id" : "book-2000063",
+      "number" : 1,
+      "series" : "century-communications-ltd",
+      "thumb" : "zx-books-UK/__ia_thumb.jpg",
+      "title" : "The Century Computer Programming Course",
+      "zip" : "zx-books-UK/TheCenturyComputerProgrammingCourse.pdf"
+    },
+    {
+      "bytes" : 29115222,
+      "cover" : "zx-books-UK/page/n0_w1024.jpg",
+      "id" : "book-2000172",
+      "number" : 2,
+      "series" : "century-communications-ltd",
+      "thumb" : "zx-books-UK/__ia_thumb.jpg",
+      "title" : "The Fourth Protocol: Playing the Game",
+      "zip" : "zx-books-UK/TheFourthProtocol-PlayingTheGame.pdf"
+    },
+    {
+      "bytes" : 13945367,
+      "cover" : "zx-spectrum-que-es-para-que-sirve-y-como-se-usa-1a-ed/page/n0_w1024.jpg",
+      "id" : "book-2000356",
+      "number" : 3,
+      "series" : "century-communications-ltd",
+      "thumb" : "zx-spectrum-que-es-para-que-sirve-y-como-se-usa-1a-ed/__ia_thumb.jpg",
+      "title" : "The Spectrum Handbook",
+      "zip" : "zx-spectrum-que-es-para-que-sirve-y-como-se-usa-1a-ed/ZX_SPECTRUM,_Que_es,_Para_que_sirve_y_Como_se_usa_(1aED).pdf"
+    },
+    {
+      "bytes" : 113648722,
+      "cover" : "best_of_pcw/page/n0_w1024.jpg",
+      "id" : "book-2000466",
+      "number" : 4,
+      "series" : "century-communications-ltd",
+      "thumb" : "best_of_pcw/__ia_thumb.jpg",
+      "title" : "Best of PCW - Software for the Spectrum",
+      "zip" : "best_of_pcw/best_of_pcw.pdf"
+    },
+    {
+      "bytes" : 122347986,
+      "cover" : "spectrum-wargaming/page/n0_w1024.jpg",
+      "id" : "book-2000376",
+      "number" : 1,
+      "series" : "collins-educational-ltd",
+      "thumb" : "spectrum-wargaming/__ia_thumb.jpg",
+      "title" : "Spectrum Wargaming",
+      "zip" : "spectrum-wargaming/SpectrumWargaming.pdf"
+    },
+    {
+      "bytes" : 2533377,
+      "cover" : "timhartnellvz200giantbookofgames/page/n0_w1024.jpg",
+      "id" : "book-2000670",
+      "number" : 1,
+      "series" : "computer-publications",
+      "thumb" : "timhartnellvz200giantbookofgames/__ia_thumb.jpg",
+      "title" : "Making the Most of Your ZX80",
+      "zip" : "timhartnellvz200giantbookofgames/Making%20The%20Most%20Of%20Your%20ZX80.pdf"
+    },
+    {
+      "bytes" : 68301940,
+      "cover" : "programacion-paso-a-paso-zx-spectrum/page/n0_w1024.jpg",
+      "id" : "book-2000384",
+      "number" : 1,
+      "series" : "dorling-kindersley-ltd",
+      "thumb" : "programacion-paso-a-paso-zx-spectrum/__ia_thumb.jpg",
+      "title" : "Step-by-Step Programming ZX Spectrum+ - Book One",
+      "zip" : "programacion-paso-a-paso-zx-spectrum/Programacion%20Paso-a-Paso%20ZX%20Spectrum+%20Libro1.pdf"
+    },
+    {
+      "bytes" : 72311099,
+      "cover" : "programacion-paso-a-paso-zx-spectrum/page/n0_w1024.jpg",
+      "id" : "book-2000459",
+      "number" : 2,
+      "series" : "dorling-kindersley-ltd",
+      "thumb" : "programacion-paso-a-paso-zx-spectrum/__ia_thumb.jpg",
+      "title" : "Step-by-Step Programming ZX Spectrum+ - Book Two",
+      "zip" : "programacion-paso-a-paso-zx-spectrum/Programacion%20Paso-a-Paso%20ZX%20Spectrum+%20Libro2.pdf"
+    },
+    {
+      "bytes" : 82030206,
+      "cover" : "programacion-paso-a-paso-zx-spectrum/page/n0_w1024.jpg",
+      "id" : "book-2001330",
+      "number" : 3,
+      "series" : "dorling-kindersley-ltd",
+      "thumb" : "programacion-paso-a-paso-zx-spectrum/__ia_thumb.jpg",
+      "title" : "Step-by-Step Programming ZX Spectrum - Book One",
+      "zip" : "programacion-paso-a-paso-zx-spectrum/Programacion%20Paso-a-Paso%20ZX%20Spectrum%20Libro1.pdf"
+    },
+    {
+      "bytes" : 71768225,
+      "cover" : "programacion-paso-a-paso-zx-spectrum/page/n0_w1024.jpg",
+      "id" : "book-2001331",
+      "number" : 4,
+      "series" : "dorling-kindersley-ltd",
+      "thumb" : "programacion-paso-a-paso-zx-spectrum/__ia_thumb.jpg",
+      "title" : "Step-by-Step Programming ZX Spectrum - Book Two",
+      "zip" : "programacion-paso-a-paso-zx-spectrum/Programacion%20Paso-a-Paso%20ZX%20Spectrum%20Libro2.pdf"
+    },
+    {
+      "bytes" : 23777330,
+      "cover" : "adventurerscompanion/page/n0_w1024.jpg",
+      "id" : "book-2000027",
+      "number" : 1,
+      "series" : "duckworth-educational-computing",
+      "thumb" : "adventurerscompanion/__ia_thumb.jpg",
+      "title" : "The Adventurer's Companion",
+      "zip" : "adventurerscompanion/adventurerscompanion.pdf"
+    },
+    {
+      "bytes" : 68563627,
+      "cover" : "duckworth-the-adventurers-notebook/page/n0_w1024.jpg",
+      "id" : "book-2000028",
+      "number" : 2,
+      "series" : "duckworth-educational-computing",
+      "thumb" : "duckworth-the-adventurers-notebook/__ia_thumb.jpg",
+      "title" : "The Adventurer's Notebook",
+      "zip" : "duckworth-the-adventurers-notebook/Duckworth%20-%20The%20Adventurer's%20Notebook.pdf"
+    },
+    {
+      "bytes" : 236878327,
+      "cover" : "alternative-languages-for-the-spectrum/page/n0_w1024.jpg",
+      "id" : "book-2000030",
+      "number" : 3,
+      "series" : "duckworth-educational-computing",
+      "thumb" : "alternative-languages-for-the-spectrum/__ia_thumb.jpg",
+      "title" : "Alternative Languages for the Spectrum",
+      "zip" : "alternative-languages-for-the-spectrum/Alternative%20Languages%20for%20the%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 3108628,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2001427",
+      "number" : 1,
+      "series" : "edward-arnold-ltd",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "Basic BASIC",
+      "zip" : "zx-books-img/BasicBASIC_2ndEdition.pdf"
+    },
+    {
+      "bytes" : 131908002,
+      "cover" : "30-music-programs/page/n0_w1024.jpg",
+      "id" : "book-2001368",
+      "number" : 1,
+      "series" : "electret-scientific-company",
+      "thumb" : "30-music-programs/__ia_thumb.jpg",
+      "title" : "30 Music Programs for Timex Sinclair 2068",
+      "zip" : "30-music-programs/30%20Music%20Programs.pdf"
+    },
+    {
+      "bytes" : 59970028,
+      "cover" : "better-programming-for-your-spectrum-and-zx-81acme/page/n0_w1024.jpg",
+      "id" : "book-2000052",
+      "number" : 1,
+      "series" : "fontana-publishing",
+      "thumb" : "better-programming-for-your-spectrum-and-zx-81acme/__ia_thumb.jpg",
+      "title" : "Better Programming for Your Spectrum and ZX81",
+      "zip" : "better-programming-for-your-spectrum-and-zx-81acme/Better_programming_for_your_Spectrum_and_ZX81(acme).pdf"
+    },
+    {
+      "bytes" : 6723712,
+      "cover" : "zx-books-BR/page/n0_w1024.jpg",
+      "id" : "book-2000840",
+      "number" : 2,
+      "series" : "fontana-publishing",
+      "thumb" : "zx-books-BR/__ia_thumb.jpg",
+      "title" : "Second Steps with Your Spectrum",
+      "zip" : "zx-books-BR/SecondStepsWithYourSpectrum(Aperfeicoando-seNoTK95).pdf"
+    },
+    {
+      "bytes" : 7714609,
+      "cover" : "timhartnellvz200giantbookofgames/page/n0_w1024.jpg",
+      "id" : "book-2000157",
+      "number" : 1,
+      "series" : "futura",
+      "thumb" : "timhartnellvz200giantbookofgames/__ia_thumb.jpg",
+      "title" : "Getting Started on Your Spectrum",
+      "zip" : "timhartnellvz200giantbookofgames/TimHartnell_GettingStartedOnYourSpectrum.pdf"
+    },
+    {
+      "bytes" : 79256512,
+      "cover" : "spectrum-128-companion/page/n0_w1024.jpg",
+      "id" : "book-2000343",
+      "number" : 1,
+      "series" : "glentop-publishers-ltd",
+      "thumb" : "spectrum-128-companion/__ia_thumb.jpg",
+      "title" : "The Spectrum 128 Companion",
+      "zip" : "spectrum-128-companion/Spectrum128Companion.pdf"
+    },
+    {
+      "bytes" : 8652903,
+      "cover" : "learning-to-use-the-zx-spectrum/page/n0_w1024.jpg",
+      "id" : "book-2000217",
+      "number" : 1,
+      "series" : "gower-publishing-co-ltd",
+      "thumb" : "learning-to-use-the-zx-spectrum/__ia_thumb.jpg",
+      "title" : "Learning to Use the ZX Spectrum Computer",
+      "zip" : "learning-to-use-the-zx-spectrum/Learning_To_Use_The_ZX_Spectrum.pdf"
+    },
+    {
+      "bytes" : 10069143,
+      "cover" : "expl4/page/n0_w1024.jpg",
+      "id" : "book-2000132",
+      "number" : 1,
+      "series" : "granada-publishing",
+      "thumb" : "expl4/__ia_thumb.jpg",
+      "title" : "Exploring FORTH",
+      "zip" : "expl4/ExploringForth.pdf"
+    },
+    {
+      "bytes" : 7551252,
+      "cover" : "tibook_introducing-logo-allan/page/n0_w1024.jpg",
+      "id" : "book-2000193",
+      "number" : 2,
+      "series" : "granada-publishing",
+      "thumb" : "tibook_introducing-logo-allan/__ia_thumb.jpg",
+      "title" : "Introducing LOGO",
+      "zip" : "tibook_introducing-logo-allan/introducing-logo-allan.pdf"
+    },
+    {
+      "bytes" : 3394445,
+      "cover" : "spectrum-graphics-and-sound/page/n0_w1024.jpg",
+      "id" : "book-2000355",
+      "number" : 3,
+      "series" : "granada-publishing",
+      "thumb" : "spectrum-graphics-and-sound/__ia_thumb.jpg",
+      "title" : "Spectrum Graphics and Sound",
+      "zip" : "spectrum-graphics-and-sound/spectrum-graphics-and-sound.pdf"
+    },
+    {
+      "bytes" : 99205521,
+      "cover" : "zx-books-ES/page/n0_w1024.jpg",
+      "id" : "book-2000436",
+      "number" : 4,
+      "series" : "granada-publishing",
+      "thumb" : "zx-books-ES/__ia_thumb.jpg",
+      "title" : "The ZX Spectrum and How to Get the Most from It",
+      "zip" : "zx-books-ES/ZXSpectrum-ComoObtenerElMaximoRendimiento.pdf"
+    },
+    {
+      "bytes" : 47007104,
+      "cover" : "zxspectrum-how-to-use-and-program/page/n0_w1024.jpg",
+      "id" : "book-2000945",
+      "number" : 5,
+      "series" : "granada-publishing",
+      "thumb" : "zxspectrum-how-to-use-and-program/__ia_thumb.jpg",
+      "title" : "The ZX Spectrum: How to Use and Program",
+      "zip" : "zxspectrum-how-to-use-and-program/ZXSpectrumHowToUseAndProgram.pdf"
+    },
+    {
+      "bytes" : 2256953,
+      "cover" : "computer-programming-1-2-3/page/n0_w1024.jpg",
+      "id" : "book-2001167",
+      "number" : 1,
+      "series" : "grosset-dunlap",
+      "thumb" : "computer-programming-1-2-3/__ia_thumb.jpg",
+      "title" : "Computer Programming 1, 2, 3!",
+      "zip" : "computer-programming-1-2-3/ComputerProgramming1,2,3.pdf"
+    },
+    {
+      "bytes" : 1893010,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000012",
+      "number" : 1,
+      "series" : "hewson-consultants-ltd",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "40 Best Machine Code Routines for the ZX Spectrum",
+      "zip" : "zx-books-img/40BestMachineCodeRoutinesForTheZXSpectrum(ZXSpectrumMachinetaalroutines)(KluwerTechnischeBoeken).pdf"
+    },
+    {
+      "bytes" : 199004746,
+      "cover" : "Sinclair_ZX_Spectrum_and_Commodore_64_Book-2012/page/n0_w1024.jpg",
+      "id" : "book-2001603",
+      "number" : 1,
+      "series" : "imagine-publishing-ltd",
+      "thumb" : "Sinclair_ZX_Spectrum_and_Commodore_64_Book-2012/__ia_thumb.jpg",
+      "title" : "The ZX Spectrum Book - 30th Anniversary Special",
+      "zip" : "Sinclair_ZX_Spectrum_and_Commodore_64_Book-2012/Sinclair_ZX_Spectrum_and_Commodore_64_Book-2012.pdf"
+    },
+    {
+      "bytes" : 51646176,
+      "cover" : "20-simple-electronics-projects-for-the-zx-81-and-other-computers-stephen-adamsacme/page/n0_w1024.jpg",
+      "id" : "book-2000004",
+      "number" : 1,
+      "series" : "interface-publications-ltd",
+      "thumb" : "20-simple-electronics-projects-for-the-zx-81-and-other-computers-stephen-adamsacme/__ia_thumb.jpg",
+      "title" : "20 Simple Electronic Projects for the ZX81 and Other Computers",
+      "zip" : "20-simple-electronics-projects-for-the-zx-81-and-other-computers-stephen-adamsacme/20_simple_electronics_projects_for_the_ZX81_and_other_computers(Stephen_ADAMS)(acme).pdf"
+    },
+    {
+      "bytes" : 2209989,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000015",
+      "number" : 2,
+      "series" : "interface-publications-ltd",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "49 Explosive Games for the ZX81",
+      "zip" : "zx-books-img/49ExplosiveGamesForTheZX81(49ExplosiveSpieleFurDenSinclairZX81)(HueberSoftware).pdf"
+    },
+    {
+      "bytes" : 16491295,
+      "cover" : "49giochiesplosiviperlospectrum/page/n0_w1024.jpg",
+      "id" : "book-2000016",
+      "number" : 3,
+      "series" : "interface-publications-ltd",
+      "thumb" : "49giochiesplosiviperlospectrum/__ia_thumb.jpg",
+      "title" : "49 Explosive Games for the ZX Spectrum",
+      "zip" : "49giochiesplosiviperlospectrum/49%20giochi%20esplosivi%20per%20lo%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 1470610,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000017",
+      "number" : 4,
+      "series" : "interface-publications-ltd",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "60 Games and Applications for the ZX Spectrum",
+      "zip" : "zx-books-img/60GamesAndApplicationsForTheZXSpectrum(60SpieleUndNutzlicheAnwendungenFurDenZXSpectrum)(HueberSoftware).pdf"
+    },
+    {
+      "bytes" : 139161516,
+      "cover" : "advanced-z-80-machine-code-programming-william-nitschkeacme/page/n0_w1024.jpg",
+      "id" : "book-2000026",
+      "number" : 5,
+      "series" : "interface-publications-ltd",
+      "thumb" : "advanced-z-80-machine-code-programming-william-nitschkeacme/__ia_thumb.jpg",
+      "title" : "Advanced Z80 Machine Code Programming",
+      "zip" : "advanced-z-80-machine-code-programming-william-nitschkeacme/Advanced_Z80_Machine_Code_Programming(William_NITSCHKE)(acme).pdf"
+    },
+    {
+      "bytes" : 3792139,
+      "cover" : "zx-books-PT/page/n0_w1024.jpg",
+      "id" : "book-2000097",
+      "number" : 6,
+      "series" : "interface-publications-ltd",
+      "thumb" : "zx-books-PT/__ia_thumb.jpg",
+      "title" : "Creating Adventure Programs on Your Computer",
+      "zip" : "zx-books-PT/CreatingAdventureProgramsOnYourComputer(ProgramarAventurasNoSeuComputador).pdf"
+    },
+    {
+      "bytes" : 17140603,
+      "cover" : "zx-books-BR/page/n0_w1024.jpg",
+      "id" : "book-2000098",
+      "number" : 7,
+      "series" : "interface-publications-ltd",
+      "thumb" : "zx-books-BR/__ia_thumb.jpg",
+      "title" : "Creating Adventure Programs on Your ZX Spectrum",
+      "zip" : "zx-books-BR/NovasAventurasNoSeuZXSpectrum.pdf"
+    },
+    {
+      "bytes" : 3885331,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000114",
+      "number" : 8,
+      "series" : "interface-publications-ltd",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "Dynamic Games for the ZX Spectrum",
+      "zip" : "zx-books-img/DynamicGamesForTheZXSpectrum(20DynamischeSpellenVoorDeZXSpectrum)(DelfiaPressBV).pdf"
+    },
+    {
+      "bytes" : 106586344,
+      "cover" : "exploring-expert-systems-on-your-microcomputer/page/n0_w1024.jpg",
+      "id" : "book-2000131",
+      "number" : 9,
+      "series" : "interface-publications-ltd",
+      "thumb" : "exploring-expert-systems-on-your-microcomputer/__ia_thumb.jpg",
+      "title" : "Exploring Expert Systems on Your Microcomputer",
+      "zip" : "exploring-expert-systems-on-your-microcomputer/ExploringExpertSystemsOnYourMicrocomputer.pdf"
+    },
+    {
+      "bytes" : 66976099,
+      "cover" : "allascopertadelqlilcomputersinclair/page/n0_w1024.jpg",
+      "id" : "book-2000134",
+      "number" : 10,
+      "series" : "interface-publications-ltd",
+      "thumb" : "allascopertadelqlilcomputersinclair/__ia_thumb.jpg",
+      "title" : "Exploring the Sinclair QL - An Introduction to Superbasic",
+      "zip" : "allascopertadelqlilcomputersinclair/Alla%20scoperta%20del%20QL%20il%20computer%20Sinclair.pdf"
+    },
+    {
+      "bytes" : 3606110,
+      "cover" : "timhartnellvz200giantbookofgames/page/n0_w1024.jpg",
+      "id" : "book-2000156",
+      "number" : 11,
+      "series" : "interface-publications-ltd",
+      "thumb" : "timhartnellvz200giantbookofgames/__ia_thumb.jpg",
+      "title" : "Getting Acquainted with Your ZX81",
+      "zip" : "timhartnellvz200giantbookofgames/Getting%20Acquainted%20With%20Your%20ZX81.pdf"
+    },
+    {
+      "bytes" : 7415650,
+      "cover" : "impariamoilpascalsulnostrocomputer/page/n0_w1024.jpg",
+      "id" : "book-2000215",
+      "number" : 12,
+      "series" : "interface-publications-ltd",
+      "thumb" : "impariamoilpascalsulnostrocomputer/__ia_thumb.jpg",
+      "title" : "Learn PASCAL on Your BASIC Micro",
+      "zip" : "impariamoilpascalsulnostrocomputer/Impariamo%20il%20Pascal%20sul%20nostro%20computer.pdf"
+    },
+    {
+      "bytes" : 26249446,
+      "cover" : "masteringmachinecodeonyourzx81/page/n0_w1024.jpg",
+      "id" : "book-2000236",
+      "number" : 13,
+      "series" : "interface-publications-ltd",
+      "thumb" : "masteringmachinecodeonyourzx81/__ia_thumb.jpg",
+      "title" : "Mastering Machine Code on Your ZX81 or ZX80",
+      "zip" : "masteringmachinecodeonyourzx81/MasteringMachineCodeOnYourZX81.pdf"
+    },
+    {
+      "bytes" : 15139658,
+      "cover" : "programmazionedellozxspectrum/page/n0_w1024.jpg",
+      "id" : "book-2000294",
+      "number" : 14,
+      "series" : "interface-publications-ltd",
+      "thumb" : "programmazionedellozxspectrum/__ia_thumb.jpg",
+      "title" : "Programming Your ZX Spectrum",
+      "zip" : "programmazionedellozxspectrum/Programmazione%20dello%20ZX%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 13558469,
+      "cover" : "illinguaggiomacchinadellospectrum/page/n0_w1024.jpg",
+      "id" : "book-2000361",
+      "number" : 15,
+      "series" : "interface-publications-ltd",
+      "thumb" : "illinguaggiomacchinadellospectrum/__ia_thumb.jpg",
+      "title" : "Spectrum Machine Code Made Easy Volume 1",
+      "zip" : "illinguaggiomacchinadellospectrum/Il%20linguaggio%20macchina%20dello%20Spectrum%20-%20Vol.1.pdf"
+    },
+    {
+      "bytes" : 8133103,
+      "cover" : "illinguaggiomacchinadellospectrum/page/n0_w1024.jpg",
+      "id" : "book-2000458",
+      "number" : 16,
+      "series" : "interface-publications-ltd",
+      "thumb" : "illinguaggiomacchinadellospectrum/__ia_thumb.jpg",
+      "title" : "Spectrum Machine Code Made Easy Volume 2",
+      "zip" : "illinguaggiomacchinadellospectrum/Il%20linguaggio%20macchina%20dello%20Spectrum%20-%20Vol.2.pdf"
+    },
+    {
+      "bytes" : 4689350,
+      "cover" : "timhartnellvz200giantbookofgames/page/n0_w1024.jpg",
+      "id" : "book-2000472",
+      "number" : 17,
+      "series" : "interface-publications-ltd",
+      "thumb" : "timhartnellvz200giantbookofgames/__ia_thumb.jpg",
+      "title" : "Exploring Artificial Intelligence on Your Sinclair QL",
+      "zip" : "timhartnellvz200giantbookofgames/Exploring%20Artificial%20Intelligence%20on%20your%20Sinclair%20QL.pdf"
+    },
+    {
+      "bytes" : 6587791,
+      "cover" : "timhartnellvz200giantbookofgames/page/n0_w1024.jpg",
+      "id" : "book-2000830",
+      "number" : 18,
+      "series" : "interface-publications-ltd",
+      "thumb" : "timhartnellvz200giantbookofgames/__ia_thumb.jpg",
+      "title" : "Mastering Your Timex Sinclair 1000 Personal Computer",
+      "zip" : "timhartnellvz200giantbookofgames/Tim_Hartnell_MasteringYourTimexSinclair1000PersonalComputer.pdf"
+    },
+    {
+      "bytes" : 52109396,
+      "cover" : "the-zx81-companion/page/n0_w1024.jpg",
+      "id" : "book-2000453",
+      "number" : 1,
+      "series" : "linsac",
+      "thumb" : "the-zx81-companion/__ia_thumb.jpg",
+      "title" : "The ZX81 Companion",
+      "zip" : "the-zx81-companion/TheZX81Companion.pdf"
+    },
+    {
+      "bytes" : 42714407,
+      "cover" : "the-zx80-companion/page/n0_w1024.jpg",
+      "id" : "book-2000538",
+      "number" : 2,
+      "series" : "linsac",
+      "thumb" : "the-zx80-companion/__ia_thumb.jpg",
+      "title" : "The ZX80 Companion",
+      "zip" : "the-zx80-companion/TheZX80Companion(2ndEd).pdf"
+    },
+    {
+      "bytes" : 12875080,
+      "cover" : "assembly-language-assembled-for-the-sinclair-zx81/page/n0_w1024.jpg",
+      "id" : "book-2000982",
+      "number" : 1,
+      "series" : "macmillan-education-ltd",
+      "thumb" : "assembly-language-assembled-for-the-sinclair-zx81/__ia_thumb.jpg",
+      "title" : "Assembly Language Assembled for the Sinclair ZX81",
+      "zip" : "assembly-language-assembled-for-the-sinclair-zx81/AssemblyLanguageAssembledForTheSinclairZX81.pdf"
+    },
+    {
+      "bytes" : 11624512,
+      "cover" : "roger-hutty-programming-in-z80-assembly-language/page/n0_w1024.jpg",
+      "id" : "book-2001057",
+      "number" : 2,
+      "series" : "macmillan-education-ltd",
+      "thumb" : "roger-hutty-programming-in-z80-assembly-language/__ia_thumb.jpg",
+      "title" : "Programming in Z80 Assembly Language",
+      "zip" : "roger-hutty-programming-in-z80-assembly-language/Roger%20Hutty%20-%20Programming%20in%20Z80%20Assembly%20Language.pdf"
+    },
+    {
+      "bytes" : 3654089,
+      "cover" : "load-dij-dij/page/n0_w1024.jpg",
+      "id" : "book-2001683",
+      "number" : 1,
+      "series" : "mark-r-jones",
+      "thumb" : "load-dij-dij/__ia_thumb.jpg",
+      "title" : "LOAD DIJ DIJ",
+      "zip" : "load-dij-dij/LOAD%20DIJ%20DIJ%20by%20Mark%20R.%20Jones%20-%20V3%20March%202022.pdf"
+    },
+    {
+      "bytes" : 12601412,
+      "cover" : "tecnicheavanzateinassemblerconlozxspectrum/page/n0_w1024.jpg",
+      "id" : "book-2000038",
+      "number" : 1,
+      "series" : "mcgraw-hill-book-company-uk-ltd",
+      "thumb" : "tecnicheavanzateinassemblerconlozxspectrum/__ia_thumb.jpg",
+      "title" : "Assembly Language for Arcade Games and Other Fast Spectrum Programs",
+      "zip" : "tecnicheavanzateinassemblerconlozxspectrum/Tecniche%20avanzate%20in%20Assembler%20con%20lo%20ZX%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 12570943,
+      "cover" : "lassemblerperlozxspectrum/page/n0_w1024.jpg",
+      "id" : "book-2000213",
+      "number" : 2,
+      "series" : "mcgraw-hill-book-company-uk-ltd",
+      "thumb" : "lassemblerperlozxspectrum/__ia_thumb.jpg",
+      "title" : "Learn and Use Assembly Language on the ZX Spectrum",
+      "zip" : "lassemblerperlozxspectrum/L'Assembler%20per%20lo%20ZX%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 9761764,
+      "cover" : "graficaavanzataconlozxspectrum/page/n0_w1024.jpg",
+      "id" : "book-2000354",
+      "number" : 3,
+      "series" : "mcgraw-hill-book-company-uk-ltd",
+      "thumb" : "graficaavanzataconlozxspectrum/__ia_thumb.jpg",
+      "title" : "The Spectrum Graphics Machine",
+      "zip" : "graficaavanzataconlozxspectrum/Grafica%20avanzata%20con%20lo%20ZX%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 71187648,
+      "cover" : "progettihardwareconlozxspectrum/page/n0_w1024.jpg",
+      "id" : "book-2000359",
+      "number" : 4,
+      "series" : "mcgraw-hill-book-company-uk-ltd",
+      "thumb" : "progettihardwareconlozxspectrum/__ia_thumb.jpg",
+      "title" : "Spectrum Interfacing and Projects",
+      "zip" : "progettihardwareconlozxspectrum/Progetti%20hardware%20con%20lo%20ZX%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 50253220,
+      "cover" : "programas_para_jovens_programadores-tk82-83-85-cp200/page/n0_w1024.jpg",
+      "id" : "book-2000456",
+      "number" : 5,
+      "series" : "mcgraw-hill-book-company-uk-ltd",
+      "thumb" : "programas_para_jovens_programadores-tk82-83-85-cp200/__ia_thumb.jpg",
+      "title" : "ZX81/TS1000 Programming for Young Programmers",
+      "zip" : "programas_para_jovens_programadores-tk82-83-85-cp200/programas_para_jovens_programadores-tk_82_83_85_cp200.pdf"
+    },
+    {
+      "bytes" : 12166723,
+      "cover" : "forthperspectrum/page/n0_w1024.jpg",
+      "id" : "book-2000024",
+      "number" : 1,
+      "series" : "melbourne-house",
+      "thumb" : "forthperspectrum/__ia_thumb.jpg",
+      "title" : "Advanced Spectrum FORTH",
+      "zip" : "forthperspectrum/Forth%20per%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 127217263,
+      "cover" : "c-for-beginners-ian-sinclair/page/n0_w1024.jpg",
+      "id" : "book-2000059",
+      "number" : 2,
+      "series" : "melbourne-house",
+      "thumb" : "c-for-beginners-ian-sinclair/__ia_thumb.jpg",
+      "title" : "C for Beginners",
+      "zip" : "c-for-beginners-ian-sinclair/C_for_Beginners(Ian_SINCLAIR).pdf"
+    },
+    {
+      "bytes" : 42792917,
+      "cover" : "The_Complete_Spectrum_ROM_Disassembly_ISBN_086759117/page/n0_w1024.jpg",
+      "id" : "book-2000076",
+      "number" : 3,
+      "series" : "melbourne-house",
+      "thumb" : "The_Complete_Spectrum_ROM_Disassembly_ISBN_086759117/__ia_thumb.jpg",
+      "title" : "The Complete Spectrum ROM Disassembly",
+      "zip" : "The_Complete_Spectrum_ROM_Disassembly_ISBN_086759117/The_Complete_Spectrum_ROM_Disassembly_ISBN_086759117.pdf"
+    },
+    {
+      "bytes" : 18286882,
+      "cover" : "guide-to-playing-the-hobbit/page/n0_w1024.jpg",
+      "id" : "book-2000171",
+      "number" : 4,
+      "series" : "melbourne-house",
+      "thumb" : "guide-to-playing-the-hobbit/__ia_thumb.jpg",
+      "title" : "A Guide to Playing the Hobbit",
+      "zip" : "guide-to-playing-the-hobbit/GuideToPlayingTheHobbit.pdf"
+    },
+    {
+      "bytes" : 37554268,
+      "cover" : "30-programs-for-the-zx-81-1-kacme/page/n0_w1024.jpg",
+      "id" : "book-2000265",
+      "number" : 5,
+      "series" : "melbourne-house",
+      "thumb" : "30-programs-for-the-zx-81-1-kacme/__ia_thumb.jpg",
+      "title" : "Not Only 30 Programs for the Sinclair ZX81",
+      "zip" : "30-programs-for-the-zx-81-1-kacme/30_programs_for_the_ZX81_1K(acme).pdf"
+    },
+    {
+      "bytes" : 3278592,
+      "cover" : "basic-programmas-voor-de-zxspectrum/page/n0_w1024.jpg",
+      "id" : "book-2000267",
+      "number" : 6,
+      "series" : "melbourne-house",
+      "thumb" : "basic-programmas-voor-de-zxspectrum/__ia_thumb.jpg",
+      "title" : "Over the Spectrum",
+      "zip" : "basic-programmas-voor-de-zxspectrum/OverTheSpectrum(BASIC-ProgrammasVoorDeZXSpectrum)(KluwerTechnischeBoeken).pdf"
+    },
+    {
+      "bytes" : 27920051,
+      "cover" : "lhardwaredellospectrum/page/n0_w1024.jpg",
+      "id" : "book-2000357",
+      "number" : 7,
+      "series" : "melbourne-house",
+      "thumb" : "lhardwaredellospectrum/__ia_thumb.jpg",
+      "title" : "Spectrum Hardware Manual",
+      "zip" : "lhardwaredellospectrum/L'hardware%20dello%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 16038234,
+      "cover" : "sinclairzxspectrumassemblerelinguaggiomacchinaperprincipianti/page/n0_w1024.jpg",
+      "id" : "book-2000363",
+      "number" : 8,
+      "series" : "melbourne-house",
+      "thumb" : "sinclairzxspectrumassemblerelinguaggiomacchinaperprincipianti/__ia_thumb.jpg",
+      "title" : "Spectrum Machine Language for the Absolute Beginner",
+      "zip" : "sinclairzxspectrumassemblerelinguaggiomacchinaperprincipianti/Sinclair%20ZX%20Spectrum%20assembler%20e%20linguaggio%20macchina%20per%20principianti.pdf"
+    },
+    {
+      "bytes" : 20507262,
+      "cover" : "illibrodelmicrodrivespectrum/page/n0_w1024.jpg",
+      "id" : "book-2000365",
+      "number" : 9,
+      "series" : "melbourne-house",
+      "thumb" : "illibrodelmicrodrivespectrum/__ia_thumb.jpg",
+      "title" : "Spectrum Microdrive Book",
+      "zip" : "illibrodelmicrodrivespectrum/Il%20libro%20del%20Microdrive%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 66790223,
+      "cover" : "spectrum-2-machine-language-joe-pritchard/page/n0_w1024.jpg",
+      "id" : "book-2000381",
+      "number" : 10,
+      "series" : "melbourne-house",
+      "thumb" : "spectrum-2-machine-language-joe-pritchard/__ia_thumb.jpg",
+      "title" : "Spectrum+2: Machine Language for the Absolute Beginner",
+      "zip" : "spectrum-2-machine-language-joe-pritchard/Spectrum%20+2%20Machine%20Language%20(Joe%20Pritchard).pdf"
+    },
+    {
+      "bytes" : 4399565,
+      "cover" : "understanding_your_spectrum/page/n0_w1024.jpg",
+      "id" : "book-2000400",
+      "number" : 11,
+      "series" : "melbourne-house",
+      "thumb" : "understanding_your_spectrum/__ia_thumb.jpg",
+      "title" : "Understanding Your Spectrum",
+      "zip" : "understanding_your_spectrum/UnderstandingYourSpectrum.pdf"
+    },
+    {
+      "bytes" : 5256743,
+      "cover" : "understanding-your-zx81-rom/page/n0_w1024.jpg",
+      "id" : "book-2000401",
+      "number" : 12,
+      "series" : "melbourne-house",
+      "thumb" : "understanding-your-zx81-rom/__ia_thumb.jpg",
+      "title" : "Understanding Your ZX81 ROM",
+      "zip" : "understanding-your-zx81-rom/UnderstandingYourZX81ROM.pdf"
+    },
+    {
+      "bytes" : 112917556,
+      "cover" : "z-80-reference-guide-alan-tullyacme/page/n0_w1024.jpg",
+      "id" : "book-2000433",
+      "number" : 13,
+      "series" : "melbourne-house",
+      "thumb" : "z-80-reference-guide-alan-tullyacme/__ia_thumb.jpg",
+      "title" : "Z-80 Reference Guide",
+      "zip" : "z-80-reference-guide-alan-tullyacme/Z80_Reference_guide(Alan_TULLY)(acme).pdf"
+    },
+    {
+      "bytes" : 40134466,
+      "cover" : "machine-language-programming-made-simpleacme/page/n0_w1024.jpg",
+      "id" : "book-2000801",
+      "number" : 14,
+      "series" : "melbourne-house",
+      "thumb" : "machine-language-programming-made-simpleacme/__ia_thumb.jpg",
+      "title" : "Machine Language Programming Made Simple for Your Sinclair & Timex TS1000",
+      "zip" : "machine-language-programming-made-simpleacme/Machine_Language_Programming_made_simple(acme).pdf"
+    },
+    {
+      "bytes" : 1174396,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000948",
+      "number" : 15,
+      "series" : "melbourne-house",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "30 Programs for the Sinclair ZX80 1K",
+      "zip" : "zx-books-img/30ProgramsForTheSinclairZX80_1K.pdf"
+    },
+    {
+      "bytes" : 62064975,
+      "cover" : "graphic-adventures-for-the-spectrum-48K/page/n0_w1024.jpg",
+      "id" : "book-2000168",
+      "number" : 1,
+      "series" : "micro-press",
+      "thumb" : "graphic-adventures-for-the-spectrum-48K/__ia_thumb.jpg",
+      "title" : "Graphic Adventures for the Spectrum 48K",
+      "zip" : "graphic-adventures-for-the-spectrum-48K/GraphicAdventuresForTheSpectrum48K.pdf"
+    },
+    {
+      "bytes" : 34598907,
+      "cover" : "15-graphic-games-for-the-spectrum/page/n0_w1024.jpg",
+      "id" : "book-2000461",
+      "number" : 2,
+      "series" : "micro-press",
+      "thumb" : "15-graphic-games-for-the-spectrum/__ia_thumb.jpg",
+      "title" : "15 Graphic Games for the Spectrum",
+      "zip" : "15-graphic-games-for-the-spectrum/15GraphicGamesForTheSpectrum.pdf"
+    },
+    {
+      "bytes" : 41338601,
+      "cover" : "spectrum-supergames/page/n0_w1024.jpg",
+      "id" : "book-2000502",
+      "number" : 3,
+      "series" : "micro-press",
+      "thumb" : "spectrum-supergames/__ia_thumb.jpg",
+      "title" : "Spectrum Supergames",
+      "zip" : "spectrum-supergames/SpectrumSupergames.pdf"
+    },
+    {
+      "bytes" : 64194515,
+      "cover" : "NH2021_SamCoupe_UsersGuide.pdf/page/n0_w1024.jpg",
+      "id" : "book-2001612",
+      "number" : 1,
+      "series" : "miles-gordon-technology",
+      "thumb" : "NH2021_SamCoupe_UsersGuide.pdf/__ia_thumb.jpg",
+      "title" : "Sam Coupé - The User's Guide",
+      "zip" : "NH2021_SamCoupe_UsersGuide.pdf/SamCoupe_UsersGuide.pdf"
+    },
+    {
+      "bytes" : 6602271,
+      "cover" : "me-and-my-micro-fred-harris/page/n0_w1024.jpg",
+      "id" : "book-2000240",
+      "number" : 1,
+      "series" : "national-extension-college-trust-ltd",
+      "thumb" : "me-and-my-micro-fred-harris/__ia_thumb.jpg",
+      "title" : "Me & My Micro",
+      "zip" : "me-and-my-micro-fred-harris/MeAndMyMicro-FredHarris-YorkshireTelevision.pdf"
+    },
+    {
+      "bytes" : 54278458,
+      "cover" : "51-game-programs-for-the-timex-sinclair-1000-and-1500_202110/page/n0_w1024.jpg",
+      "id" : "book-2000763",
+      "number" : 1,
+      "series" : "new-american-library",
+      "thumb" : "51-game-programs-for-the-timex-sinclair-1000-and-1500_202110/__ia_thumb.jpg",
+      "title" : "51 Game Programs for the Timex Sinclair 1000 and 1500",
+      "zip" : "51-game-programs-for-the-timex-sinclair-1000-and-1500_202110/51%20Game%20Programs%20For%20The%20Timex%20Sinclair%201000%20And%201500%20-%20Tim%20Hartnell%20-%20ISBN%200-451-12598-3.pdf"
+    },
+    {
+      "bytes" : 22968474,
+      "cover" : "micros_de_logica_sinclair/page/n0_w1024.jpg",
+      "id" : "book-2001092",
+      "number" : 2,
+      "series" : "new-american-library",
+      "thumb" : "micros_de_logica_sinclair/__ia_thumb.jpg",
+      "title" : "The Timex Personal Computer Made Simple",
+      "zip" : "micros_de_logica_sinclair/micros_de_logica_sinclair.pdf"
+    },
+    {
+      "bytes" : 20267551,
+      "cover" : "zx-books-PT/page/n0_w1024.jpg",
+      "id" : "book-2000007",
+      "number" : 1,
+      "series" : "newnes-technical-books",
+      "thumb" : "zx-books-PT/__ia_thumb.jpg",
+      "title" : "26 BASIC Programs for Your Micro",
+      "zip" : "zx-books-PT/26BasicProgramsForYourMicro(26ProgramasBasicParaMicrocomputadores).pdf"
+    },
+    {
+      "bytes" : 66205445,
+      "cover" : "introducing-z-80-assembly-language-programming-ian-sinclairacme/page/n0_w1024.jpg",
+      "id" : "book-2000429",
+      "number" : 2,
+      "series" : "newnes-technical-books",
+      "thumb" : "introducing-z-80-assembly-language-programming-ian-sinclairacme/__ia_thumb.jpg",
+      "title" : "Introducing Z-80 Assembly Language Programming",
+      "zip" : "introducing-z-80-assembly-language-programming-ian-sinclairacme/Introducing_Z80_assembly_language_programming(Ian_SINCLAIR)(acme).pdf"
+    },
+    {
+      "bytes" : 147905623,
+      "cover" : "newnes-zx-spectrum-users-handbook-r.-j.-simpson-t.-j.-terrell/page/n0_w1024.jpg",
+      "id" : "book-2000443",
+      "number" : 3,
+      "series" : "newnes-technical-books",
+      "thumb" : "newnes-zx-spectrum-users-handbook-r.-j.-simpson-t.-j.-terrell/__ia_thumb.jpg",
+      "title" : "ZX Spectrum User's Handbook",
+      "zip" : "newnes-zx-spectrum-users-handbook-r.-j.-simpson-t.-j.-terrell/Newnes%20-%20ZX%20Spectrum%20User's%20Handbook%20(R.J.%20Simpson,%20T.J.%20Terrell).pdf"
+    },
+    {
+      "bytes" : 47687030,
+      "cover" : "zx-81-basic-book-1982-reprintedacme/page/n0_w1024.jpg",
+      "id" : "book-2000451",
+      "number" : 4,
+      "series" : "newnes-technical-books",
+      "thumb" : "zx-81-basic-book-1982-reprintedacme/__ia_thumb.jpg",
+      "title" : "ZX81 BASIC Book",
+      "zip" : "zx-81-basic-book-1982-reprintedacme/ZX81_BASIC_book(1982_Reprinted)(acme).pdf"
+    },
+    {
+      "bytes" : 21821078,
+      "cover" : "inteligencia-artificial-em-basic-2ed/page/n0_w1024.jpg",
+      "id" : "book-2000908",
+      "number" : 5,
+      "series" : "newnes-technical-books",
+      "thumb" : "inteligencia-artificial-em-basic-2ed/__ia_thumb.jpg",
+      "title" : "Artificial Intelligence in BASIC",
+      "zip" : "inteligencia-artificial-em-basic-2ed/Inteligencia_Artificial_em_Basic-2ed.pdf"
+    },
+    {
+      "bytes" : 24203802,
+      "cover" : "z80-assembly-language-subroutines/page/n0_w1024.jpg",
+      "id" : "book-2000756",
+      "number" : 1,
+      "series" : "osborne",
+      "thumb" : "z80-assembly-language-subroutines/__ia_thumb.jpg",
+      "title" : "Z80 Assembly Language Subroutines",
+      "zip" : "z80-assembly-language-subroutines/Z80_Assembly_Language_Subroutines.pdf"
+    },
+    {
+      "bytes" : 5056422,
+      "cover" : "hogan_thom_discover_forth_learning_and_programming_the_forth/page/n0_w1024.jpg",
+      "id" : "book-2001087",
+      "number" : 2,
+      "series" : "osborne",
+      "thumb" : "hogan_thom_discover_forth_learning_and_programming_the_forth/__ia_thumb.jpg",
+      "title" : "Discover FORTH: Learning and Programming the FORTH Language",
+      "zip" : "hogan_thom_discover_forth_learning_and_programming_the_forth/hogan_thom_discover_forth_learning_and_programming_the_forth.pdf"
+    },
+    {
+      "bytes" : 12778775,
+      "cover" : "cpm-manual-para-programadores/page/n0_w1024.jpg",
+      "id" : "book-2001423",
+      "number" : 3,
+      "series" : "osborne",
+      "thumb" : "cpm-manual-para-programadores/__ia_thumb.jpg",
+      "title" : "The Programmer's CP/M Handbook",
+      "zip" : "cpm-manual-para-programadores/ProgrammersCP-MHandbookThe(CP-MManualParaProgramadores)(McGraw-HillES).pdf"
+    },
+    {
+      "bytes" : 16233974,
+      "cover" : "computers-that-made-britain/page/n0_w1024.jpg",
+      "id" : "book-2001611",
+      "number" : 1,
+      "series" : "other-publishers",
+      "thumb" : "computers-that-made-britain/__ia_thumb.jpg",
+      "title" : "The Computers That Made Britain",
+      "zip" : "computers-that-made-britain/Computers%20that%20made%20Britain%20v1.pdf"
+    },
+    {
+      "bytes" : 50682841,
+      "cover" : "munchers-the-ultimate-timex-sinclair-games-book/page/n0_w1024.jpg",
+      "id" : "book-2001613",
+      "number" : 2,
+      "series" : "other-publishers",
+      "thumb" : "munchers-the-ultimate-timex-sinclair-games-book/__ia_thumb.jpg",
+      "title" : "MUNCHERS: The Ultimate Timex/Sinclair Games Book",
+      "zip" : "munchers-the-ultimate-timex-sinclair-games-book/MUNCHERS%20-%20The%20Ultimate%20Timex%20Sinclair%20Games%20Book%20-%20Yin%20Chiu%20&%20Henry%20Mullish%20-%20ISBN%200-07-010839-0.pdf"
+    },
+    {
+      "bytes" : 266840383,
+      "cover" : "howtomakeyourcomputertalk/page/n0_w1024.jpg",
+      "id" : "book-2001614",
+      "number" : 3,
+      "series" : "other-publishers",
+      "thumb" : "howtomakeyourcomputertalk/__ia_thumb.jpg",
+      "title" : "How To Make Your Computer Talk",
+      "zip" : "howtomakeyourcomputertalk/How%20to%20Make%20Your%20Computer%20Talk.pdf"
+    },
+    {
+      "bytes" : 53804660,
+      "cover" : "control-things-with-your-timex-sinclair/page/n0_w1024.jpg",
+      "id" : "book-2001615",
+      "number" : 4,
+      "series" : "other-publishers",
+      "thumb" : "control-things-with-your-timex-sinclair/__ia_thumb.jpg",
+      "title" : "Control Things With Your Timex Sinclair",
+      "zip" : "control-things-with-your-timex-sinclair/Control%20Things%20with%20your%20Timex%20Sinclair%20-%20Robert%20L%20Swarts%20-%20ISBN%200-88056-127-0.pdf"
+    },
+    {
+      "bytes" : 34976679,
+      "cover" : "bogglers-22-smart-games-programs-2-k-to-16-k-in-timex-sinclair-basic/page/n0_w1024.jpg",
+      "id" : "book-2001616",
+      "number" : 5,
+      "series" : "other-publishers",
+      "thumb" : "bogglers-22-smart-games-programs-2-k-to-16-k-in-timex-sinclair-basic/__ia_thumb.jpg",
+      "title" : "BOGGLERS: 22 Smart Games Programs (2K to 16K) in Timex/Sinclair BASIC",
+      "zip" : "bogglers-22-smart-games-programs-2-k-to-16-k-in-timex-sinclair-basic/BOGGLERS%20-%2022%20Smart%20Games%20Programs%20(2K%20to%2016K)%20in%20Timex%20Sinclair%20BASIC%20-%20ISBN%200-07-023959-2.pdf"
+    },
+    {
+      "bytes" : 204839023,
+      "cover" : "70-games-for-the-timex-sinclair-1000-and-1500/page/n0_w1024.jpg",
+      "id" : "book-2001670",
+      "number" : 6,
+      "series" : "other-publishers",
+      "thumb" : "70-games-for-the-timex-sinclair-1000-and-1500/__ia_thumb.jpg",
+      "title" : "70 Games for the Timex/Sinclair 1000 and 1500",
+      "zip" : "70-games-for-the-timex-sinclair-1000-and-1500/70%20Games%20for%20the%20Timex%20Sinclair%201000%20and%201500.pdf"
+    },
+    {
+      "bytes" : 13878895,
+      "cover" : "zx-spectrum-games-screenshot/page/n0_w1024.jpg",
+      "id" : "book-2001700",
+      "number" : 7,
+      "series" : "other-publishers",
+      "thumb" : "zx-spectrum-games-screenshot/__ia_thumb.jpg",
+      "title" : "ZX Spectrum Screenshot Catalog",
+      "zip" : "zx-spectrum-games-screenshot/ZX_Spectrum_Games_Screenshot.pdf"
+    },
+    {
+      "bytes" : 6418220,
+      "cover" : "sixty-programs-for-the-sinclair-zx-spectrum/page/n0_w1024.jpg",
+      "id" : "book-2000018",
+      "number" : 1,
+      "series" : "pan-books-ltd",
+      "thumb" : "sixty-programs-for-the-sinclair-zx-spectrum/__ia_thumb.jpg",
+      "title" : "Sixty Programs for the Sinclair ZX Spectrum",
+      "zip" : "sixty-programs-for-the-sinclair-zx-spectrum/sixty-programs-for-the-sinclair-zx-spectrum.pdf"
+    },
+    {
+      "bytes" : 40608432,
+      "cover" : "companion-to-the-sinclair-zx-microdrive-and-interfaces/page/n0_w1024.jpg",
+      "id" : "book-2000072",
+      "number" : 2,
+      "series" : "pan-books-ltd",
+      "thumb" : "companion-to-the-sinclair-zx-microdrive-and-interfaces/__ia_thumb.jpg",
+      "title" : "The Companion to the Sinclair ZX Microdrive and Interfaces",
+      "zip" : "companion-to-the-sinclair-zx-microdrive-and-interfaces/CompanionToTheSinclairZXMicrodriveAndInterfacesThe.pdf"
+    },
+    {
+      "bytes" : 23845066,
+      "cover" : "CrackingCodeZXSpectrum/page/n0_w1024.jpg",
+      "id" : "book-2000640",
+      "number" : 3,
+      "series" : "pan-books-ltd",
+      "thumb" : "CrackingCodeZXSpectrum/__ia_thumb.jpg",
+      "title" : "Cracking the Code on the Sinclair ZX Spectrum",
+      "zip" : "CrackingCodeZXSpectrum/CrackingCodeZXSpectrum.pdf"
+    },
+    {
+      "bytes" : 65513387,
+      "cover" : "advanced-programming-for-the-16kzx81/page/n0_w1024.jpg",
+      "id" : "book-2000021",
+      "number" : 1,
+      "series" : "papermac",
+      "thumb" : "advanced-programming-for-the-16kzx81/__ia_thumb.jpg",
+      "title" : "Advanced Programming for the 16K ZX81",
+      "zip" : "advanced-programming-for-the-16kzx81/AdvancedProgrammingForThe16KZX81.pdf"
+    },
+    {
+      "bytes" : 23326527,
+      "cover" : "micro-maths/page/n0_w1024.jpg",
+      "id" : "book-2000246",
+      "number" : 2,
+      "series" : "papermac",
+      "thumb" : "micro-maths/__ia_thumb.jpg",
+      "title" : "Micro Maths",
+      "zip" : "micro-maths/Micro-Maths.pdf"
+    },
+    {
+      "bytes" : 30243225,
+      "cover" : "the-purple-planet/page/n0_w1024.jpg",
+      "id" : "book-2000295",
+      "number" : 3,
+      "series" : "papermac",
+      "thumb" : "the-purple-planet/__ia_thumb.jpg",
+      "title" : "The Purple Planet - Micro PROLOG for the Spectrum 48K",
+      "zip" : "the-purple-planet/ThePurplePlanet.pdf"
+    },
+    {
+      "bytes" : 89607713,
+      "cover" : "more-real-applications-for-the-zx-81-randle-hurleyacme/page/n0_w1024.jpg",
+      "id" : "book-2000514",
+      "number" : 4,
+      "series" : "papermac",
+      "thumb" : "more-real-applications-for-the-zx-81-randle-hurleyacme/__ia_thumb.jpg",
+      "title" : "More Real Applications for the ZX81 and ZX Spectrum",
+      "zip" : "more-real-applications-for-the-zx-81-randle-hurleyacme/More_real_applications_for_the_ZX81(Randle_HURLEY)(acme).pdf"
+    },
+    {
+      "bytes" : 187682278,
+      "cover" : "sinclair-user-book-of-programs/page/n0_w1024.jpg",
+      "id" : "book-2000497",
+      "number" : 1,
+      "series" : "penguin-books-ltd",
+      "thumb" : "sinclair-user-book-of-programs/__ia_thumb.jpg",
+      "title" : "The 'Sinclair User' Book of Games and Programs for the Spectrum",
+      "zip" : "sinclair-user-book-of-programs/SinclairUserBookOfPrograms.pdf"
+    },
+    {
+      "bytes" : 141791089,
+      "cover" : "zx81pocketbookthe/page/n0_w1024.jpg",
+      "id" : "book-2000454",
+      "number" : 1,
+      "series" : "phipps-associates",
+      "thumb" : "zx81pocketbookthe/__ia_thumb.jpg",
+      "title" : "The ZX81 Pocket Book",
+      "zip" : "zx81pocketbookthe/ZX81PocketBookThe.pdf"
+    },
+    {
+      "bytes" : 1684648,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000997",
+      "number" : 1,
+      "series" : "phoenix-publishing-associates",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "Brain Teasers for the Spectrum 48K",
+      "zip" : "zx-books-img/BrainTeasersForTheSpectrum48K.pdf"
+    },
+    {
+      "bytes" : 31774557,
+      "cover" : "sinclair-ql-begleiter-huthig/page/n0_w1024.jpg",
+      "id" : "book-2000329",
+      "number" : 1,
+      "series" : "pitman-publishing-ltd",
+      "thumb" : "sinclair-ql-begleiter-huthig/__ia_thumb.jpg",
+      "title" : "The Sinclair QL Companion",
+      "zip" : "sinclair-ql-begleiter-huthig/Sinclair%20QL-Begleiter%20(H%C3%BCthig).pdf"
+    },
+    {
+      "bytes" : 3264990,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000000",
+      "number" : 1,
+      "series" : "prentice-hall-international",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "100 Programs for the ZX Spectrum",
+      "zip" : "zx-books-img/100ProgramsForTheZXSpectrum(100ProgrammasVoorDeZXSpectrum)(DeltaPress).pdf"
+    },
+    {
+      "bytes" : 26847131,
+      "cover" : "easy-to-understand-guide-to-home-computers/page/n0_w1024.jpg",
+      "id" : "book-2001443",
+      "number" : 1,
+      "series" : "publications-international-ltd",
+      "thumb" : "easy-to-understand-guide-to-home-computers/__ia_thumb.jpg",
+      "title" : "Easy-to-Understand Guide to Home Computers",
+      "zip" : "easy-to-understand-guide-to-home-computers/Easy-To-UnderstandGuideToHomeComputers.pdf"
+    },
+    {
+      "bytes" : 29036637,
+      "cover" : "Alan_Sugar_The_Amstrad_Story_1990_Century/page/n0_w1024.jpg",
+      "id" : "book-2000462",
+      "number" : 1,
+      "series" : "random-house",
+      "thumb" : "Alan_Sugar_The_Amstrad_Story_1990_Century/__ia_thumb.jpg",
+      "title" : "Alan Sugar: The Amstrad Story",
+      "zip" : "Alan_Sugar_The_Amstrad_Story_1990_Century/Alan_Sugar_The_Amstrad_Story_1990_Century.pdf"
+    },
+    {
+      "bytes" : 923729,
+      "cover" : "timhartnellvz200giantbookofgames/page/n0_w1024.jpg",
+      "id" : "book-2000233",
+      "number" : 1,
+      "series" : "reston-publishing-company-inc",
+      "thumb" : "timhartnellvz200giantbookofgames/__ia_thumb.jpg",
+      "title" : "Making the Most of Your ZX81",
+      "zip" : "timhartnellvz200giantbookofgames/Tim_Hartnell_MakingTheMostOfYourZX81.pdf"
+    },
+    {
+      "bytes" : 41215896,
+      "cover" : "basics-of-timex-sinclair-1500-1000-basic/page/n0_w1024.jpg",
+      "id" : "book-2000532",
+      "number" : 2,
+      "series" : "reston-publishing-company-inc",
+      "thumb" : "basics-of-timex-sinclair-1500-1000-basic/__ia_thumb.jpg",
+      "title" : "Basics of Timex Sinclair 1000, ZX81 BASIC",
+      "zip" : "basics-of-timex-sinclair-1500-1000-basic/Basics%20of%20Timex%20Sinclair%201500%20&%201000%20BASIC%20-%20Allen%20H.%20Wolach%20-%20ISBN%200-8359-0347-8.pdf"
+    },
+    {
+      "bytes" : 1317529,
+      "cover" : "cambridge-colour-collection/page/n0_w1024.jpg",
+      "id" : "book-2000002",
+      "number" : 1,
+      "series" : "richard-francis-altwasser",
+      "thumb" : "cambridge-colour-collection/__ia_thumb.jpg",
+      "title" : "Cambridge Colour Collection",
+      "zip" : "cambridge-colour-collection/cambridge-colour-collection.pdf"
+    },
+    {
+      "bytes" : 5995426,
+      "cover" : "micro-adventure-4-time-trap/page/n0_w1024.jpg",
+      "id" : "book-2000484",
+      "number" : 1,
+      "series" : "scholastic-inc",
+      "thumb" : "micro-adventure-4-time-trap/__ia_thumb.jpg",
+      "title" : "Micro Adventure 4: Time Trap",
+      "zip" : "micro-adventure-4-time-trap/MicroAdventure4-TimeTrap.pdf"
+    },
+    {
+      "bytes" : 7809362,
+      "cover" : "micro-adventure-8-the-big-freeze/page/n0_w1024.jpg",
+      "id" : "book-2000933",
+      "number" : 2,
+      "series" : "scholastic-inc",
+      "thumb" : "micro-adventure-8-the-big-freeze/__ia_thumb.jpg",
+      "title" : "Micro Adventure 8: The Big Freeze",
+      "zip" : "micro-adventure-8-the-big-freeze/MicroAdventure8-TheBigFreeze.pdf"
+    },
+    {
+      "bytes" : 7666916,
+      "cover" : "micro-adventure-9-dead-ringer/page/n0_w1024.jpg",
+      "id" : "book-2001217",
+      "number" : 3,
+      "series" : "scholastic-inc",
+      "thumb" : "micro-adventure-9-dead-ringer/__ia_thumb.jpg",
+      "title" : "Micro Adventure 9: Dead Ringer",
+      "zip" : "micro-adventure-9-dead-ringer/MicroAdventure9-DeadRinger.pdf"
+    },
+    {
+      "bytes" : 7772383,
+      "cover" : "micro-adventure-10-spellbound/page/n0_w1024.jpg",
+      "id" : "book-2001218",
+      "number" : 4,
+      "series" : "scholastic-inc",
+      "thumb" : "micro-adventure-10-spellbound/__ia_thumb.jpg",
+      "title" : "Micro Adventure 10: Spellbound",
+      "zip" : "micro-adventure-10-spellbound/MicroAdventureNo10Spellbound.pdf"
+    },
+    {
+      "bytes" : 10149231,
+      "cover" : "10_Starter_Programs_from_Family_Computing/page/n0_w1024.jpg",
+      "id" : "book-2001667",
+      "number" : 5,
+      "series" : "scholastic-inc",
+      "thumb" : "10_Starter_Programs_from_Family_Computing/__ia_thumb.jpg",
+      "title" : "10 Starter Programs from Family Computing",
+      "zip" : "10_Starter_Programs_from_Family_Computing/10_Starter_Programs_from_Family_Computing.pdf"
+    },
+    {
+      "bytes" : 1759436,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000088",
+      "number" : 1,
+      "series" : "shiva-publishing-ltd",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "Computer Puzzles: For Spectrum & ZX81",
+      "zip" : "zx-books-img/ComputerPuzzles-ForSpectrumZX81.pdf"
+    },
+    {
+      "bytes" : 2244728,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000116",
+      "number" : 2,
+      "series" : "shiva-publishing-ltd",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "Easy Programming for the ZX Spectrum",
+      "zip" : "zx-books-img/EasyProgrammingForTheZXSpectrum(BASICMetDeZXSpectrum)(KluwerTechnischeBoeken).pdf"
+    },
+    {
+      "bytes" : 16453705,
+      "cover" : "machinecodeandbetterbasic/page/n0_w1024.jpg",
+      "id" : "book-2000224",
+      "number" : 3,
+      "series" : "shiva-publishing-ltd",
+      "thumb" : "machinecodeandbetterbasic/__ia_thumb.jpg",
+      "title" : "Machine Code and Better Basic",
+      "zip" : "machinecodeandbetterbasic/Machine%20Code%20and%20better%20BASIC.pdf"
+    },
+    {
+      "bytes" : 27386951,
+      "cover" : "illinguaggiomacchinadellospectrum_muzzio/page/n0_w1024.jpg",
+      "id" : "book-2000360",
+      "number" : 4,
+      "series" : "shiva-publishing-ltd",
+      "thumb" : "illinguaggiomacchinadellospectrum_muzzio/__ia_thumb.jpg",
+      "title" : "Spectrum Machine Code",
+      "zip" : "illinguaggiomacchinadellospectrum_muzzio/Il%20linguaggio%20macchina%20dello%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 2558390,
+      "cover" : "inteligencia-artificial-con-el-zx-spectrum/page/n0_w1024.jpg",
+      "id" : "book-2000463",
+      "number" : 5,
+      "series" : "shiva-publishing-ltd",
+      "thumb" : "inteligencia-artificial-con-el-zx-spectrum/__ia_thumb.jpg",
+      "title" : "Artificial Intelligence: ZX Spectrum",
+      "zip" : "inteligencia-artificial-con-el-zx-spectrum/ES%20-%20Inteligencia%20Artificial%20con%20el%20ZX%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 5964428,
+      "cover" : "winfield_alan_the_complete_forth/page/n0_w1024.jpg",
+      "id" : "book-2000468",
+      "number" : 1,
+      "series" : "sigma-technical-press",
+      "thumb" : "winfield_alan_the_complete_forth/__ia_thumb.jpg",
+      "title" : "The Complete FORTH",
+      "zip" : "winfield_alan_the_complete_forth/winfield_alan_the_complete_forth.pdf"
+    },
+    {
+      "bytes" : 7989279,
+      "cover" : "zx-spectrum-explored-incomplete/page/n0_w1024.jpg",
+      "id" : "book-2000439",
+      "number" : 1,
+      "series" : "sinclair-browne-ltd",
+      "thumb" : "zx-spectrum-explored-incomplete/__ia_thumb.jpg",
+      "title" : "The ZX Spectrum Explored",
+      "zip" : "zx-spectrum-explored-incomplete/ZxSpectrumExplored-TimHartnell-incomplete.pdf"
+    },
+    {
+      "bytes" : 84847678,
+      "cover" : "NH2021_qluserguide.pdf/page/n0_w1024.jpg",
+      "id" : "book-2001608",
+      "number" : 1,
+      "series" : "sinclair-research-ltd",
+      "thumb" : "NH2021_qluserguide.pdf/__ia_thumb.jpg",
+      "title" : "Sinclair QL User Guide",
+      "zip" : "NH2021_qluserguide.pdf/qluserguide.pdf"
+    },
+    {
+      "bytes" : 46145973,
+      "cover" : "BestOfSUM/page/n0_w1024.jpg",
+      "id" : "book-2001223",
+      "number" : 1,
+      "series" : "sum",
+      "thumb" : "BestOfSUM/__ia_thumb.jpg",
+      "title" : "The Best of SUM",
+      "zip" : "BestOfSUM/BestOfSUMThe.pdf"
+    },
+    {
+      "bytes" : 6327845,
+      "cover" : "machine-code-applications-for-the-zx-spectrum-david-laine/page/n0_w1024.jpg",
+      "id" : "book-2000225",
+      "number" : 1,
+      "series" : "sunshine-books-ltd",
+      "thumb" : "machine-code-applications-for-the-zx-spectrum-david-laine/__ia_thumb.jpg",
+      "title" : "Machine Code Applications for the ZX Spectrum: Expert Machine Code Techniques",
+      "zip" : "machine-code-applications-for-the-zx-spectrum-david-laine/MachineCodeApplicationsForTheZxSpectrumDavidLaine-Sunshine.pdf"
+    },
+    {
+      "bytes" : 9622326,
+      "cover" : "guidaallozxmicrodriveeallinterface1/page/n0_w1024.jpg",
+      "id" : "book-2000235",
+      "number" : 2,
+      "series" : "sunshine-books-ltd",
+      "thumb" : "guidaallozxmicrodriveeallinterface1/__ia_thumb.jpg",
+      "title" : "Master Your ZX Microdrive",
+      "zip" : "guidaallozxmicrodriveeallinterface1/Guida%20allo%20ZX%20Microdrive%20e%20all'Interface%201.pdf"
+    },
+    {
+      "bytes" : 101541265,
+      "cover" : "zx-books-PT/page/n0_w1024.jpg",
+      "id" : "book-2000299",
+      "number" : 3,
+      "series" : "sunshine-books-ltd",
+      "thumb" : "zx-books-PT/__ia_thumb.jpg",
+      "title" : "Quill, Easel, Archive & Abacus on the Sinclair QL: Integrating the Psion Software",
+      "zip" : "zx-books-PT/QuillEaselArchiveAndAbacusOnTheSinclairQL(QuillEaselArchiveEAbacusNoSinclairQL).pdf"
+    },
+    {
+      "bytes" : 122616749,
+      "cover" : "zx-books-PT/page/n0_w1024.jpg",
+      "id" : "book-2000328",
+      "number" : 4,
+      "series" : "sunshine-books-ltd",
+      "thumb" : "zx-books-PT/__ia_thumb.jpg",
+      "title" : "Sinclair QL Adventures: A Micro-Adventurer's Handbook",
+      "zip" : "zx-books-PT/SinclairQLAdventures(JogosDeAventurasParaOSinclairQL).pdf"
+    },
+    {
+      "bytes" : 43307927,
+      "cover" : "zx-books-UK/page/n0_w1024.jpg",
+      "id" : "book-2000347",
+      "number" : 5,
+      "series" : "sunshine-books-ltd",
+      "thumb" : "zx-books-UK/__ia_thumb.jpg",
+      "title" : "Spectrum Adventures: A Guide to Playing and Writing Adventures",
+      "zip" : "zx-books-UK/SpectrumAdventures.pdf"
+    },
+    {
+      "bytes" : 11121331,
+      "cover" : "programacion-del-z80/page/n0_w1024.jpg",
+      "id" : "book-2000292",
+      "number" : 1,
+      "series" : "sybex-computer-books",
+      "thumb" : "programacion-del-z80/__ia_thumb.jpg",
+      "title" : "Programming the Z80",
+      "zip" : "programacion-del-z80/ProgrammingTheZ80(ProgramacionDelZ80)(EdicionesAnayaMultimediaS.A.).pdf"
+    },
+    {
+      "bytes" : 10221745,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2001421",
+      "number" : 1,
+      "series" : "tab-books-inc",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "101 Projects for the Z80",
+      "zip" : "zx-books-img/101ProjectsForTheZ80.pdf"
+    },
+    {
+      "bytes" : 3445195,
+      "cover" : "playing-the-hobbit-v-1/page/n0_w1024.jpg",
+      "id" : "book-2001243",
+      "number" : 1,
+      "series" : "templesoft",
+      "thumb" : "playing-the-hobbit-v-1/__ia_thumb.jpg",
+      "title" : "Playing The Hobbit",
+      "zip" : "playing-the-hobbit-v-1/PlayingTheHobbitV1.pdf"
+    },
+    {
+      "bytes" : 70000323,
+      "cover" : "the-sinclair-zx-81-programming-for-real-applications-randle-hurleyacme/page/n0_w1024.jpg",
+      "id" : "book-2000338",
+      "number" : 1,
+      "series" : "the-macmillan-press-ltd",
+      "thumb" : "the-sinclair-zx-81-programming-for-real-applications-randle-hurleyacme/__ia_thumb.jpg",
+      "title" : "The Sinclair ZX81: Programming for Real Applications",
+      "zip" : "the-sinclair-zx-81-programming-for-real-applications-randle-hurleyacme/The_SINCLAIR_ZX81_programming_for_real_applications(Randle_HURLEY)(acme).pdf"
+    },
+    {
+      "bytes" : 1978468,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000127",
+      "number" : 1,
+      "series" : "timedata-ltd",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "The Explorers Guide to the ZX81",
+      "zip" : "zx-books-img/ExplorersGuideToTheZX81The.pdf"
+    },
+    {
+      "bytes" : 13731389,
+      "cover" : "allascopertadelbasicspectrum/page/n0_w1024.jpg",
+      "id" : "book-2000133",
+      "number" : 2,
+      "series" : "timedata-ltd",
+      "thumb" : "allascopertadelbasicspectrum/__ia_thumb.jpg",
+      "title" : "Exploring Spectrum BASIC",
+      "zip" : "allascopertadelbasicspectrum/Alla%20scoperta%20del%20BASIC%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 239068209,
+      "cover" : "the-zx80-magic-book/page/n0_w1024.jpg",
+      "id" : "book-2000509",
+      "number" : 3,
+      "series" : "timedata-ltd",
+      "thumb" : "the-zx80-magic-book/__ia_thumb.jpg",
+      "title" : "The ZX80 Magic Book",
+      "zip" : "the-zx80-magic-book/The_ZX80_Magic_Book.pdf"
+    },
+    {
+      "bytes" : 45297913,
+      "cover" : "SpeedyComputer011D/page/n0_w1024.jpg",
+      "id" : "book-2000080",
+      "number" : 1,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "SpeedyComputer011D/__ia_thumb.jpg",
+      "title" : "Computer Battlegames",
+      "zip" : "SpeedyComputer011D/SpeedyComputer011D.pdf"
+    },
+    {
+      "bytes" : 4994075,
+      "cover" : "lenguaje-de-las-computadores/page/n0_w1024.jpg",
+      "id" : "book-2000084",
+      "number" : 2,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "lenguaje-de-las-computadores/__ia_thumb.jpg",
+      "title" : "Usborne Guide to Computer Jargon - Illustrated",
+      "zip" : "lenguaje-de-las-computadores/UsborneGuideToComputerJargon-Illustrated(LenguajeDeLasComputadoresEl)(EditorialPlesa).pdf"
+    },
+    {
+      "bytes" : 16178508,
+      "cover" : "JuegosDeOrdenadorEspacio/page/n0_w1024.jpg",
+      "id" : "book-2000089",
+      "number" : 3,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "JuegosDeOrdenadorEspacio/__ia_thumb.jpg",
+      "title" : "Computer Spacegames",
+      "zip" : "JuegosDeOrdenadorEspacio/Juegos%20de%20Ordenador%20Espacio.pdf"
+    },
+    {
+      "bytes" : 3247647,
+      "cover" : "Creepy_Computer_Games_1983_Usborne_Publishing/page/n0_w1024.jpg",
+      "id" : "book-2000102",
+      "number" : 4,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "Creepy_Computer_Games_1983_Usborne_Publishing/__ia_thumb.jpg",
+      "title" : "Creepy Computer Games",
+      "zip" : "Creepy_Computer_Games_1983_Usborne_Publishing/Creepy_Computer_Games_1983_Usborne_Publishing.pdf"
+    },
+    {
+      "bytes" : 46436329,
+      "cover" : "SpeedyComputer005D/page/n0_w1024.jpg",
+      "id" : "book-2000185",
+      "number" : 5,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "SpeedyComputer005D/__ia_thumb.jpg",
+      "title" : "Inside the Chip",
+      "zip" : "SpeedyComputer005D/SpeedyComputer005D.pdf"
+    },
+    {
+      "bytes" : 4142313,
+      "cover" : "programacion-de-computadoras/page/n0_w1024.jpg",
+      "id" : "book-2000198",
+      "number" : 6,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "programacion-de-computadoras/__ia_thumb.jpg",
+      "title" : "Introduction to Computer Programming: BASIC for Beginners",
+      "zip" : "programacion-de-computadoras/IntroductionToComputerProgramming-BASICForBeginners(ProgramacionDeComputadores)(EditorialPlesa).pdf"
+    },
+    {
+      "bytes" : 7727565,
+      "cover" : "SpeedyComputer026D/page/n0_w1024.jpg",
+      "id" : "book-2000210",
+      "number" : 7,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "SpeedyComputer026D/__ia_thumb.jpg",
+      "title" : "Island of Secrets",
+      "zip" : "SpeedyComputer026D/SpeedyComputer026D.pdf"
+    },
+    {
+      "bytes" : 14848990,
+      "cover" : "the-mystery-of-silver-mountain/page/n0_w1024.jpg",
+      "id" : "book-2000262",
+      "number" : 8,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "the-mystery-of-silver-mountain/__ia_thumb.jpg",
+      "title" : "The Mystery of Silver Mountain",
+      "zip" : "the-mystery-of-silver-mountain/the-mystery-of-silver-mountain.pdf"
+    },
+    {
+      "bytes" : 3295242,
+      "cover" : "ampliando-tu-microcomputadora/page/n0_w1024.jpg",
+      "id" : "book-2000280",
+      "number" : 9,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "ampliando-tu-microcomputadora/__ia_thumb.jpg",
+      "title" : "Practical Things to Do with a Microcomputer",
+      "zip" : "ampliando-tu-microcomputadora/PracticalThingsToDoWithAMicrocomputer(AmpliandoTumicrocomputadora)(EditorialPlesa).pdf"
+    },
+    {
+      "bytes" : 4163216,
+      "cover" : "practica-tu-basic/page/n0_w1024.jpg",
+      "id" : "book-2000282",
+      "number" : 10,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "practica-tu-basic/__ia_thumb.jpg",
+      "title" : "Practise Your BASIC",
+      "zip" : "practica-tu-basic/PractiseYourBASIC(PracticaTuBASIC)(EditorialPlesa).pdf"
+    },
+    {
+      "bytes" : 41490272,
+      "cover" : "SpeedyComputer013D/page/n0_w1024.jpg",
+      "id" : "book-2000398",
+      "number" : 11,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "SpeedyComputer013D/__ia_thumb.jpg",
+      "title" : "Understanding Computer Graphics",
+      "zip" : "SpeedyComputer013D/SpeedyComputer013D.pdf"
+    },
+    {
+      "bytes" : 11728521,
+      "cover" : "weird-computer-games_osbourne/page/n0_w1024.jpg",
+      "id" : "book-2000411",
+      "number" : 12,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "weird-computer-games_osbourne/__ia_thumb.jpg",
+      "title" : "Weird Computer Games",
+      "zip" : "weird-computer-games_osbourne/WeirdComputerGames-Osbourne.pdf"
+    },
+    {
+      "bytes" : 16393745,
+      "cover" : "programa-tus-propias-aventuras-en-tu-computadora/page/n0_w1024.jpg",
+      "id" : "book-2000424",
+      "number" : 13,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "programa-tus-propias-aventuras-en-tu-computadora/__ia_thumb.jpg",
+      "title" : "Write Your Own Adventure Programs for Your Microcomputer",
+      "zip" : "programa-tus-propias-aventuras-en-tu-computadora/ProgramaTusPropiasAventurasEnTuComputadora.pdf"
+    },
+    {
+      "bytes" : 21128125,
+      "cover" : "SpeedyComputer023D/page/n0_w1024.jpg",
+      "id" : "book-2000425",
+      "number" : 14,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "SpeedyComputer023D/__ia_thumb.jpg",
+      "title" : "Write Your Own Fantasy Games for Your Microcomputer",
+      "zip" : "SpeedyComputer023D/SpeedyComputer023D_images.zip"
+    },
+    {
+      "bytes" : 38313166,
+      "cover" : "SpeedyComputer007D/page/n0_w1024.jpg",
+      "id" : "book-2000467",
+      "number" : 15,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "SpeedyComputer007D/__ia_thumb.jpg",
+      "title" : "Usborne Guide to Better BASIC",
+      "zip" : "SpeedyComputer007D/SpeedyComputer007D.pdf"
+    },
+    {
+      "bytes" : 6903181,
+      "cover" : "juegos-de-computadores/page/n0_w1024.jpg",
+      "id" : "book-2000506",
+      "number" : 16,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "juegos-de-computadores/__ia_thumb.jpg",
+      "title" : "Usborne Guide to Computer and Video Games",
+      "zip" : "juegos-de-computadores/UsborneGuideToComputerAndVideoGames(JuegosDeComputadores)(EditorialPlesa).pdf"
+    },
+    {
+      "bytes" : 10363572,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000861",
+      "number" : 17,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "The Beginner's Computer Handbook",
+      "zip" : "zx-books-img/BeginnersComputerHandbookThe.pdf"
+    },
+    {
+      "bytes" : 17642527,
+      "cover" : "simple-basic/page/n0_w1024.jpg",
+      "id" : "book-2001333",
+      "number" : 18,
+      "series" : "usborne-publishing-ltd",
+      "thumb" : "simple-basic/__ia_thumb.jpg",
+      "title" : "Simple BASIC",
+      "zip" : "simple-basic/simple-basic.pdf"
+    },
+    {
+      "bytes" : 8757192,
+      "cover" : "giochiamoconzxspectrum/page/n0_w1024.jpg",
+      "id" : "book-2000146",
+      "number" : 1,
+      "series" : "virgin-books",
+      "thumb" : "giochiamoconzxspectrum/__ia_thumb.jpg",
+      "title" : "Games for Your ZX Spectrum",
+      "zip" : "giochiamoconzxspectrum/Giochiamo%20con%20ZX%20Spectrum.pdf"
+    },
+    {
+      "bytes" : 60579730,
+      "cover" : "games-for-your-zx-81-mark-charltonacme/page/n0_w1024.jpg",
+      "id" : "book-2000474",
+      "number" : 2,
+      "series" : "virgin-books",
+      "thumb" : "games-for-your-zx-81-mark-charltonacme/__ia_thumb.jpg",
+      "title" : "Games for Your ZX81",
+      "zip" : "games-for-your-zx-81-mark-charltonacme/Games_for_your_ZX81(Mark_CHARLTON)(acme).pdf"
+    },
+    {
+      "bytes" : 3840925,
+      "cover" : "more-games-for-your-zx81/page/n0_w1024.jpg",
+      "id" : "book-2000486",
+      "number" : 3,
+      "series" : "virgin-books",
+      "thumb" : "more-games-for-your-zx81/__ia_thumb.jpg",
+      "title" : "More Games for Your ZX81",
+      "zip" : "more-games-for-your-zx81/MoreGamesForYourZX81.pdf"
+    },
+    {
+      "bytes" : 4243175,
+      "cover" : "zx-books-img/page/n0_w1024.jpg",
+      "id" : "book-2000643",
+      "number" : 4,
+      "series" : "virgin-books",
+      "thumb" : "zx-books-img/__ia_thumb.jpg",
+      "title" : "Adventures for Your ZX-Spectrum",
+      "zip" : "zx-books-img/AdventuresForYourZX-Spectrum(AvantureZaVasZXSpectrum)(TehnickaKnjigaIZavodZaIzdavanjeUdzbenika).pdf"
+    },
+    {
+      "bytes" : 25139715,
+      "cover" : "zx-books-UK/page/n0_w1024.jpg",
+      "id" : "book-2000942",
+      "number" : 5,
+      "series" : "virgin-books",
+      "thumb" : "zx-books-UK/__ia_thumb.jpg",
+      "title" : "More Adventures for Your ZX Spectrum",
+      "zip" : "zx-books-UK/MoreAdventuresForYourZXSpectrum.pdf"
+    },
+    {
+      "bytes" : 6869299,
+      "cover" : "al-n-daves-a-z-of-speed-reviews/page/n0_w1024.jpg",
+      "id" : "book-2001685",
+      "number" : 1,
+      "series" : "zx-spectrum-it-lives",
+      "thumb" : "al-n-daves-a-z-of-speed-reviews/__ia_thumb.jpg",
+      "title" : "Al 'n' Dave's A to Z of Speed Reviews",
+      "zip" : "al-n-daves-a-z-of-speed-reviews/Al%20'n'%20Dave's%20A-Z%20of%20Speed%20Reviews.pdf"
+    },
+    {
+      "bytes" : 6390322,
+      "cover" : "a-z-of-curiosities-of-the-modern-age/page/n0_w1024.jpg",
+      "id" : "book-2001698",
+      "number" : 2,
+      "series" : "zx-spectrum-it-lives",
+      "thumb" : "a-z-of-curiosities-of-the-modern-age/__ia_thumb.jpg",
+      "title" : "A to Z of Curiosities Of The Modern Age",
+      "zip" : "a-z-of-curiosities-of-the-modern-age/A-Z%20of%20Curiosities%20Of%20The%20Modern%20Age.pdf"
+    },
+    {
+      "bytes" : 17830725,
+      "cover" : "captains-blog-final-entry/page/n0_w1024.jpg",
+      "id" : "book-2001703",
+      "number" : 3,
+      "series" : "zx-spectrum-it-lives",
+      "thumb" : "captains-blog-final-entry/__ia_thumb.jpg",
+      "title" : "Captain's Blog: Final Entry?",
+      "zip" : "captains-blog-final-entry/Captain's%20Blog-Final%20Entry.pdf"
+    }
+  ],
+  "series" : [
+    {
+      "code" : "",
+      "key" : "addison-wesley-productions",
+      "language" : "en",
+      "name" : "Addison-Wesley Productions"
+    },
+    {
+      "code" : "",
+      "key" : "arcsoft-publishers",
+      "language" : "en",
+      "name" : "ARCsoft Publishers"
+    },
+    {
+      "code" : "",
+      "key" : "armada",
+      "language" : "en",
+      "name" : "Armada"
+    },
+    {
+      "code" : "",
+      "key" : "bernard-babani-publishing-ltd",
+      "language" : "en",
+      "name" : "Bernard Babani Publishing Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "big-brother-publications",
+      "language" : "en",
+      "name" : "Big Brother Publications"
+    },
+    {
+      "code" : "",
+      "key" : "cambridge-computer",
+      "language" : "en",
+      "name" : "Cambridge Computer"
+    },
+    {
+      "code" : "",
+      "key" : "cambridge-university-press",
+      "language" : "en",
+      "name" : "Cambridge University Press"
+    },
+    {
+      "code" : "",
+      "key" : "century-communications-ltd",
+      "language" : "en",
+      "name" : "Century Communications Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "collins-educational-ltd",
+      "language" : "en",
+      "name" : "Collins Educational Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "computer-publications",
+      "language" : "en",
+      "name" : "Computer Publications"
+    },
+    {
+      "code" : "",
+      "key" : "dorling-kindersley-ltd",
+      "language" : "en",
+      "name" : "Dorling Kindersley Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "duckworth-educational-computing",
+      "language" : "en",
+      "name" : "Duckworth Educational Computing"
+    },
+    {
+      "code" : "",
+      "key" : "edward-arnold-ltd",
+      "language" : "en",
+      "name" : "Edward Arnold Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "electret-scientific-company",
+      "language" : "en",
+      "name" : "Electret Scientific Company"
+    },
+    {
+      "code" : "",
+      "key" : "fontana-publishing",
+      "language" : "en",
+      "name" : "Fontana Publishing"
+    },
+    {
+      "code" : "",
+      "key" : "futura",
+      "language" : "en",
+      "name" : "Futura"
+    },
+    {
+      "code" : "",
+      "key" : "glentop-publishers-ltd",
+      "language" : "en",
+      "name" : "Glentop Publishers Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "gower-publishing-co-ltd",
+      "language" : "en",
+      "name" : "Gower Publishing Co Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "granada-publishing",
+      "language" : "en",
+      "name" : "Granada Publishing"
+    },
+    {
+      "code" : "",
+      "key" : "grosset-dunlap",
+      "language" : "en",
+      "name" : "Grosset & Dunlap"
+    },
+    {
+      "code" : "",
+      "key" : "hewson-consultants-ltd",
+      "language" : "en",
+      "name" : "Hewson Consultants Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "imagine-publishing-ltd",
+      "language" : "en",
+      "name" : "Imagine Publishing Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "interface-publications-ltd",
+      "language" : "en",
+      "name" : "Interface Publications Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "linsac",
+      "language" : "en",
+      "name" : "Linsac"
+    },
+    {
+      "code" : "",
+      "key" : "macmillan-education-ltd",
+      "language" : "en",
+      "name" : "Macmillan Education Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "mark-r-jones",
+      "language" : "en",
+      "name" : "Mark R. Jones"
+    },
+    {
+      "code" : "",
+      "key" : "mcgraw-hill-book-company-uk-ltd",
+      "language" : "en",
+      "name" : "McGraw-Hill Book Company UK Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "melbourne-house",
+      "language" : "en",
+      "name" : "Melbourne House"
+    },
+    {
+      "code" : "",
+      "key" : "micro-press",
+      "language" : "en",
+      "name" : "Micro Press"
+    },
+    {
+      "code" : "",
+      "key" : "miles-gordon-technology",
+      "language" : "en",
+      "name" : "Miles Gordon Technology"
+    },
+    {
+      "code" : "",
+      "key" : "national-extension-college-trust-ltd",
+      "language" : "en",
+      "name" : "National Extension College Trust Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "new-american-library",
+      "language" : "en",
+      "name" : "New American Library"
+    },
+    {
+      "code" : "",
+      "key" : "newnes-technical-books",
+      "language" : "en",
+      "name" : "Newnes Technical Books"
+    },
+    {
+      "code" : "",
+      "key" : "osborne",
+      "language" : "en",
+      "name" : "Osborne"
+    },
+    {
+      "code" : "",
+      "key" : "other-publishers",
+      "language" : "en",
+      "name" : "Other publishers"
+    },
+    {
+      "code" : "",
+      "key" : "pan-books-ltd",
+      "language" : "en",
+      "name" : "Pan Books Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "papermac",
+      "language" : "en",
+      "name" : "Papermac"
+    },
+    {
+      "code" : "",
+      "key" : "penguin-books-ltd",
+      "language" : "en",
+      "name" : "Penguin Books Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "phipps-associates",
+      "language" : "en",
+      "name" : "Phipps Associates"
+    },
+    {
+      "code" : "",
+      "key" : "phoenix-publishing-associates",
+      "language" : "en",
+      "name" : "Phoenix Publishing Associates"
+    },
+    {
+      "code" : "",
+      "key" : "pitman-publishing-ltd",
+      "language" : "en",
+      "name" : "Pitman Publishing Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "prentice-hall-international",
+      "language" : "en",
+      "name" : "Prentice-Hall International"
+    },
+    {
+      "code" : "",
+      "key" : "publications-international-ltd",
+      "language" : "en",
+      "name" : "Publications International Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "random-house",
+      "language" : "en",
+      "name" : "Random House"
+    },
+    {
+      "code" : "",
+      "key" : "reston-publishing-company-inc",
+      "language" : "en",
+      "name" : "Reston Publishing Company Inc"
+    },
+    {
+      "code" : "",
+      "key" : "richard-francis-altwasser",
+      "language" : "en",
+      "name" : "Richard Francis Altwasser"
+    },
+    {
+      "code" : "",
+      "key" : "scholastic-inc",
+      "language" : "en",
+      "name" : "Scholastic Inc"
+    },
+    {
+      "code" : "",
+      "key" : "shiva-publishing-ltd",
+      "language" : "en",
+      "name" : "Shiva Publishing Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "sigma-technical-press",
+      "language" : "en",
+      "name" : "Sigma Technical Press"
+    },
+    {
+      "code" : "",
+      "key" : "sinclair-browne-ltd",
+      "language" : "en",
+      "name" : "Sinclair Browne Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "sinclair-research-ltd",
+      "language" : "en",
+      "name" : "Sinclair Research Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "sum",
+      "language" : "en",
+      "name" : "SUM"
+    },
+    {
+      "code" : "",
+      "key" : "sunshine-books-ltd",
+      "language" : "en",
+      "name" : "Sunshine Books Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "sybex-computer-books",
+      "language" : "en",
+      "name" : "Sybex Computer Books"
+    },
+    {
+      "code" : "",
+      "key" : "tab-books-inc",
+      "language" : "en",
+      "name" : "Tab Books Inc"
+    },
+    {
+      "code" : "",
+      "key" : "templesoft",
+      "language" : "en",
+      "name" : "Templesoft"
+    },
+    {
+      "code" : "",
+      "key" : "the-macmillan-press-ltd",
+      "language" : "en",
+      "name" : "The Macmillan Press Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "timedata-ltd",
+      "language" : "en",
+      "name" : "Timedata Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "usborne-publishing-ltd",
+      "language" : "en",
+      "name" : "Usborne Publishing Ltd"
+    },
+    {
+      "code" : "",
+      "key" : "virgin-books",
+      "language" : "en",
+      "name" : "Virgin Books"
+    },
+    {
+      "code" : "",
+      "key" : "zx-spectrum-it-lives",
+      "language" : "en",
+      "name" : "ZX Spectrum - It Lives"
+    }
+  ],
+  "version" : 1
+}

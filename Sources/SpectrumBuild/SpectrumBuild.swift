@@ -30,6 +30,11 @@ import SZKit
 struct SpectrumBuild {
 
     static func main() async throws {
+        // Progress from a run that takes minutes is worth nothing if it
+        // arrives all at once at the end, which is what happens by default the
+        // moment stdout is a pipe rather than a terminal.
+        setvbuf(stdout, nil, _IOLBF, 0)
+
         let arguments = Array(CommandLine.arguments.dropFirst())
 
         let root = URL(fileURLWithPath: #filePath)   // .../Sources/SpectrumBuild/<this>
@@ -40,13 +45,70 @@ struct SpectrumBuild {
         let dump = try await ZXDBDump.load(
             cache: root.appendingPathComponent(".zxdb-cache"),
             allowNetwork: !arguments.contains("--no-network"),
+            // `publishers` and `labels` are what shelve the books by imprint.
+            // Left out of this list, the join silently finds nothing and every
+            // book lands under "Other publishers" — which is exactly what the
+            // first build did, and the catalogue looked perfectly valid.
             tables: ["magazines", "issues", "files", "downloads",
-                     "entries", "filetypes", "genretypes", "countries"])
+                     "entries", "filetypes", "genretypes", "countries",
+                     "publishers", "labels"])
+
+        let cache = root.appendingPathComponent(".zxdb-cache")
+        let builder = SpectrumCatalog(dump: dump, cache: cache,
+                                      allowNetwork: !arguments.contains("--no-network"))
+
+        if arguments.contains("--plan") {
+            let (planned, unexpandable) = builder.plan()
+            let books = builder.planBooks()
+            print(String(repeating: "\u{2500}", count: 68))
+            print("What a full build would ask for\n")
+            for group in Spectrum.Group.inMenuOrder {
+                let mine = group == .books ? books : planned.filter { $0.group == group }
+                print("  \(group.display.padded(to: 12)) "
+                      + "\(String(mine.count).leftPadded(to: 5)) rows  "
+                      + "\(String(Set(mine.map(\.identifier)).count).leftPadded(to: 5)) items  "
+                      + "\(String(Set(mine.map(\.seriesKey)).count).leftPadded(to: 4)) series")
+            }
+            if !unexpandable.isEmpty {
+                print("\n  not expandable:")
+                for (why, n) in unexpandable.sorted(by: { $0.value > $1.value }) {
+                    print("      \(String(n).leftPadded(to: 5))  \(why)")
+                }
+            }
+            return
+        }
+
+        if arguments.contains("--build") {
+            guard let name = value(of: "--build", in: arguments),
+                  let group = Spectrum.Group(rawValue: name) else {
+                throw ZXDBDump.Failure(
+                    "--build needs one of: "
+                    + Spectrum.Group.allCases.map(\.rawValue).joined(separator: ", "))
+            }
+            let output = value(of: "--output", in: arguments).map { URL(fileURLWithPath: $0) }
+                ?? root.appendingPathComponent(
+                    "Sources/SZKit/Resources/\(group.resource).json")
+            print(String(repeating: "\u{2500}", count: 68))
+            print("Building \(group.resource)\n")
+            try await builder.build(
+                group: group,
+                limit: value(of: "--limit", in: arguments).flatMap(Int.init),
+                output: output)
+            return
+        }
+
+        if arguments.contains("--validate") {
+            let perToken = value(of: "--per-token", in: arguments).flatMap(Int.init) ?? 8
+            print(String(repeating: "─", count: 68))
+            print("Checking expanded masks against archive.org\n")
+            await Validator(dump: dump, perToken: perToken).run()
+            return
+        }
 
         guard arguments.contains("--probe") else {
             throw ZXDBDump.Failure(
-                "only --probe is implemented: this tool reports what ZXDB holds, "
-                + "it does not build a catalogue yet")
+                "expected --probe (what ZXDB holds) or --validate (whether the "
+                + "expanded masks resolve); no catalogue is built yet")
         }
 
         let report = Report(dump: dump)
@@ -56,6 +118,11 @@ struct SpectrumBuild {
         report.recordedFiles()
         report.books()
         report.inventory()
+    }
+
+    static func value(of flag: String, in arguments: [String]) -> String? {
+        guard let i = arguments.firstIndex(of: flag), i + 1 < arguments.count else { return nil }
+        return arguments[i + 1]
     }
 }
 

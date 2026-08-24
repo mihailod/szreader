@@ -17,6 +17,9 @@ final class ArchiveOrgBrowseTests: XCTestCase {
 
     // MARK: - Fixtures
 
+    /// Enough of a PDF to be sniffed as one.
+    private let pdfBytes = Data("%PDF-1.4\n".utf8) + Data(repeating: 0x41, count: 200)
+
     /// A CBR upload, with everything archive.org derives from one.
     private let comicBookItem = """
     {
@@ -185,6 +188,43 @@ final class ArchiveOrgBrowseTests: XCTestCase {
          "source": "original"},
         {"name": "transactor-for-the-amiga_archive.torrent",
          "format": "Archive BitTorrent", "size": "23813", "source": "metadata"}
+      ]
+    }
+    """.data(using: .utf8)!
+
+    /// An item whose files are filed in folders.
+    ///
+    /// `retro-gamer-magazine-archive` is one item holding 393 issues of Retro
+    /// Gamer, and not one of them is at the item's root: the first is named
+    /// `Retro Gamer/2004/2004/01.pdf`, folders and all. Cut to three, with the
+    /// page pipeline run over every one of them — which is the archive's
+    /// normal state and the pack fixture's opposite.
+    private let foldersItem = """
+    {
+      "metadata": {
+        "identifier": "retro-gamer-magazine-archive",
+        "title": "Retro Gamer Magazine Archive",
+        "mediatype": "texts"
+      },
+      "files": [
+        {"name": "Retro Gamer/2004/2004/01.pdf",
+         "format": "Text PDF", "size": "9028784", "source": "original"},
+        {"name": "Retro Gamer/2004/2004/01_jp2.zip",
+         "format": "Single Page Processed JP2 ZIP", "size": "42286989",
+         "source": "derivative"},
+        {"name": "Retro Gamer/2004/2004/01_scandata.xml",
+         "format": "Scandata", "size": "28426", "source": "derivative"},
+        {"name": "Retro Gamer/2004/2004/02.pdf",
+         "format": "Text PDF", "size": "9500000", "source": "original"},
+        {"name": "Retro Gamer/2004/2004/02_jp2.zip",
+         "format": "Single Page Processed JP2 ZIP", "size": "43000000",
+         "source": "derivative"},
+        {"name": "Retro Gamer/Specials/Videogames Hardware Handbook_downmagaz.net.pdf",
+         "format": "Text PDF", "size": "8000000", "source": "original"},
+        {"name": "__ia_thumb.jpg", "format": "Item Tile", "size": "22644",
+         "source": "original"},
+        {"name": "retro-gamer-magazine-archive_files.xml",
+         "format": "Metadata", "source": "original"}
       ]
     }
     """.data(using: .utf8)!
@@ -778,5 +818,151 @@ final class ArchiveOrgBrowseTests: XCTestCase {
         XCTAssertEqual(after.title, before.title)
         XCTAssertEqual(after.series, before.series)
         XCTAssertEqual(after.pageCount, before.pageCount)
+    }
+
+    // MARK: - Items that file their scans in folders
+
+    /// The address of an issue inside an item's folders names that issue, so
+    /// the reader who is looking at it is not asked which of 393 they meant.
+    func testAnAddressInsideAnItemsFoldersNamesTheIssue() throws {
+        let url = URL(string: "https://archive.org/details/retro-gamer-magazine-archive/"
+                      + "Retro%20Gamer/2004/2004/01/")!
+        XCTAssertEqual(ArchiveOrg.identifier(inURL: url), "retro-gamer-magazine-archive")
+        let stem = try XCTUnwrap(ArchiveOrg.fileStem(inURL: url))
+        XCTAssertEqual(stem, "Retro Gamer/2004/2004/01")
+
+        let folders = try item(foldersItem)
+        XCTAssertEqual(folders.readableIssues.count, 3)
+        XCTAssertEqual(folders.issue(named: stem)?.stem, "Retro Gamer/2004/2004/01")
+
+        // The same file linked to directly, extension and all.
+        let direct = URL(string: "https://archive.org/download/retro-gamer-magazine-archive/"
+                         + "Retro%20Gamer/2004/2004/01.pdf")!
+        let named = try XCTUnwrap(ArchiveOrg.fileStem(inURL: direct))
+        XCTAssertEqual(folders.issue(named: named)?.stem, "Retro Gamer/2004/2004/01")
+
+        // A name that simply ends in a dotted word is found whole, rather than
+        // trimmed to "…Handbook_downmagaz" and matching nothing.
+        let special = "Retro Gamer/Specials/Videogames Hardware Handbook_downmagaz.net"
+        XCTAssertEqual(folders.issue(named: special)?.stem, special)
+
+        // Still a place in the book rather than a folder.
+        let reading = URL(string: "https://archive.org/details/retro-gamer-magazine-archive/"
+                          + "Retro%20Gamer/2004/2004/01/page/n4/mode/2up")!
+        XCTAssertEqual(ArchiveOrg.fileStem(inURL: reading), "Retro Gamer/2004/2004/01")
+    }
+
+    /// Each scanned issue of an item is asked for by name, so 393 issues of
+    /// Retro Gamer get 393 covers rather than 393 copies of January 2004's.
+    ///
+    /// `/download/<id>/<file>/page/n0_w1024.jpg`, measured against the archive:
+    /// the item's own address answers with the same JPEG whichever issue is
+    /// meant, and this one answers with each issue's own first page.
+    func testEachScannedIssueIsAskedForByName() throws {
+        let folders = try item(foldersItem)
+        let issues = folders.readableIssues
+        XCTAssertEqual(folders.coverPath(for: try XCTUnwrap(
+            folders.issue(named: "Retro Gamer/2004/2004/01"))),
+            "retro-gamer-magazine-archive/Retro%20Gamer/2004/2004/01/page/n0_w1024.jpg")
+        XCTAssertEqual(folders.coverPath(for: try XCTUnwrap(
+            folders.issue(named: "Retro Gamer/2004/2004/02"))),
+            "retro-gamer-magazine-archive/Retro%20Gamer/2004/2004/02/page/n0_w1024.jpg")
+        // The special has no rendered pages, so there is nothing to ask for.
+        XCTAssertNil(folders.coverPath(for: try XCTUnwrap(issues.first {
+            $0.stem.hasPrefix("Retro Gamer/Specials")
+        })))
+    }
+
+    /// The pack keeps the item's own address: its one scanned volume is named
+    /// `…Apr[ocr]`, which no URL can carry, and it is the only book the item's
+    /// reader could be showing.
+    func testAPacksOneScannedVolumeStillTakesTheItemsCover() throws {
+        let pack = try item(packItem)
+        XCTAssertEqual(pack.renderedIssueCount, 1)
+        XCTAssertNil(ArchiveOrg.firstPagePath(item: "transactor-for-the-amiga",
+                                              file: pack.readableIssues[0].stem))
+        XCTAssertEqual(pack.coverPath(for: pack.readableIssues[0]),
+                       "transactor-for-the-amiga/page/n0_w1024.jpg")
+        XCTAssertNil(pack.coverPath(for: pack.readableIssues[1]))
+    }
+
+    /// What the endpoint will and will not answer to, which is what decides
+    /// whether an issue has a cover before it is downloaded.
+    func testAnIssuesCoverAddressIsWrittenTheWayTheArchiveReadsIt() {
+        let id = "retro-gamer-magazine-archive"
+        // Folders stay folders; spaces become the one escape it decodes.
+        XCTAssertEqual(ArchiveOrg.firstPagePath(item: id, file: "Retro Gamer/2004/2004/02"),
+                       "retro-gamer-magazine-archive/Retro%20Gamer/2004/2004/02/page/n0_w1024.jpg")
+        // A comma is a path character, and is left alone. Escaped, it 404s.
+        XCTAssertEqual(ArchiveOrg.firstPagePath(
+            item: id, file: "Retro Gamer/2019/Retro Gamer UK - Issue 196, 2019"),
+            "retro-gamer-magazine-archive/Retro%20Gamer/2019/"
+            + "Retro%20Gamer%20UK%20-%20Issue%20196,%202019/page/n0_w1024.jpg")
+        // Brackets have to be literal, and Foundation will not leave them so.
+        XCTAssertNil(ArchiveOrg.firstPagePath(item: id, file: "Transactor_Vol_01[ocr]"))
+        // Nor will it leave an accent, and the archive refuses it escaped.
+        XCTAssertNil(ArchiveOrg.firstPagePath(item: id, file: "Retro Gamer/2010/Retro Gamer №81"))
+
+        // A cover address is a URL that survives being made into one.
+        for file in ["Retro Gamer/2004/2004/02",
+                     "Retro Gamer/2019/Retro Gamer UK - Issue 196, 2019"] {
+            let path = try? XCTUnwrap(ArchiveOrg.firstPagePath(item: id, file: file))
+            let url = ArchiveOrg.base + (path ?? "")
+            XCTAssertEqual(URL(string: url)?.absoluteString, url, file)
+        }
+    }
+
+    /// A shelf entry named after a path reads as a path. The folders are what
+    /// say which issue it is, so they become words.
+    func testAnIssueInFoldersIsNamedByItsFoldersRatherThanItsPath() throws {
+        let folders = try item(foldersItem)
+        let issue = try XCTUnwrap(folders.issue(named: "Retro Gamer/2004/2004/01"))
+        XCTAssertEqual(issue.name, "Retro Gamer 2004 2004 01")
+        XCTAssertEqual(folders.shortName(for: issue), "2004 2004 01")
+
+        let store = try Store()
+        let done = try store.importArchiveItem(folders, file: issue.best)
+        XCTAssertEqual(done.title, "Retro Gamer 2004 2004 01")
+        // The code is a key rather than a name, and stays the path.
+        XCTAssertEqual(folders.code(for: issue),
+                       "retro-gamer-magazine-archive/Retro Gamer/2004/2004/01")
+    }
+
+    /// The bug that started this: the mirror records the name the archive gave
+    /// the file, which here is a path, and the download went looking for three
+    /// folders nobody had created. It failed as "the file 01.pdf.part doesn't
+    /// exist" — which reads as a missing file and was a missing directory.
+    func testAnIssueFiledInFoldersDownloadsToOneFile() async throws {
+        let folders = try item(foldersItem)
+        let store = try Store()
+        let issue = try XCTUnwrap(folders.issue(named: "Retro Gamer/2004/2004/01"))
+        let id = try store.importArchiveItem(folders, file: issue.best).issueID
+        XCTAssertEqual(try store.filename(forMirrorAt: issue.best.url(item: folders.identifier)),
+                       "Retro Gamer/2004/2004/01.pdf")
+
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = Library(store: store, paths: LibraryPaths(root: root),
+                              transport: StubTransport { _ in .init(status: 500) },
+                              downloader: StubDownloader(bodies: ["archive.org": pdfBytes]))
+
+        let outcome = try await library.fetch(issueID: id)
+        XCTAssertEqual(outcome.kind, .pdf)
+        XCTAssertEqual(outcome.path.lastPathComponent, "01.pdf")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outcome.path.path))
+    }
+
+    /// A filename is one path component, whatever the host called the file.
+    func testADownloadIsNamedByTheFileRatherThanThePathToIt() {
+        XCTAssertEqual(Library.diskName("Retro Gamer/2004/2004/01.pdf", issueID: 7), "01.pdf")
+        XCTAssertEqual(Library.diskName("Amiga Bilten 1.pdf", issueID: 7), "Amiga Bilten 1.pdf")
+        // A name off a Content-Disposition header is a stranger's string.
+        XCTAssertEqual(Library.diskName("../../etc/passwd", issueID: 7), "passwd")
+        XCTAssertEqual(Library.diskName("..", issueID: 7), "7.bin")
+        XCTAssertEqual(Library.diskName("/", issueID: 7), "7.bin")
+        XCTAssertEqual(Library.diskName("", issueID: 7), "7.bin")
+        XCTAssertEqual(Library.diskName(nil, issueID: 7), "7.bin")
     }
 }

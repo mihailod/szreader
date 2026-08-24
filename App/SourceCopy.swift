@@ -43,6 +43,8 @@ struct SourceCopy {
         case .comicbookplus: return comicBookPlus
         case .batcave:       return batcave
         case .stripovi:      return stripovi
+        case .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
+            return spectrum(site)
         default:             return bombJack(site)
         }
     }
@@ -243,6 +245,46 @@ struct SourceCopy {
                   + "the index and downloads each issue from those sites on demand. "
                   + "This is an independent reader, not affiliated with or endorsed "
                   + "by either, and it hosts none of their scans.")
+    }
+
+    /// The three Sinclair shelves, described from their group.
+    ///
+    /// One shape rather than three near-identical blocks, for the reason the
+    /// BombJack seven are written once below: they differ in what they hold
+    /// and in nothing else, and a second copy of the disclaimer is a second
+    /// chance for one of them to drift.
+    private static func spectrum(_ site: IssueSite) -> SourceCopy {
+        SourceCopy(
+            switchTitle: site.spectrumGroup?.display ?? "Spectrum Computing",
+            detail: detail(for: site.spectrumGroup),
+            shelfPhrase: "scanned Sinclair magazines and books",
+            creditHeading: "Spectrum Computing / ZXDB",
+            // Two parties to credit, not one, and the split is the whole point
+            // of how this source works: ZXDB says where a scan is, and the
+            // Internet Archive is where it actually lives. Naming only the
+            // first would credit an index for someone else's hosting.
+            credit: "The Sinclair sources are built from ZXDB, the open database "
+                  + "behind Spectrum Computing, which is licensed under the Open "
+                  + "Database License and records where each issue is archived. "
+                  + "The scans themselves are held by the Internet Archive and are "
+                  + "downloaded from there when you ask for one. The app ships the "
+                  + "index only. This is an independent reader, not affiliated with "
+                  + "or endorsed by either, and it hosts no scans.")
+    }
+
+    /// What one Sinclair shelf holds, in the terms someone choosing would use.
+    private static func detail(for group: Spectrum.Group?) -> String {
+        switch group {
+        case .fanzines:
+            return "User-group newsletters and fanzines for the Sinclair "
+                 + "machines, scanned from paper."
+        case .books:
+            return "The Sinclair programming library by imprint — Usborne, "
+                 + "Interface, Melbourne House and more."
+        case .magazines, .none:
+            return "English-language Sinclair magazines — Crash, Your Sinclair, "
+                 + "Sinclair User, ZX Computing and the wider 8-bit press."
+        }
     }
 
     /// What one category holds, in the terms someone choosing would use.

@@ -41,6 +41,38 @@ public enum ArchiveOrg {
         "\(encode(item))/page/n0_w1024.jpg"
     }
 
+    /// The first page of one *file* inside an item, at print size.
+    ///
+    /// The same BookReader endpoint, told which of the item's books it is
+    /// being asked about: `/download/<id>/<file>/page/n0_w1024.jpg`. Measured
+    /// against `retro-gamer-magazine-archive`, where the item's own address
+    /// answers with January 2004's cover no matter which of the 393 issues is
+    /// meant, and this one answers with each issue's own.
+    ///
+    /// Nil for a name that cannot be written in a URL this endpoint accepts.
+    /// It matches the name almost literally — `%20` is the one escape it
+    /// decodes — so `…Apr[ocr]` answers where `…Apr%5Bocr%5D` is a 404, and
+    /// `URL(string:)` escapes brackets, accents and everything else outside
+    /// `urlPathAllowed` before a request is ever made. There is no third
+    /// spelling to try: those issues get no cover address, and the shelf shows
+    /// the same placeholder as for an item the archive never scanned, until
+    /// the download supplies the real first page.
+    public static func firstPagePath(item: String, file: String) -> String? {
+        guard file.unicodeScalars.allSatisfy(addressable.contains) else { return nil }
+        return "\(encode(item))/\(encodePath(file))/page/n0_w1024.jpg"
+    }
+
+    /// What a filename may hold and still be asked for by name.
+    ///
+    /// Everything a URL path carries unescaped, plus the space — which is in
+    /// no URL, is in half the filenames on archive.org, and is the one
+    /// character this endpoint decodes.
+    private static let addressable: CharacterSet = {
+        var set = CharacterSet.urlPathAllowed
+        set.insert(" ")
+        return set
+    }()
+
     /// The square item tile every item has, for a stand-in while the cover
     /// loads. About 180px, and never the whole cover.
     public static func thumbnailPath(item: String) -> String {
@@ -94,9 +126,17 @@ public enum ArchiveOrg {
     /// which of them you are looking at in the third path segment:
     /// `/details/transactor-for-the-amiga/Transactor_for_the_Amiga_Vol_01_01_1988_Apr[ocr]`.
     ///
-    /// Returned without its extension, because that is how the details page
-    /// writes it and how the files group: one issue is a `.pdf` and its
-    /// siblings under one name.
+    /// Everything after the identifier, joined back up, because an item's
+    /// files are not always at its root: `retro-gamer-magazine-archive` files
+    /// 393 issues in folders, and the address of one of them is
+    /// `/details/retro-gamer-magazine-archive/Retro%20Gamer/2004/2004/01/`.
+    /// Read as a single segment that is the magazine's name, matching no
+    /// issue, and the reader was asked which of 393 they meant while looking
+    /// straight at the answer.
+    ///
+    /// Returned as the address writes it, extension and all. The details page
+    /// drops it and a link to the file itself keeps it; `issue(named:)` knows
+    /// both are one issue.
     public static func fileStem(inURL url: URL) -> String? {
         segments(inURL: url)?.file
     }
@@ -122,13 +162,13 @@ public enum ArchiveOrg {
         // shape as an item and is not one.
         guard !identifier.isEmpty, !identifier.hasPrefix("@") else { return nil }
 
-        var file: String?
-        if parts.count >= 3 {
-            let raw = parts[2].removingPercentEncoding ?? parts[2]
-            if !raw.isEmpty, !readerPathWords.contains(raw.lowercased()) {
-                file = (raw as NSString).deletingPathExtension
-            }
-        }
+        // Up to the point where the archive's own reader takes over the
+        // address: `…/<file>/page/n0/mode/2up` is a place in that file, and
+        // the words after it are not folders.
+        let named = parts.dropFirst(2)
+            .prefix { !readerPathWords.contains($0.lowercased()) }
+            .map { $0.removingPercentEncoding ?? $0 }
+        let file = named.isEmpty ? nil : named.joined(separator: "/")
         return (identifier, file)
     }
 
@@ -151,6 +191,16 @@ public enum ArchiveOrg {
         }
         let counted = pageElement.allGroups(xml).count
         return counted > 0 ? counted : nil
+    }
+
+    /// Escapes a path inside an item, keeping its folders as folders.
+    ///
+    /// An item's files are not always at its root — the Retro Gamer archive
+    /// files every issue under `Retro Gamer/<year>/…` — and those slashes are
+    /// slashes in the address too, where the ones inside a single name are
+    /// not. So the path is escaped a segment at a time.
+    static func encodePath(_ path: String) -> String {
+        path.split(separator: "/").map { encode(String($0)) }.joined(separator: "/")
     }
 
     /// Escapes one path segment.

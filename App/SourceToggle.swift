@@ -57,7 +57,9 @@ struct SourceList: View {
 
     /// The sources that stand on their own.
     private var standalone: [IssueSite] {
-        IssueSite.allCases.filter { $0.bombjackCategory == nil }
+        IssueSite.allCases.filter {
+            $0.bombjackCategory == nil && $0.spectrumGroup == nil
+        }
     }
 
     var body: some View {
@@ -69,7 +71,39 @@ struct SourceList: View {
                 Divider().padding(.leading, 16)
             }
             bombJackGroup
+            Divider().padding(.leading, 16)
+            spectrumGroup
         }
+    }
+
+    /// The three, under one heading — same shape as the seven above, and for
+    /// the same reason: flat, they read as three peers of StripZona; grouped,
+    /// they read as one archive with parts, which is what they are.
+    private var spectrumGroup: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Spectrum Computing").font(.headline)
+                Text("Scanned magazines, fanzines and books for the Sinclair "
+                     + "machines — ZX Spectrum, ZX81 and QL.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+
+            ForEach(Array(IssueSite.spectrumSites.enumerated()), id: \.element) { index, site in
+                SourceToggle(site: site, model: model)
+                    .padding(.leading, 32)
+                    .padding(.trailing, 16)
+                    .padding(.vertical, 8)
+                if index < IssueSite.spectrumSites.count - 1 {
+                    Divider().padding(.leading, 32)
+                }
+            }
+        }
+        .padding(.bottom, 4)
     }
 
     /// The seven, under one heading.

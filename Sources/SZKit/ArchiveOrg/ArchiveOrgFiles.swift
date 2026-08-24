@@ -202,9 +202,18 @@ public extension ArchiveOrgItem {
     }
 
     /// The issue an address names, when it names one this item holds.
+    ///
+    /// Tried as the address writes it, then without its extension, because the
+    /// two addresses for one issue disagree about that: the archive's reader
+    /// ends `…/2004/01/` where a link to the file itself ends `…/01.pdf`.
+    /// Extension last, so a scan whose name simply ends in a dotted word —
+    /// `…_downmagaz.net.pdf` — is found under the name it actually has before
+    /// anything is trimmed off it.
     func issue(named stem: String) -> ReadableIssue? {
         let key = stem.lowercased()
+        let bare = (key as NSString).deletingPathExtension
         return readableIssues.first { $0.stem.lowercased() == key }
+            ?? readableIssues.first { $0.stem.lowercased() == bare }
     }
 
     /// How one issue of this item is filed in the library.
@@ -230,11 +239,31 @@ public extension ArchiveOrgItem {
     /// which is the right cover for exactly one of the thirteen.
     func hasRenderedPages(forStem stem: String) -> Bool {
         let prefix = stem.lowercased()
-        return files.contains { file in
+        return renderedFileNames.contains { $0.hasPrefix(prefix) }
+    }
+
+    /// The page pipeline's own output, lowercased, so a question asked once
+    /// per issue does not re-read every file in the item each time.
+    private var renderedFileNames: [String] {
+        files.compactMap { file in
             let format = (file.format ?? "").lowercased()
-            guard format.contains("jp2") || format == "scandata" else { return false }
-            return file.name.lowercased().hasPrefix(prefix)
+            guard format.contains("jp2") || format == "scandata" else { return nil }
+            return file.name.lowercased()
         }
+    }
+
+    /// How many of this item's issues the archive has rendered pages for.
+    ///
+    /// Asked only where an issue cannot be named in an address of its own:
+    /// `/download/<id>/page/n0_w1024.jpg` serves the first page of the one
+    /// book the item's reader opens, so it is that issue's cover only where
+    /// there is nothing else it could be.
+    var renderedIssueCount: Int {
+        let rendered = renderedFileNames
+        return readableIssues.filter { issue in
+            let prefix = issue.stem.lowercased()
+            return rendered.contains { $0.hasPrefix(prefix) }
+        }.count
     }
 
     /// The best cover available without downloading the issue.
@@ -247,7 +276,25 @@ public extension ArchiveOrgItem {
     /// the truth in the meantime.
     func coverPath(for issue: ReadableIssue) -> String? {
         if hasRenderedPages(forStem: issue.stem) {
-            return ArchiveOrg.firstPagePath(item: identifier)
+            // An item that holds one issue *is* that issue, so its own address
+            // is that issue's cover.
+            if readableIssues.count == 1 {
+                return ArchiveOrg.firstPagePath(item: identifier)
+            }
+            // An item that holds several has to say which, or they all get the
+            // same picture: the Retro Gamer archive is 393 scanned issues
+            // behind one `/page/n0`, and every one of them would have been
+            // shelved under January 2004's cover.
+            if let own = ArchiveOrg.firstPagePath(item: identifier, file: issue.stem) {
+                return own
+            }
+            // A name no URL can carry. The item's own address is still the
+            // right picture where the archive rendered exactly one of its
+            // issues, which is the shape of a pack: one volume scanned, twelve
+            // left as plain PDFs.
+            if renderedIssueCount == 1 {
+                return ArchiveOrg.firstPagePath(item: identifier)
+            }
         }
         guard readableIssues.count == 1,
               files.contains(where: { $0.name == "__ia_thumb.jpg" }) else { return nil }
@@ -264,8 +311,14 @@ public extension ArchiveOrgItem {
     private static let spaceRun = Rx(#"\s+"#)
 
     /// A filename stem as a person would read it.
+    ///
+    /// Folders count as underscores do. An item that files its scans in
+    /// directories names one `Retro Gamer/2004/2004/01`, and a shelf entry
+    /// called after a path reads as a path; the folders are what say which
+    /// issue it is, so they are kept as words rather than dropped.
     static func readableName(_ stem: String) -> String {
-        var text = stem.replacingOccurrences(of: "_", with: " ")
+        var text = stem.replacingOccurrences(of: "/", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
         text = scanTag.replacing(text, with: " ")
         text = spaceRun.replacing(text, with: " ")
         return text.trimmingCharacters(in: .whitespaces)

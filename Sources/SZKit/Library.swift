@@ -702,6 +702,30 @@ public final class Library {
         throw last ?? DownloadError.badStatus(500)
     }
 
+    /// What a download is called on disk.
+    ///
+    /// One path component, always. The name recorded against a mirror is the
+    /// name its host gave the file, and on archive.org that is the file's
+    /// *path inside the item* rather than its name: the Retro Gamer archive
+    /// is one item holding 393 issues at names like
+    /// `Retro Gamer/2004/2004/01.pdf`. Appended whole to the issue's
+    /// directory, such a name aims the download at three folders nobody
+    /// created, and the failure reads "the file 01.pdf.part doesn't exist" —
+    /// a missing directory, reported as a missing file.
+    ///
+    /// The folders are dropped rather than made. Nothing downstream reads
+    /// them: every issue downloads into a directory of its own, so two files
+    /// called `01.pdf` cannot meet. And a name that arrived in a
+    /// Content-Disposition header is a stranger's string, where `../` is a
+    /// way out of that directory rather than part of a filename.
+    static func diskName(_ proposed: String?, issueID: Int) -> String {
+        let leaf = ((proposed ?? "") as NSString).lastPathComponent
+        guard !leaf.isEmpty, leaf != ".", leaf != "..", !leaf.contains("/") else {
+            return "\(issueID).bin"
+        }
+        return leaf
+    }
+
     /// One pass at one mirror: resolve, fetch, and check what arrived.
     private func transfer(mirror: MirrorLink, url: URL, issueID: Int,
                           into directory: URL,
@@ -715,7 +739,7 @@ public final class Library {
         let link = try await registry.directLink(url, via: transport)
 
         let name = explicitName ?? ((try? store.filename(forMirrorAt: mirror.url)) ?? nil)
-        let filename = name ?? "\(issueID).bin"
+        let filename = Self.diskName(name, issueID: issueID)
         let finalURL = directory.appendingPathComponent(filename)
         let rawURL = directory.appendingPathComponent(filename + ".part")
 

@@ -28,6 +28,17 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     // archives: 31 Croatian web comics, none of which is a file. Its
     // catalogue is its own shape for that reason — see `StripoviCatalog`.
     case stripovi
+    // A shipped index like RetroSpec's, but assembled rather than scraped:
+    // ZXDB stores a URL template per magazine and `spectrum-build` expands it
+    // against each issue, then asks archive.org what that item really holds.
+    //
+    // English only, split by what the material is rather than by the language
+    // it is in. Books are the odd one: they are not periodicals and come from
+    // a different pair of ZXDB tables. See `Spectrum.Group`, which is where
+    // the mapping to a catalogue file lives.
+    case spectrumMagazines
+    case spectrumFanzines
+    case spectrumBooks
     // BombJack ships as seven catalogues rather than one.
     //
     // As a single source it was 18,219 rows: fifteen seconds to seed, which
@@ -54,6 +65,14 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .comicbookplus: return "ComicBook+"
         case .batcave:       return "BatCave"
         case .stripovi:      return "Stripovi.com"
+        case .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
+            // "Spectrum Computing: Magazines" rather than "Magazines". Same
+            // reason BombJack's categories are spelled in full below: this
+            // string is written into the publisher column and the search index
+            // of every seeded row, and "Magazines" on its own in a publisher
+            // filter names nothing.
+            guard let group = spectrumGroup else { return rawValue }
+            return "Spectrum Computing: \(group.display)"
         default:
             // "BombJack: Books" rather than "Books". This string is written
             // into the publisher column and the search index of every seeded
@@ -98,6 +117,8 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .stripovi:                            return "stripovi-catalog"
         case .retrospec:                 return "retrospec-catalog"
         case .archive:                   return "archive-catalog"
+        case .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
+            return spectrumGroup?.resource
         default:                         return bombjackCategory?.resource
         }
     }
@@ -116,10 +137,32 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .bombjackHardware:           return .hardware
         case .bombjackGames:              return .games
         case .bombjackOther:              return .other
-        case .stripzona, .retrospec, .archive, .comicbookplus, .batcave, .stripovi:
+        case .stripzona, .retrospec, .archive, .comicbookplus, .batcave, .stripovi,
+             .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
             return nil
         }
     }
+
+    /// The ZXDB shelf this source carries, or nil if it is not one of them.
+    ///
+    /// The counterpart of `bombjackCategory`, and here for the same reason:
+    /// one place that knows which case maps to which catalogue file, so a
+    /// switch label and a resource name cannot come apart.
+    public var spectrumGroup: Spectrum.Group? {
+        switch self {
+        case .spectrumMagazines: return .magazines
+        case .spectrumFanzines:  return .fanzines
+        case .spectrumBooks:     return .books
+        default:                 return nil
+        }
+    }
+
+    /// The three that make up the Sinclair archive, in the order the settings
+    /// list shows them.
+    public static let spectrumSites: [IssueSite] =
+        Spectrum.Group.inMenuOrder.compactMap { group in
+            IssueSite.allCases.first { $0.spectrumGroup == group }
+        }
 
     /// The seven that make up BombJack, in the order the settings list shows
     /// them. Named `bombjackSites` rather than `bombjack` so it cannot be
