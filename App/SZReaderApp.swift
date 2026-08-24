@@ -706,6 +706,8 @@ final class AppModel: ObservableObject {
                 outcome = .failure(error)
             }
             guard let self else { return }
+            // Whether the shelf below has anything new to show.
+            let wroteRows: Bool
             switch outcome {
             case .success(let report):
                 if announce, report.inserted > 0 {
@@ -717,10 +719,30 @@ final class AppModel: ObservableObject {
                                + "your library. You can hide them again in Settings.")
                 }
                 self.status = report.isEmpty ? "" : "\(site.display) ready"
+                wroteRows = !report.isEmpty
             case .failure(let error):
                 self.status = "\(site.display) catalogue unavailable: "
                             + "\(Library.reason(error))"
+                // A seed that threw part-way has still committed whatever
+                // batches it finished, and the report that would have said how
+                // many is what the throw replaced. So this refreshes: the one
+                // case where the shelf may have grown without anything being
+                // able to say by how much.
+                wroteRows = true
             }
+            // Nothing written means nothing to rebuild, and that is the normal
+            // case on every launch after the first: the stamp matches, the
+            // seed skips, and the shelf is already showing exactly these rows.
+            // Rebuilding anyway cost one full menu pass and one full re-sort
+            // of the whole library *per enabled source* — fourteen of each, to
+            // discover that nothing had changed.
+            //
+            // Safe to skip because neither caller depends on this refresh for
+            // anything but the seed's own rows. A source being switched on is
+            // a change to what is *visible*, and `sourcesChanged` refreshes
+            // for that before this task is ever started; `start()` likewise
+            // refreshes on its own once the launch seeds are away.
+            guard wroteRows else { return }
             self.refreshSourceMenus()
             self.issueCount = self.store?.issueCount ?? 0
             self.downloadedCount = self.store?.downloadedCount ?? 0

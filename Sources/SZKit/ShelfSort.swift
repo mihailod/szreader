@@ -73,6 +73,46 @@ public enum ShelfSort: String, CaseIterable, Sendable {
     }
 }
 
+/// The derived keys a sort compares on, worked out once per issue.
+///
+/// `editionCode` and `heroDisplay` are computed properties, and both run
+/// `Fold.fold` — two `replacingOccurrences`, an NSString folding, and two
+/// regular-expression passes. Asking for them *inside* the comparator meant
+/// deriving them once per comparison rather than once per row, which is a
+/// different order of growth: sorting 27,801 issues by Series makes 292,412
+/// comparisons and asked for a key roughly 1.17 million times, at four and a
+/// half seconds for the sort.
+///
+/// Keyed by issue id, which is unique and stable for the length of one sort.
+/// Nothing about the comparison changes — same localised `compare`, same
+/// case-insensitive grouping, same tie-breaks — so the order this produces is
+/// the order the old code produced, arrived at without doing the same work
+/// hundreds of thousands of times.
+///
+/// A class rather than a struct because the comparator closure has to be able
+/// to fill it in as it goes; `Array.sort(by:)` calls that closure from one
+/// thread, so there is nothing here to synchronise.
+private final class SortKeys {
+    private var editions: [Int: String] = [:]
+    private var heroes: [Int: String] = [:]
+
+    /// Empty rather than nil, because that is what the comparison did with a
+    /// nil anyway: both `same` and `byText` coalesce it before looking.
+    func edition(_ issue: StoredIssue) -> String {
+        if let cached = editions[issue.id] { return cached }
+        let key = issue.editionCode ?? ""
+        editions[issue.id] = key
+        return key
+    }
+
+    func hero(_ issue: StoredIssue) -> String {
+        if let cached = heroes[issue.id] { return cached }
+        let key = issue.heroDisplay ?? ""
+        heroes[issue.id] = key
+        return key
+    }
+}
+
 public extension StoredIssue {
 
     /// The comparator for a sort, or nil to keep the query's own order.
@@ -98,8 +138,15 @@ public extension StoredIssue {
         // order that has to be defined, not the array that came back.
         case .newest:   return whileSearching ? nil : { $0.id > $1.id }
         case .title:    return { byText($0.title ?? $0.code, $1.title ?? $1.code, $0, $1) }
-        case .series:   return bySeries
-        case .hero:     return byHero
+        // One cache per comparator, so it lives exactly as long as the sort
+        // that is using it and a later sort never reads keys derived from a
+        // row as it was before an edit.
+        case .series:
+            let keys = SortKeys()
+            return { bySeries($0, $1, keys) }
+        case .hero:
+            let keys = SortKeys()
+            return { byHero($0, $1, keys) }
         case .number:   return byNumber
         }
     }
@@ -126,15 +173,19 @@ public extension StoredIssue {
 
     /// Series, then number within it — an edition is one numbered run, so its
     /// issues belong together in order regardless of who stars in them.
-    private static func bySeries(_ a: StoredIssue, _ b: StoredIssue) -> Bool {
-        if !same(a.editionCode, b.editionCode) { return byText(a.editionCode, b.editionCode, a, b) }
+    private static func bySeries(_ a: StoredIssue, _ b: StoredIssue,
+                                 _ keys: SortKeys) -> Bool {
+        let left = keys.edition(a), right = keys.edition(b)
+        if !same(left, right) { return byText(left, right, a, b) }
         if a.number != b.number { return byNumber(a, b) }
         return a.id < b.id
     }
 
-    private static func byHero(_ a: StoredIssue, _ b: StoredIssue) -> Bool {
-        if !same(a.heroDisplay, b.heroDisplay) { return byText(a.heroDisplay, b.heroDisplay, a, b) }
-        return bySeries(a, b)
+    private static func byHero(_ a: StoredIssue, _ b: StoredIssue,
+                               _ keys: SortKeys) -> Bool {
+        let left = keys.hero(a), right = keys.hero(b)
+        if !same(left, right) { return byText(left, right, a, b) }
+        return bySeries(a, b, keys)
     }
 
     /// Numeric, so 9 comes before 21 and 100 last.
