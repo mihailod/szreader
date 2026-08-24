@@ -682,15 +682,22 @@ final class AppModel: ObservableObject {
         guard let store else { return }
         status = "loading \(site.display)…"
         Task { @MainActor [weak self] in
+            // Bound once, here, on the main actor. `self` inside a `[weak self]`
+            // closure is a *variable* — the runtime zeroes it on dealloc — so
+            // reading it from the detached seed below is a shared mutable read
+            // across concurrency domains, and an error under the Swift 6
+            // language mode. The binding holds the model for the length of one
+            // seed; the app owns it for the whole run regardless.
+            let model = self
             let outcome: Result<SeedReport, Error>
             do {
                 let report = try await Task.detached(priority: .utility) {
                     try store.seedCatalogue(for: site) { done, total in
                         // Cheap and rate-limited by the batch size: one
                         // message per four hundred rows, not per row.
-                        Task { @MainActor [weak self] in
-                            guard let self, done < total else { return }
-                            self.status = "loading \(site.display)… \(done) of \(total)"
+                        Task { @MainActor in
+                            guard let model, done < total else { return }
+                            model.status = "loading \(site.display)… \(done) of \(total)"
                         }
                     }
                 }.value
@@ -1218,11 +1225,15 @@ final class AppModel: ObservableObject {
         // its closure must not reach for the model: reading a captured, weak,
         // non-Sendable AppModel from concurrent code is a data race, and an
         // error under the Swift 6 language mode. A stream continuation *is*
-        // Sendable, so that is all the closure holds; the fractions are
-        // consumed on the main actor, where the model lives.
+        // Sendable and the scale below is a Double, so those two are all
+        // the closure holds; the fractions are consumed on the main actor,
+        // where the model lives.
         var sink: AsyncStream<TransferTick>.Continuation!
         let fractions = AsyncStream<TransferTick> { sink = $0 }
         let continuation = sink!
+        // Read here rather than inside the closure: it is main-actor state
+        // and the closure runs on whichever thread is moving bytes.
+        let share = Self.transferShare
         let report: @Sendable (DownloadProgress) -> Void = { p in
             // expected is -1 when the server sends no length; with no total
             // there is no fraction to show.
@@ -1235,7 +1246,7 @@ final class AppModel: ObservableObject {
             // stated, and that figure is rounded. A bar that runs past its own
             // end looks broken in a way that being slightly early does not.
             let fraction = min(Double(p.received) / Double(p.expected), 1.0)
-            continuation.yield(TransferTick(fraction: fraction * Self.transferShare,
+            continuation.yield(TransferTick(fraction: fraction * share,
                                             received: p.received, expected: p.expected))
         }
 
@@ -1500,16 +1511,20 @@ final class AppModel: ObservableObject {
         status = "fetching \u{201C}\(name)\u{201D}\u{2026}"
 
         Task { @MainActor [weak self] in
+            // Bound on the main actor for the same reason as `seedInBackground`:
+            // the fetcher's progress closure runs off it, and must capture an
+            // immutable optional rather than read a weak variable.
+            let model = self
             do {
                 let fetcher = StripoviFetcher(transport: URLSessionTransport())
                 let result = try await fetcher.fetch(
                     comic: comic, in: catalogue,
                     into: library.directory(forIssue: issueID)) { done, total in
-                        Task { @MainActor [weak self] in
-                            guard let self, total > 0 else { return }
-                            self.progress[issueID] = Double(done) / Double(total)
-                            self.status = "fetching \u{201C}\(name)\u{201D} \u{2014} "
-                                        + "page \(done) of \(total)"
+                        Task { @MainActor in
+                            guard let model, total > 0 else { return }
+                            model.progress[issueID] = Double(done) / Double(total)
+                            model.status = "fetching \u{201C}\(name)\u{201D} \u{2014} "
+                                         + "page \(done) of \(total)"
                         }
                     }
 
@@ -1741,6 +1756,6 @@ final class AppModel: ObservableObject {
     }
 
     func mirrors(for issue: StoredIssue) -> [MirrorLink] {
-        (try? store?.mirrors(forIssue: issue.id)) as? [MirrorLink] ?? []
+        (try? store?.mirrors(forIssue: issue.id)) ?? []
     }
 }

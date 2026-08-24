@@ -149,7 +149,7 @@ final class BatCavePageFetcher: NSObject {
         // Stay on the reader page. It is the referring page for every one of
         // these images, and that turns out to be what the image host checks —
         // see `directImage`.
-        session = await BatCaveSession(
+        session = BatCaveSession(
             cookies: await SiteCookies.header(forDomain: BatCave.host),
             userAgent: await currentUserAgent(),
             referer: readerURL)

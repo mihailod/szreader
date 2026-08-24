@@ -102,6 +102,21 @@ let package = Package(
                 .define("_FILE_OFFSET_BITS", to: "64"),
                 .define("_LARGEFILE_SOURCE"),
                 .define("RAR_SMP"),
+                // unrar is upstream source kept byte-identical so it can be
+                // re-vendored, so its warnings can never be fixed where they
+                // are raised. There were 150 of them — five classes, all
+                // house style rather than defects — against 32 from this
+                // app's own code, which is the number that matters and which
+                // they buried. Silenced for this target only, and named one
+                // by one rather than `-w`: anything unrar does NOT already do
+                // still warns, here and in szunrar.cpp beside it.
+                .unsafeFlags([
+                    "-Wno-logical-op-parentheses",
+                    "-Wno-dangling-else",
+                    "-Wno-shorten-64-to-32",
+                    "-Wno-switch",
+                    "-Wno-nontrivial-memcall",
+                ]),
             ]
         ),
         // Deliberately UIKit-free so the parsers run as fast Mac unit tests

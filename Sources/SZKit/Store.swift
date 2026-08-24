@@ -6,7 +6,7 @@ public enum ReadState: String, Sendable, CaseIterable {
     case unread, reading, read
 }
 
-public struct StoredIssue: Equatable, Sendable {
+public struct StoredIssue: Equatable, Sendable, Identifiable {
     public let id: Int
     public let code: String?
     public let number: Int?
@@ -367,12 +367,12 @@ public final class Store: @unchecked Sendable {
         // Safe to lose: everything about them came from a shipped catalogue
         // and comes back the moment a switch is thrown. A downloaded file
         // survives on disk; its row returns when its category is enabled.
-        try? db.run("DELETE FROM issue_fts WHERE rowid IN "
-                  + "(SELECT id FROM issue WHERE site = 'bombjack')")
-        try? db.run("DELETE FROM mirror WHERE issue_id IN "
-                  + "(SELECT id FROM issue WHERE site = 'bombjack')")
-        try? db.run("DELETE FROM issue WHERE site = 'bombjack'")
-        try? db.run("DELETE FROM meta WHERE key = 'bombjack_catalogue'")
+        _ = try? db.run("DELETE FROM issue_fts WHERE rowid IN "
+                      + "(SELECT id FROM issue WHERE site = 'bombjack')")
+        _ = try? db.run("DELETE FROM mirror WHERE issue_id IN "
+                      + "(SELECT id FROM issue WHERE site = 'bombjack')")
+        _ = try? db.run("DELETE FROM issue WHERE site = 'bombjack'")
+        _ = try? db.run("DELETE FROM meta WHERE key = 'bombjack_catalogue'")
 
         for change in Self.coverQuestions { try? reopenCoverQuestion(change) }
 

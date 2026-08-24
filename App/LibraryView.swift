@@ -1805,8 +1805,6 @@ struct IssueDetail: View {
     }
 }
 
-extension StoredIssue: Identifiable {}
-
 /// Stops a view's own ideal width from sizing its parent.
 private struct ClampWidth: ViewModifier {
     let active: Bool

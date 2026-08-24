@@ -1,4 +1,4 @@
-- check/clear 100+ xcode warnings, use xcodebuild
+- send more emails
 
 -------------
 

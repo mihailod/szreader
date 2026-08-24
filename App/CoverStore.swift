@@ -95,21 +95,21 @@ final class CoverStore: @unchecked Sendable {
         guard let url else { return nil }
         if let hit = cached(url, grayscale: grayscale) { return hit }
 
-        lock.lock()
-        let existing = inFlight[url]
-        let task: Task<UIImage?, Never>
-        if let existing {
-            task = existing
-        } else {
-            task = Task.detached(priority: .userInitiated) { [weak self] in
+        // Scoped rather than lock()/unlock(): the pair is unavailable from an
+        // async context, because a lock held across a suspension parks a thread
+        // of the cooperative pool. Nothing here awaits inside the lock — the
+        // scoped form is what makes that structural instead of a promise.
+        let task: Task<UIImage?, Never> = lock.withLock {
+            if let existing = inFlight[url] { return existing }
+            let started = Task.detached(priority: .userInitiated) { [weak self] in
                 await self?.fetchAndDecode(url) ?? nil
             }
-            inFlight[url] = task
+            inFlight[url] = started
+            return started
         }
-        lock.unlock()
 
         let produced = await task.value
-        lock.lock(); inFlight[url] = nil; lock.unlock()
+        lock.withLock { inFlight[url] = nil }
         if let hit = cached(url, grayscale: grayscale) { return hit }
 
         // Storing is not keeping. `NSCache` evicts whenever it likes, so
