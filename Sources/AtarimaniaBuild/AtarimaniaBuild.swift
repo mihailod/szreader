@@ -1,5 +1,6 @@
 import Foundation
 import SZKit
+import BuildSupport
 
 /// Builds the shipped Atarimania catalogue.
 ///

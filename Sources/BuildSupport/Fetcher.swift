@@ -1,26 +1,30 @@
 import Foundation
 
-/// Fetches pages and PDF headers, remembering everything it is told.
+/// Fetches pages and file headers, remembering everything it is told.
 ///
-/// RetroSpec's fetcher with one difference: the size pass here is ~1,900
-/// requests rather than 653, and each is a HEAD whose cost is latency alone.
-/// Sequentially that is half an hour of waiting for nothing; five at a time
-/// makes it a few minutes and asks the site for exactly the same set of
-/// things. The page pass stays sequential — 86 requests, run once.
-struct Fetcher: Sendable {
+/// Shared by the build tools that read a static archive of PDFs — Atarimania
+/// and Vintage Apple — rather than copied into each. RetroSpec keeps its own,
+/// which predates this and reads a different kind of page.
+///
+/// RetroSpec's fetcher with one difference: the size pass here is a couple of
+/// thousand requests rather than 653, and each is a HEAD whose cost is latency
+/// alone. Sequentially that is half an hour of waiting for nothing; five at a
+/// time makes it a few minutes and asks the site for exactly the same set of
+/// things. The page pass stays sequential — a few dozen requests, run once.
+public struct Fetcher: Sendable {
 
     /// What a HEAD on a PDF came back with.
-    struct Probe: Codable, Equatable, Sendable {
-        let status: Int
-        let bytes: Int64?
+    public struct Probe: Codable, Equatable, Sendable {
+        public let status: Int
+        public let bytes: Int64?
     }
 
-    let directory: URL
-    let allowNetwork: Bool
+    public let directory: URL
+    public let allowNetwork: Bool
 
     private var probeFile: URL { directory.appendingPathComponent("pdf-sizes.json") }
 
-    init(directory: URL, allowNetwork: Bool) {
+    public init(directory: URL, allowNetwork: Bool) {
         self.directory = directory
         self.allowNetwork = allowNetwork
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -33,7 +37,7 @@ struct Fetcher: Sendable {
     /// Never invalidated by age. Deleting `.atarimania-cache/` is how you ask
     /// for fresh copies, which keeps a rebuild reproducible until you say
     /// otherwise.
-    func page(at url: String, key: String) async throws -> String {
+    public func page(at url: String, key: String) async throws -> String {
         let file = directory.appendingPathComponent(key)
         if let cached = try? Data(contentsOf: file) {
             return String(decoding: cached, as: UTF8.self)
@@ -44,8 +48,9 @@ struct Fetcher: Sendable {
         guard let remote = URL(string: url) else { throw Missing("bad URL: \(url)") }
 
         var request = URLRequest(url: remote)
-        // The site is a rendered React app behind a CDN and answers a bare
-        // URLSession user agent with a challenge page.
+        // Atarimania is a rendered React app behind a CDN and answers a bare
+        // URLSession user agent with a challenge page. Vintage Apple does not
+        // care, and sending it costs nothing.
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
                          forHTTPHeaderField: "User-Agent")
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -69,10 +74,10 @@ struct Fetcher: Sendable {
             .flatMap { try? JSONDecoder().decode([String: Probe].self, from: $0) } ?? [:]
     }
 
-    func recordedProbe(_ url: String) -> Probe? { known()[url] }
+    public func recordedProbe(_ url: String) -> Probe? { known()[url] }
 
     /// Ask every URL its size, a few at a time, and write the lot down once.
-    func probeAll(_ urls: [String], width: Int) async {
+    public func probeAll(_ urls: [String], width: Int) async {
         var have = known()
         let wanted = urls.filter { have[$0] == nil }
         guard !wanted.isEmpty else {
@@ -128,8 +133,8 @@ struct Fetcher: Sendable {
         }
     }
 
-    struct Missing: Error, CustomStringConvertible {
-        let description: String
-        init(_ description: String) { self.description = description }
+    public struct Missing: Error, CustomStringConvertible {
+        public let description: String
+        public init(_ description: String) { self.description = description }
     }
 }

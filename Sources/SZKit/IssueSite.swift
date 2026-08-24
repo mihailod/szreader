@@ -45,6 +45,15 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     // at ~1,900 issues it seeds in a fraction of a second, and the material is
     // one archive of one machine's press with no natural seam to split on.
     case atarimania
+    // Vintage Apple: the Apple-world press, books and manuals, as static
+    // tables of PDFs.
+    //
+    // Two switches, and the split is about worth rather than size: the
+    // magazines are largely on archive.org already — which holds more Byte
+    // than this site does — while the books are about half unavailable
+    // anywhere else. See `VintageApple.Group`.
+    case vintageAppleMagazines
+    case vintageAppleBooks
     // BombJack ships as seven catalogues rather than one.
     //
     // As a single source it was 18,219 rows: fifteen seconds to seed, which
@@ -80,6 +89,9 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
             guard let group = spectrumGroup else { return rawValue }
             return "Spectrum Computing: \(group.display)"
         case .atarimania:    return "Atarimania"
+        case .vintageAppleMagazines, .vintageAppleBooks:
+            guard let group = vintageAppleGroup else { return rawValue }
+            return "Vintage Apple: \(group.display)"
         default:
             // "BombJack: Books" rather than "Books". This string is written
             // into the publisher column and the search index of every seeded
@@ -127,6 +139,8 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
             return spectrumGroup?.resource
         case .atarimania:                return "atarimania-catalog"
+        case .vintageAppleMagazines, .vintageAppleBooks:
+            return vintageAppleGroup?.resource
         default:                         return bombjackCategory?.resource
         }
     }
@@ -146,10 +160,27 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .bombjackGames:              return .games
         case .bombjackOther:              return .other
         case .stripzona, .retrospec, .archive, .comicbookplus, .batcave, .stripovi,
-             .spectrumMagazines, .spectrumFanzines, .spectrumBooks, .atarimania:
+             .spectrumMagazines, .spectrumFanzines, .spectrumBooks, .atarimania,
+             .vintageAppleMagazines, .vintageAppleBooks:
             return nil
         }
     }
+
+    /// The Vintage Apple shelf this source carries, or nil if it is not one.
+    public var vintageAppleGroup: VintageApple.Group? {
+        switch self {
+        case .vintageAppleMagazines: return .magazines
+        case .vintageAppleBooks:     return .books
+        default:                     return nil
+        }
+    }
+
+    /// The two that make up Vintage Apple, in the order the settings list
+    /// shows them.
+    public static let vintageAppleSites: [IssueSite] =
+        VintageApple.Group.inMenuOrder.compactMap { group in
+            IssueSite.allCases.first { $0.vintageAppleGroup == group }
+        }
 
     /// The ZXDB shelf this source carries, or nil if it is not one of them.
     ///

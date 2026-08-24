@@ -24,6 +24,9 @@ spike/*.csv
 # ~1,900 HEAD results. Derived and bulky, same as the caches above.
 .atarimania-cache/
 
+# Section pages and PDF headers `vintageapple-build` has already fetched.
+.vintageapple-cache/
+
 # --- Build artefacts ---------------------------------------------------
 .build/
 .swiftpm/

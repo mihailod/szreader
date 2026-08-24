@@ -46,6 +46,8 @@ struct SourceCopy {
         case .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
             return spectrum(site)
         case .atarimania:    return atarimania
+        case .vintageAppleMagazines, .vintageAppleBooks:
+            return vintageApple(site)
         default:             return bombJack(site)
         }
     }
@@ -259,6 +261,25 @@ struct SourceCopy {
               + "downloads each issue from the site on demand. This is an "
               + "independent reader, not affiliated with or endorsed by "
               + "Atarimania, and it hosts none of their scans.")
+
+    /// The two Vintage Apple shelves, described from their group.
+    private static func vintageApple(_ site: IssueSite) -> SourceCopy {
+        let books = site.vintageAppleGroup == .books
+        return SourceCopy(
+            switchTitle: site.vintageAppleGroup?.display ?? "Vintage Apple",
+            detail: books
+                ? "Scanned Apple and Mac books, programming guides, manuals and "
+                + "catalogues, including the Inside Macintosh series."
+                : "Scanned Apple-world magazines — Byte, Macworld, MacUser, "
+                + "PC World, Softalk and Apple's develop.",
+            shelfPhrase: "scanned Apple magazines and books",
+            creditHeading: "Vintage Apple",
+            credit: "The Vintage Apple sources index the scanned Apple magazine "
+                  + "and book archive at vintageapple.org. The app ships the "
+                  + "index and downloads each file from the site on demand. "
+                  + "This is an independent reader, not affiliated with or "
+                  + "endorsed by Vintage Apple, and it hosts none of their scans.")
+    }
 
     /// The three Sinclair shelves, described from their group.
     ///

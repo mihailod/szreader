@@ -51,6 +51,12 @@ STart, Atari User), the ST press (Atari ST User, ST Action, ST Format) and the
 US user-group newsletters. Switch it on to see the index then Download
 individually to read.
 
+  * **[Vintage Apple](https://vintageapple.org)** — the Apple side of the era,
+in two switchable sub-sources: Magazines (Byte 1975-1998, Macworld, MacUser,
+PC World, Softalk and Apple's develop) and Books & Manuals (scanned Apple and Mac
+books, programming guides, catalogues and the Inside Macintosh series).
+Switch either on to see the index then Download individually to read.
+
 * **Bug fixes and various improvements** including: performance optimizations,
 Settings enhancements, honoring server cooldown periods,
 better handling of square-shaped artwork, display of download progress in MB.

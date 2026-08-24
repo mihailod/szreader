@@ -1,5 +1,7 @@
 - send more emails
 
+- add sort by scan size
+
 -------------
 
 additional sources:
@@ -12,16 +14,7 @@ no account, index everything offline like retrospec
 
 - Digital Comics Museum https://digitalcomicmuseum.com
 waiting for activation email
-
-
--------------------
-
-Tier 1 — best fit, verified
-
-1. Vintage Apple — vintageapple.org · Shape A · this is the one I'd do first
-Byte (1975–1998), Macworld (1984–2005), MacUser (1984–1997), Softalk (1980–1984), Apple develop, PC World. I confirmed the issue pages are chronological tables with thumbnail, title, year and scan date, and that they link direct PDFs with a self-describing filename (/byte/pdf/197509_Byte_Magazine_Vol_00-01_....pdf) — no account, no captcha. That is RetroSpec's exact shape: swift run vintageapple-build against a handful of index pages, year and month parsed off the filename, six series. It also fills BombJack's biggest hole — BombJack is Commodore/Amiga/8-bit, and Byte + the Apple press is the other half of the era.
-
-3. Digital Comics Museum — already on your todo · Shape C, not A
+Digital Comics Museum — · Shape C, not A
 Worth recording what I found while you wait on that activation email: digitalcomicmuseum.com returns 403 to a plain fetch (Cloudflare). So a dcm-build tool would be fighting a bot wall on every rebuild, while a WKWebView won't notice. Build it as ComicBookPlus's twin — same Golden Age public-domain material, same free-account-to-download model, so ComicBookPlusPage.swift + Store+ComicBookPlusImport.swift are close to a straight copy.
 
 	

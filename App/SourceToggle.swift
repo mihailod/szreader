@@ -59,6 +59,7 @@ struct SourceList: View {
     private var standalone: [IssueSite] {
         IssueSite.allCases.filter {
             $0.bombjackCategory == nil && $0.spectrumGroup == nil
+                && $0.vintageAppleGroup == nil
         }
     }
 
@@ -73,67 +74,63 @@ struct SourceList: View {
             bombJackGroup
             Divider().padding(.leading, 16)
             spectrumGroup
+            Divider().padding(.leading, 16)
+            vintageAppleGroup
         }
     }
 
-    /// The three, under one heading — same shape as the seven above, and for
-    /// the same reason: flat, they read as three peers of StripZona; grouped,
-    /// they read as one archive with parts, which is what they are.
+    /// The two, under one heading — same shape as the groups above.
+    private var vintageAppleGroup: some View {
+        grouped(title: "Vintage Apple",
+                blurb: "Scanned magazines, books and manuals from the Apple world "
+                     + "— Byte, Macworld, MacUser and the Mac bookshelf.",
+                sites: IssueSite.vintageAppleSites)
+    }
+
+    /// One archive with parts: a heading, a line saying what it is, and its
+    /// switches indented under it.
+    ///
+    /// Written once and called three times. It began as three near-identical
+    /// blocks and they had already started to drift in their padding.
+    private func grouped(title: String, blurb: String,
+                         sites: [IssueSite]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.headline)
+                Text(blurb)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+
+            ForEach(Array(sites.enumerated()), id: \.element) { index, site in
+                SourceToggle(site: site, model: model)
+                    .padding(.leading, 32)
+                    .padding(.trailing, 16)
+                    .padding(.vertical, 8)
+                if index < sites.count - 1 {
+                    Divider().padding(.leading, 32)
+                }
+            }
+        }
+        .padding(.bottom, 4)
+    }
+
     private var spectrumGroup: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Spectrum Computing").font(.headline)
-                Text("Scanned magazines, fanzines and books for the Sinclair "
-                     + "machines — ZX Spectrum, ZX81 and QL.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 4)
-
-            ForEach(Array(IssueSite.spectrumSites.enumerated()), id: \.element) { index, site in
-                SourceToggle(site: site, model: model)
-                    .padding(.leading, 32)
-                    .padding(.trailing, 16)
-                    .padding(.vertical, 8)
-                if index < IssueSite.spectrumSites.count - 1 {
-                    Divider().padding(.leading, 32)
-                }
-            }
-        }
-        .padding(.bottom, 4)
+        grouped(title: "Spectrum Computing",
+                blurb: "Scanned magazines, fanzines and books for the Sinclair "
+                     + "machines — ZX Spectrum, ZX81 and QL.",
+                sites: IssueSite.spectrumSites)
     }
 
-    /// The seven, under one heading.
     private var bombJackGroup: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("BombJack").font(.headline)
-                Text("Scanned computer magazines and books for many platforms — "
-                     + "Commodore 8bit, Amiga, Atari, Sinclair, MSX, etc.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 4)
-
-            ForEach(Array(IssueSite.bombjackSites.enumerated()), id: \.element) { index, site in
-                SourceToggle(site: site, model: model)
-                    // Indented, so the seven read as parts of the archive
-                    // above them rather than as more sources beside it.
-                    .padding(.leading, 32)
-                    .padding(.trailing, 16)
-                    .padding(.vertical, 8)
-                if index < IssueSite.bombjackSites.count - 1 {
-                    Divider().padding(.leading, 32)
-                }
-            }
-        }
-        .padding(.bottom, 4)
+        grouped(title: "BombJack",
+                blurb: "Scanned computer magazines and books for many platforms — "
+                     + "Commodore 8bit, Amiga, Atari, Sinclair, MSX, etc.",
+                sites: IssueSite.bombjackSites)
     }
 }
 

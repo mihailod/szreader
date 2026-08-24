@@ -161,8 +161,15 @@ let package = Package(
         .executableTarget(name: "spectrum-build", dependencies: ["SZKit"],
                           path: "Sources/SpectrumBuild",
                           swiftSettings: [.swiftLanguageMode(.v6)]),
-        .executableTarget(name: "atarimania-build", dependencies: ["SZKit"],
+        // Shared by the archive-of-PDFs build tools, so the caching fetcher
+        // exists once rather than once per source.
+        .target(name: "BuildSupport", path: "Sources/BuildSupport",
+                swiftSettings: [.swiftLanguageMode(.v6)]),
+        .executableTarget(name: "atarimania-build", dependencies: ["SZKit", "BuildSupport"],
                           path: "Sources/AtarimaniaBuild",
+                          swiftSettings: [.swiftLanguageMode(.v6)]),
+        .executableTarget(name: "vintageapple-build", dependencies: ["SZKit", "BuildSupport"],
+                          path: "Sources/VintageAppleBuild",
                           swiftSettings: [.swiftLanguageMode(.v6)]),
         // Still v5: the concurrency tests deliberately share one Store across
         // threads to prove the locking works, which mode 6 cannot see is safe.

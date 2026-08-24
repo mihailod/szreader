@@ -38,7 +38,7 @@ public struct DirectHost: FileHost {
     /// the bombjack catalogue shipped the first time.
     public init(hosts: Set<String> = ["retrospec.elite.org", "archive.org",
                                      "commodore.bombjack.org", "arcarc.xmission.com",
-                                     "www.atarimania.com"]) {
+                                     "www.atarimania.com", "vintageapple.org"]) {
         self.hosts = Set(hosts.map { $0.lowercased() })
     }
 
