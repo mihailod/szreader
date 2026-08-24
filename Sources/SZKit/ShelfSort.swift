@@ -42,6 +42,13 @@ public enum ShelfSort: String, CaseIterable, Sendable {
     case hero
     case number
 
+    /// Biggest scan first, with everything not downloaded below all of it.
+    ///
+    /// Last in the menu because it is the one order that is not about the
+    /// comics at all — it answers "what is filling the device", which is a
+    /// question asked while clearing space rather than while reading.
+    case size
+
     /// What a fresh install sorts by.
     public static let `default` = ShelfSort.opened
 
@@ -54,6 +61,7 @@ public enum ShelfSort: String, CaseIterable, Sendable {
         case .series:   return "Series"
         case .hero:     return "Hero"
         case .number:   return "Number"
+        case .size:     return "Scan Size"
         }
     }
 
@@ -69,6 +77,9 @@ public enum ShelfSort: String, CaseIterable, Sendable {
         case .series:   return "books.vertical"
         case .hero:     return "person"
         case .number:   return "number"
+        // A disk, because the figure being sorted on is disk space — none of
+        // the others are about the device.
+        case .size:     return "internaldrive"
         }
     }
 }
@@ -124,8 +135,17 @@ public extension StoredIssue {
     /// buries the row the reader was looking for. The five explicit keys are
     /// unaffected: someone who asks for Title means Title, question or no
     /// question.
+    ///
+    /// `sizes` is what each downloaded issue weighs, keyed by id, and only
+    /// `.size` reads it. It is handed in rather than looked up per row because
+    /// the figure lives in the database and a comparator runs hundreds of
+    /// thousands of times: one bulk read, then a dictionary lookup per
+    /// comparison. An id the map does not carry weighs nothing, which is the
+    /// same answer the info panel gives when the download record has no byte
+    /// count.
     static func comparator(for sort: ShelfSort,
-                           whileSearching: Bool = false)
+                           whileSearching: Bool = false,
+                           sizes: [Int: Int64] = [:])
         -> ((StoredIssue, StoredIssue) -> Bool)? {
         switch sort {
         case .imported: return nil
@@ -148,7 +168,28 @@ public extension StoredIssue {
             let keys = SortKeys()
             return { byHero($0, $1, keys) }
         case .number:   return byNumber
+        case .size:     return { bySize($0, $1, sizes) }
         }
+    }
+
+    /// Biggest scan first, then everything not downloaded.
+    ///
+    /// The tail is not a rounding of the order above it: an issue that is only
+    /// catalogued occupies nothing, and a shelf that mixed those in with the
+    /// small downloads would answer "what is filling the device" with mostly
+    /// rows that are not on it. Downloaded and not is asked first, so a
+    /// download whose record carries no byte count still sits with the files
+    /// rather than among the rows that have none.
+    ///
+    /// Ties break on the id ascending, which keeps a set — one archive shared
+    /// by a whole run, every issue of it recorded at the same weight — in its
+    /// own numbered order rather than backwards.
+    private static func bySize(_ a: StoredIssue, _ b: StoredIssue,
+                               _ sizes: [Int: Int64]) -> Bool {
+        if a.isDownloaded != b.isDownloaded { return a.isDownloaded }
+        let left = sizes[a.id] ?? 0, right = sizes[b.id] ?? 0
+        if left != right { return left > right }
+        return a.id < b.id
     }
 
     /// Most recently opened first, and everything never opened after all of

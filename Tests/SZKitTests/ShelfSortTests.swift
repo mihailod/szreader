@@ -6,10 +6,11 @@ final class ShelfSortTests: XCTestCase {
 
     private func issue(_ id: Int, edition: String? = nil, number: Int? = nil,
                        title: String? = nil, hero: String? = nil,
-                       isRead: Bool = false, openedAt: Date? = nil) -> StoredIssue {
+                       isRead: Bool = false, openedAt: Date? = nil,
+                       isDownloaded: Bool = false) -> StoredIssue {
         StoredIssue(id: id, code: "C\(id)", number: number, title: title, series: nil,
                     hero: hero, edition: edition, publisher: nil, isRead: isRead, lastPage: nil, numberTo: nil, started: false, downloadFailed: false, style: .labeledBlock,
-                    mirrorCount: 1, coverURL: nil, isDownloaded: false,
+                    mirrorCount: 1, coverURL: nil, isDownloaded: isDownloaded,
                     openedAt: openedAt)
     }
 
@@ -18,8 +19,10 @@ final class ShelfSortTests: XCTestCase {
         Date(timeIntervalSince1970: 1_700_000_000 - Double(minutes) * 60)
     }
 
-    private func order(_ issues: [StoredIssue], by sort: ShelfSort) -> [Int] {
-        guard let comparator = StoredIssue.comparator(for: sort) else { return issues.map(\.id) }
+    private func order(_ issues: [StoredIssue], by sort: ShelfSort,
+                       sizes: [Int: Int64] = [:]) -> [Int] {
+        guard let comparator = StoredIssue.comparator(for: sort, sizes: sizes)
+        else { return issues.map(\.id) }
         return issues.sorted(by: comparator).map(\.id)
     }
 
@@ -203,6 +206,94 @@ final class ShelfSortTests: XCTestCase {
         let sameInstant = [issue(9, openedAt: ago(3)), issue(4, openedAt: ago(3))]
         XCTAssertEqual(order(sameInstant, by: .opened), [9, 4])
         XCTAssertEqual(order(sameInstant.reversed(), by: .opened), [9, 4])
+    }
+
+    /// Last in the menu, as the one order that is about the device rather than
+    /// the comics.
+    func testScanSizeIsOfferedLast() {
+        XCTAssertEqual(ShelfSort.allCases.last, .size)
+        XCTAssertEqual(ShelfSort.size.label, "Scan Size")
+        XCTAssertEqual(ShelfSort.size.rawValue, "size")
+    }
+
+    /// Biggest scan on top.
+    func testScanSizeSortsBiggestFirst() {
+        let shelf = [downloaded(1), downloaded(2), downloaded(3)]
+        XCTAssertEqual(order(shelf, by: .size,
+                             sizes: [1: 40_000_000, 2: 120_000_000, 3: 80_000_000]),
+                       [2, 3, 1])
+    }
+
+    /// Everything not downloaded goes below every download, however small the
+    /// smallest download is — the order answers "what is filling the device",
+    /// and a catalogued row is not on it.
+    func testScanSizePutsUndownloadedLast() {
+        let shelf = [issue(1), downloaded(2), issue(3), downloaded(4)]
+        XCTAssertEqual(order(shelf, by: .size, sizes: [2: 1_000, 4: 90_000_000]),
+                       [4, 2, 1, 3])
+    }
+
+    /// A download whose record carries no byte count is still a download: it
+    /// sorts at the bottom of the files, not among the rows that have none.
+    func testScanSizeKeepsUnmeasuredDownloadsAboveTheRest() {
+        let shelf = [issue(1), downloaded(2), downloaded(3)]
+        XCTAssertEqual(order(shelf, by: .size, sizes: [3: 5_000_000]), [3, 2, 1])
+    }
+
+    /// A set is one archive shared by a whole run, so its issues all weigh the
+    /// same — and must stay in their own numbered order rather than backwards.
+    func testScanSizeTiesKeepImportOrder() {
+        let shelf = [downloaded(7), downloaded(5), downloaded(6)]
+        XCTAssertEqual(order(shelf, by: .size,
+                             sizes: [5: 60_000_000, 6: 60_000_000, 7: 60_000_000]),
+                       [5, 6, 7])
+    }
+
+    /// Asked for by name, so it applies to a search like the other explicit
+    /// keys rather than deferring to relevance.
+    func testScanSizeAppliesWhileSearching() {
+        XCTAssertNotNil(StoredIssue.comparator(for: .size, whileSearching: true))
+    }
+
+    private func downloaded(_ id: Int) -> StoredIssue { issue(id, isDownloaded: true) }
+}
+
+/// The figure the Scan Size order sorts on, read out of the database in one go.
+final class DownloadedSizeTests: XCTestCase {
+
+    private func populated() throws -> Store {
+        let store = try Store()
+        try store.ingest(html: """
+            <title>Zagor - ZLATNA SERIJA - ZS i LMS - Stripzona</title>
+            <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKE013</div>
+            <div>017-Klark siti</div><div>http://www.mediafire.com/?FAKE017</div>
+            """)
+        return store
+    }
+
+    func testTheMapCarriesWhatEachDownloadWeighs() throws {
+        let store = try populated()
+        let rows = try store.recent(limit: nil)
+        try store.recordDownload(issueID: rows[0].id, mirrorURL: "http://x/1",
+                                 path: URL(fileURLWithPath: "/tmp/1.cbz"), bytes: 90_000_000)
+
+        let sizes = store.downloadedBytesByIssue
+        XCTAssertEqual(sizes[rows[0].id], 90_000_000)
+        XCTAssertNil(sizes[rows[1].id], "nothing was downloaded for it")
+    }
+
+    /// A record with no byte count is left out rather than reported as zero:
+    /// the sort and the button both read a missing entry as "not measured",
+    /// and a 0 would be indistinguishable from an empty file.
+    func testAnUnmeasuredDownloadIsAbsentRatherThanZero() throws {
+        let store = try populated()
+        let row = try XCTUnwrap(try store.recent(limit: nil).first)
+        try store.recordDownload(issueID: row.id, mirrorURL: "http://x/1",
+                                 path: URL(fileURLWithPath: "/tmp/1.cbz"), bytes: 0)
+
+        XCTAssertNil(store.downloadedBytesByIssue[row.id])
+        XCTAssertTrue(row.isDownloaded || store.downloadedCount == 1,
+                      "it is still a download, just an unmeasured one")
     }
 }
 

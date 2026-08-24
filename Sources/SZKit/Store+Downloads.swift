@@ -65,6 +65,30 @@ extension Store {
         return out
     }
 
+    /// What every downloaded issue weighs, keyed by issue id.
+    ///
+    /// One read for the whole shelf. The alternative — `downloadedFile` per
+    /// row — is a statement per issue, and both callers want the figure for
+    /// every visible row at once: the Scan Size order compares on it, and the
+    /// list puts it on the button that frees it.
+    ///
+    /// The recorded archive size, the same number the info panel shows, not
+    /// what the unpacked pages occupy on disk. `totalDownloadedBytes` measures
+    /// the folders because it reports the library's real footprint; this one
+    /// has to agree with the figure already on the screen.
+    ///
+    /// Rows recording no bytes are left out rather than reported as zero: a
+    /// caller cannot tell "nothing" from "not measured" from a 0, and every
+    /// one of them treats a missing entry as unknown already.
+    public var downloadedBytesByIssue: [Int: Int64] {
+        var out: [Int: Int64] = [:]
+        try? db.query("SELECT issue_id, bytes FROM download WHERE bytes > 0") { row in
+            guard let id = row.int(0), let bytes = row.int(1) else { return }
+            out[id] = Int64(bytes)
+        }
+        return out
+    }
+
     /// A mirror that 404s is recorded rather than retried on every read — the
     /// `drugi sken` alternate is there precisely because links rot.
     public func markMirrorDead(url: String) throws {

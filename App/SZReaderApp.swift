@@ -59,6 +59,14 @@ final class AppModel: ObservableObject {
     }
     @Published var issueCount = 0
     @Published var downloadedCount = 0
+    /// What each downloaded issue weighs, keyed by issue id.
+    ///
+    /// Held rather than asked for per row: the Scan Size order compares on it,
+    /// and every list row puts it on its Remove Download button, so a lookup
+    /// per row would be a database statement inside a view body. Refreshed
+    /// wherever the download set can change, which is `refresh(note:)` — every
+    /// download, removal and delete goes through it.
+    @Published var downloadedSizes: [Int: Int64] = [:]
     /// How many of those the app seeded from a catalogue it ships.
     ///
     /// Published because the bulk deletes leave them where they are, so both
@@ -525,6 +533,7 @@ final class AppModel: ObservableObject {
             issueCount = store.issueCount
             downloadedCount = store.downloadedCount
             shippedCount = store.shippedCount
+            downloadedSizes = store.downloadedBytesByIssue
             diskUsage = library?.diskUsage ?? 0
             freeSpace = Self.freeSpace()
             refreshSourceMenus()
@@ -574,7 +583,8 @@ final class AppModel: ObservableObject {
             // shelf sorts by arrival, a search stays in relevance order. Both
             // import orders defer here; the four explicit keys do not.
             if let comparator = StoredIssue.comparator(for: sortOrder,
-                                                       whileSearching: searching) {
+                                                       whileSearching: searching,
+                                                       sizes: downloadedSizes) {
                 results.sort(by: comparator)
             }
         } catch {
@@ -1769,6 +1779,9 @@ final class AppModel: ObservableObject {
         issueCount = store?.issueCount ?? 0
         downloadedCount = store?.downloadedCount ?? 0
         shippedCount = store?.shippedCount ?? 0
+        // Before the search below it, which sorts on these when the shelf is
+        // in Scan Size order.
+        downloadedSizes = store?.downloadedBytesByIssue ?? [:]
         diskUsage = library?.diskUsage ?? 0
         freeSpace = Self.freeSpace()
         // A newly imported page can bring a series the menu has not offered.

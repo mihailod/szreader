@@ -59,7 +59,8 @@ Switch either on to see the index then Download individually to read.
 
 * **Bug fixes and various improvements** including: performance optimizations,
 Settings enhancements, honoring server cooldown periods,
-better handling of square-shaped artwork, display of download progress in MB.
+better handling of square-shaped artwork, display of download progress in MB,
+sort by scan size.
 
 ---
 

@@ -1001,6 +1001,20 @@ struct LibraryView: View {
         }
     }
 
+    /// "Remove Download (33MB)", the same wording the info panel's button
+    /// carries and for the same reason: the size being freed belongs on the
+    /// control that frees it, rather than one sheet away. In Scan Size order
+    /// it is also the figure the shelf was sorted by, so the list has to show
+    /// it or the order looks arbitrary.
+    ///
+    /// A download the record has no byte count for keeps the plain wording. A
+    /// scan that reads "(0MB)" is a scan the reader will think is broken.
+    private func removeOrDownloadTitle(_ issue: StoredIssue) -> String {
+        guard issue.isDownloaded else { return "Download" }
+        guard let size = model.downloadedSizes[issue.id] else { return "Remove Download" }
+        return "Remove Download (\(IssueDetail.mb(size)))"
+    }
+
     private func rowActions(_ issue: StoredIssue) -> some View {
         HStack(spacing: 10) {
             if model.downloading.contains(issue.id) {
@@ -1017,7 +1031,7 @@ struct LibraryView: View {
                         beginDownload(issue, model: model, pending: &pending)
                     }
                 } label: {
-                    rowLabel(issue.isDownloaded ? "Remove Download" : "Download",
+                    rowLabel(removeOrDownloadTitle(issue),
                              icon: issue.isDownloaded ? "trash" : "arrow.down.circle")
                 }
                 .buttonStyle(.bordered)
