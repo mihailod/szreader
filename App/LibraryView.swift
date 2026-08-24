@@ -1639,6 +1639,39 @@ struct IssueDetail: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingCover = false
 
+    /// What the downloaded file weighs, read when the sheet opens rather than
+    /// on every redraw — it is a database round trip, and the answer only
+    /// changes when a download finishes or is removed.
+    @State private var downloadedSize: Int64?
+
+    /// "Downloading… 20% (2MB of 10MB)".
+    ///
+    /// The byte counts appear only when the downloader reported them. The
+    /// page-image sources count pages instead, and there the line stays the
+    /// percentage alone rather than showing a size nobody measured.
+    private var downloadingText: String {
+        guard let fraction = model.progress[current.id] else { return "Downloading…" }
+        let percent = String(format: "Downloading… %.0f%%", fraction * 100)
+        guard let bytes = model.transferred[current.id], bytes.expected > 0 else {
+            return percent
+        }
+        return "\(percent) (\(Self.mb(bytes.received)) of \(Self.mb(bytes.expected)))"
+    }
+
+    /// "Remove Download (34MB)" — so the size being freed is on the button
+    /// that frees it, rather than somewhere else on the screen.
+    private var removeOrDownloadTitle: String {
+        guard current.isDownloaded else { return "Download" }
+        guard let size = downloadedSize else { return "Remove Download" }
+        return "Remove Download (\(Self.mb(size)))"
+    }
+
+    /// Whole megabytes, decimal, matching the shelf's own storage readout.
+    /// A 34 MB scan is not a figure anyone reads to one decimal place.
+    static func mb(_ bytes: Int64) -> String {
+        "\(Int((Double(bytes) / 1_000_000).rounded()))MB"
+    }
+
     /// The row as it stands now, not as it was when the sheet opened.
     ///
     /// `sheet(item:)` hands over a snapshot and never revisits it, so a
@@ -1657,9 +1690,7 @@ struct IssueDetail: View {
                     if model.downloading.contains(current.id) {
                         HStack {
                             ProgressView()
-                            Text(model.progress[current.id].map {
-                                String(format: "Downloading… %.0f%%", $0 * 100)
-                            } ?? "Downloading…")
+                            Text(downloadingText)
                             .foregroundStyle(.secondary)
                         }
                     } else {
@@ -1675,7 +1706,7 @@ struct IssueDetail: View {
                                     beginDownload(current, model: model, pending: &pending)
                                 }
                             } label: {
-                                Label(current.isDownloaded ? "Remove Download" : "Download",
+                                Label(removeOrDownloadTitle,
                                       systemImage: current.isDownloaded
                                       ? "trash" : "arrow.down.circle")
                                 .frame(maxWidth: .infinity)
@@ -1752,6 +1783,12 @@ struct IssueDetail: View {
                         }
                     }
                 }
+            }
+            // Re-read when the download state flips, so removing an issue or
+            // finishing one updates the button without reopening the sheet.
+            .task(id: current.isDownloaded) {
+                downloadedSize = current.isDownloaded
+                    ? model.downloadedBytes(issueID: current.id) : nil
             }
             .navigationTitle(issue.title ?? issue.code ?? "Issue")
             .navigationBarTitleDisplayMode(.inline)

@@ -146,6 +146,9 @@ let package = Package(
         .executableTarget(name: "spectrum-build", dependencies: ["SZKit"],
                           path: "Sources/SpectrumBuild",
                           swiftSettings: [.swiftLanguageMode(.v6)]),
+        .executableTarget(name: "atarimania-build", dependencies: ["SZKit"],
+                          path: "Sources/AtarimaniaBuild",
+                          swiftSettings: [.swiftLanguageMode(.v6)]),
         // Still v5: the concurrency tests deliberately share one Store across
         // threads to prove the locking works, which mode 6 cannot see is safe.
         .testTarget(name: "SZKitTests", dependencies: ["SZKit"],

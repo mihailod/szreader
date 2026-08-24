@@ -378,6 +378,41 @@ final class AppModel: ObservableObject {
     /// a Download button.
     @Published var downloading: Set<Int> = []
 
+    /// Bytes moved so far, and the total expected, for a transfer in flight.
+    ///
+    /// Beside `progress` rather than folded into it because the two are not
+    /// the same thing: the fraction spans transfer *and* unpacking, while
+    /// these are bytes off the wire. Only the archive download reports them —
+    /// the page-image sources count pages, and multiplying a page fraction by
+    /// a byte total would invent a number.
+    @Published var transferred: [Int: TransferBytes] = [:]
+
+    struct TransferBytes: Sendable, Equatable {
+        let received: Int64
+        let expected: Int64
+    }
+
+    /// One report from the downloader, crossing threads.
+    ///
+    /// Sendable and plain, for the reason spelled out where the stream is
+    /// built: the progress closure runs on whichever thread is moving bytes
+    /// and must not touch the model.
+    struct TransferTick: Sendable {
+        let fraction: Double
+        let received: Int64
+        let expected: Int64
+    }
+
+    /// What an issue's downloaded file weighs on disk, or nil when it is not
+    /// downloaded. Read straight from the download record rather than stat'ing
+    /// the file: the record is what the shelf's own storage readout counts.
+    func downloadedBytes(issueID: Int) -> Int64? {
+        guard let store else { return nil }
+        guard let outcome = try? store.downloadedFile(issueID: issueID),
+              outcome.bytes > 0 else { return nil }
+        return outcome.bytes
+    }
+
     private var store: Store?
     /// Readable so the page grid can render thumbnails from the pages already
     /// on disk; only this model ever sets it.
@@ -1185,8 +1220,8 @@ final class AppModel: ObservableObject {
         // error under the Swift 6 language mode. A stream continuation *is*
         // Sendable, so that is all the closure holds; the fractions are
         // consumed on the main actor, where the model lives.
-        var sink: AsyncStream<Double>.Continuation!
-        let fractions = AsyncStream<Double> { sink = $0 }
+        var sink: AsyncStream<TransferTick>.Continuation!
+        let fractions = AsyncStream<TransferTick> { sink = $0 }
         let continuation = sink!
         let report: @Sendable (DownloadProgress) -> Void = { p in
             // expected is -1 when the server sends no length; with no total
@@ -1200,11 +1235,16 @@ final class AppModel: ObservableObject {
             // stated, and that figure is rounded. A bar that runs past its own
             // end looks broken in a way that being slightly early does not.
             let fraction = min(Double(p.received) / Double(p.expected), 1.0)
-            continuation.yield(fraction * Self.transferShare)
+            continuation.yield(TransferTick(fraction: fraction * Self.transferShare,
+                                            received: p.received, expected: p.expected))
         }
 
         Task { @MainActor [weak self] in
-            for await fraction in fractions { self?.progress[issueID] = fraction }
+            for await tick in fractions {
+                self?.progress[issueID] = tick.fraction
+                self?.transferred[issueID] = TransferBytes(received: tick.received,
+                                                           expected: tick.expected)
+            }
         }
 
         Task { @MainActor [weak self] in
@@ -1226,6 +1266,7 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
+                self.transferred[issueID] = nil
                 // A success clears any earlier failure mark.
                 try? self.store?.setDownloadFailed(false, issueID: issueID)
 
@@ -1251,6 +1292,7 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
+                self.transferred[issueID] = nil
 
                 // A host asking for a pause is not a download that failed.
                 // Nothing is wrong with the link, so nothing is marked on the
@@ -1357,6 +1399,7 @@ final class AppModel: ObservableObject {
                                          path: result.file, bytes: result.bytes)
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
+                self.transferred[issueID] = nil
                 try? store.setDownloadFailed(false, issueID: issueID)
 
                 // The series poster stands in for every issue of a run until
@@ -1373,6 +1416,7 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
+                self.transferred[issueID] = nil
 
                 // A cancelled fetch is not a failure: the pages already on
                 // disk are kept and the next attempt resumes from them, so
@@ -1474,6 +1518,7 @@ final class AppModel: ObservableObject {
                                          path: result.file, bytes: result.bytes)
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
+                self.transferred[issueID] = nil
                 try? store.setDownloadFailed(false, issueID: issueID)
 
                 // The site's listing tile stands in until the comic's own
@@ -1506,6 +1551,7 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
+                self.transferred[issueID] = nil
 
                 if error is CancellationError {
                     self.search(self.query)

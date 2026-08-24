@@ -20,6 +20,10 @@ spike/*.csv
 # directory to ask for a newer dump.
 .zxdb-cache/
 
+# Pages and PDF headers `atarimania-build` has already fetched: 86 pages and
+# ~1,900 HEAD results. Derived and bulky, same as the caches above.
+.atarimania-cache/
+
 # --- Build artefacts ---------------------------------------------------
 .build/
 .swiftpm/

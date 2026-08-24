@@ -45,6 +45,7 @@ struct SourceCopy {
         case .stripovi:      return stripovi
         case .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
             return spectrum(site)
+        case .atarimania:    return atarimania
         default:             return bombJack(site)
         }
     }
@@ -246,6 +247,18 @@ struct SourceCopy {
                   + "This is an independent reader, not affiliated with or endorsed "
                   + "by either, and it hosts none of their scans.")
     }
+
+    private static let atarimania = SourceCopy(
+        switchTitle: IssueSite.atarimania.settingsName,
+        detail: "Scanned Atari magazines — Antic, ANALOG, Page 6, STart, "
+              + "Atari User, the ST press and US user-group newsletters.",
+        shelfPhrase: "scanned Atari magazines",
+        creditHeading: "Atarimania",
+        credit: "The Atarimania source indexes the scanned Atari magazine "
+              + "archive at atarimania.com. The app ships the index and "
+              + "downloads each issue from the site on demand. This is an "
+              + "independent reader, not affiliated with or endorsed by "
+              + "Atarimania, and it hosts none of their scans.")
 
     /// The three Sinclair shelves, described from their group.
     ///

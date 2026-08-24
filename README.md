@@ -45,8 +45,15 @@ Magazines (Crash, Your Sinclair, Sinclair User, ZX Computing and the wider 8-bit
 Fanzines, and Books by imprint (Usborne, Interface, Melbourne House and more).
 Download individually to read.
 
-* **Bug fixes and various improvements** including: performance optimizations, Source panel enhancements,
-honouring server cooldown periods, better square page cover handling.
+  * **[Atarimania](https://www.atarimania.com/magazines)** — scanned issues
+of the Atari press across 70 titles: the 8-bit magazines (Antic, ANALOG, Page 6,
+STart, Atari User), the ST press (Atari ST User, ST Action, ST Format) and the
+US user-group newsletters. Switch it on to see the index then Download
+individually to read.
+
+* **Bug fixes and various improvements** including: performance optimizations,
+Settings enhancements, honoring server cooldown periods,
+better handling of square-shaped artwork, display of download progress in MB.
 
 ---
 

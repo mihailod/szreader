@@ -37,7 +37,8 @@ public struct DirectHost: FileHost {
     /// download — it is `noHostFor` on every single issue in it, which is how
     /// the bombjack catalogue shipped the first time.
     public init(hosts: Set<String> = ["retrospec.elite.org", "archive.org",
-                                     "commodore.bombjack.org", "arcarc.xmission.com"]) {
+                                     "commodore.bombjack.org", "arcarc.xmission.com",
+                                     "www.atarimania.com"]) {
         self.hosts = Set(hosts.map { $0.lowercased() })
     }
 

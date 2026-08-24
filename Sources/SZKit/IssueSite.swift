@@ -39,6 +39,12 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     case spectrumMagazines
     case spectrumFanzines
     case spectrumBooks
+    // Atarimania: 85 titles of scanned Atari press, one direct PDF per issue.
+    //
+    // One source rather than split, unlike BombJack and the Sinclair shelves:
+    // at ~1,900 issues it seeds in a fraction of a second, and the material is
+    // one archive of one machine's press with no natural seam to split on.
+    case atarimania
     // BombJack ships as seven catalogues rather than one.
     //
     // As a single source it was 18,219 rows: fifteen seconds to seed, which
@@ -73,6 +79,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
             // filter names nothing.
             guard let group = spectrumGroup else { return rawValue }
             return "Spectrum Computing: \(group.display)"
+        case .atarimania:    return "Atarimania"
         default:
             // "BombJack: Books" rather than "Books". This string is written
             // into the publisher column and the search index of every seeded
@@ -119,6 +126,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .archive:                   return "archive-catalog"
         case .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
             return spectrumGroup?.resource
+        case .atarimania:                return "atarimania-catalog"
         default:                         return bombjackCategory?.resource
         }
     }
@@ -138,7 +146,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .bombjackGames:              return .games
         case .bombjackOther:              return .other
         case .stripzona, .retrospec, .archive, .comicbookplus, .batcave, .stripovi,
-             .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
+             .spectrumMagazines, .spectrumFanzines, .spectrumBooks, .atarimania:
             return nil
         }
     }
