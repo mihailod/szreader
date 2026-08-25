@@ -100,7 +100,7 @@ targets:
         PRODUCT_NAME: SZReader
         # The single source of truth for the app's version.
         #
-        # MARKETING_VERSION is what a reader sees — "1.1". Bump it when the
+        # MARKETING_VERSION is what a reader sees — "1.2". Bump it when the
         # release is worth naming.
         #
         # CURRENT_PROJECT_VERSION is the build number. The App Store rejects an
@@ -109,8 +109,8 @@ targets:
         # re-upload of an identical build after a rejected one. It is an
         # integer that only ever increases; it does not reset when
         # MARKETING_VERSION changes.
-        MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "4"
+        MARKETING_VERSION: "1.2"
+        CURRENT_PROJECT_VERSION: "5"
         INFOPLIST_FILE: App/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"        # iPhone and iPad
