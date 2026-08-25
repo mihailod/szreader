@@ -16,6 +16,40 @@ import SZKit
 /// credential in a file.
 enum SiteCookies {
 
+    /// A `Cookie` header for one *address*, matched the way a browser matches.
+    ///
+    /// Not the same question as `header(forDomain:)`, and the difference runs
+    /// the opposite way. That one answers "cookies for this site and anything
+    /// under it", which is right for gathering a session. This one answers
+    /// "what would a browser send *to this URL*", which is the question a
+    /// request has — and the two disagree exactly where it matters: a cookie
+    /// set for `.batcave.biz` belongs on a request to `img.batcave.biz`, and
+    /// asking for the subdomain's own cookies would leave it out.
+    ///
+    /// A host that shares no suffix with the cookie's domain gets nothing,
+    /// which is the point: pages served from somewhere else entirely must not
+    /// be sent another site's session.
+    static func header(forURL url: URL) async -> String? {
+        guard let host = url.host?.lowercased() else { return nil }
+        await warmUp()
+        let jar = await MainActor.run { WKWebsiteDataStore.default().httpCookieStore }
+        let cookies: [HTTPCookie] = await withCheckedContinuation { continuation in
+            Task { @MainActor in
+                jar.getAllCookies { continuation.resume(returning: $0) }
+            }
+        }
+        let mine = cookies.filter { cookie in
+            let domain = cookie.domain.hasPrefix(".")
+                ? String(cookie.domain.dropFirst()) : cookie.domain
+            let lowered = domain.lowercased()
+            // The cookie's domain must be the host or a parent of it — the
+            // reverse of the containment `header(forDomain:)` tests.
+            return host == lowered || host.hasSuffix("." + lowered)
+        }
+        guard !mine.isEmpty else { return nil }
+        return mine.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+    }
+
     /// A `Cookie` header for one domain, or nil when there is nothing stored.
     ///
     /// `.default()` is the persistent store, which is the one `BrowserModel`

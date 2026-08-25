@@ -111,4 +111,47 @@ final class BatCaveReaderPageTests: XCTestCase {
     func testAPageThatIsNotAReaderPageIsNotRead() {
         XCTAssertNil(BatCaveReaderPage.reading("<html><body>the front page</body></html>"))
     }
+
+    // MARK: - Addresses the site does not state absolutely
+
+    /// The shape that broke "Land of the Sons": protocol-relative, with no
+    /// `https:` on the front. Invisible in a browser — an `<img src>` resolves
+    /// it against the page — and fatal outside one, where it is a URL with no
+    /// scheme and the request is refused before it is sent.
+    func testAProtocolRelativeAddressIsMadeAbsolute() throws {
+        let reading = try XCTUnwrap(BatCaveReaderPage.reading(payload(
+            images: #""//img.batcave.biz/img/5/11/22/1-aa.jpg""#, pages: "1")))
+        XCTAssertEqual(reading.images, ["https://img.batcave.biz/img/5/11/22/1-aa.jpg"])
+    }
+
+    /// The same fault in its other common form.
+    func testARootRelativeAddressIsMadeAbsolute() throws {
+        let reading = try XCTUnwrap(BatCaveReaderPage.reading(payload(
+            images: #""/img/5/11/22/1-aa.jpg""#, pages: "1")))
+        XCTAssertEqual(reading.images, ["https://batcave.biz/img/5/11/22/1-aa.jpg"])
+    }
+
+    /// An address that is already absolute must pass through untouched —
+    /// including its host, which is not the site's own.
+    func testAnAbsoluteAddressIsLeftAlone() throws {
+        let reading = try XCTUnwrap(BatCaveReaderPage.reading(payload(images: Self.two)))
+        XCTAssertEqual(reading.images, ["https://img.batcave.biz/img/5/11/22/1-aa.jpg",
+                                        "https://img.batcave.biz/img/5/11/22/2-bb.jpg"])
+    }
+
+    /// Every page of the real fixture is already absolute, so normalising must
+    /// leave all ninety-four exactly as they were.
+    func testARealPageIsUnchangedByNormalising() throws {
+        let reading = try XCTUnwrap(BatCaveReaderPage.reading(page("reader-94-pages.html")))
+        XCTAssertEqual(reading.pageCount, 94)
+        XCTAssertTrue(reading.images.allSatisfy { $0.hasPrefix("https://img.batcave.biz/") })
+    }
+
+    /// Nonsense that cannot become an address is dropped rather than fetched,
+    /// the same as a blank entry.
+    func testSomethingThatIsNotAnAddressIsDropped() throws {
+        let reading = try XCTUnwrap(BatCaveReaderPage.reading(payload(
+            images: #""https://img.batcave.biz/img/5/11/22/1-aa.jpg", "   ""#, pages: "1")))
+        XCTAssertEqual(reading.pageCount, 1)
+    }
 }

@@ -98,10 +98,43 @@ public enum BatCaveReaderPage {
             // Blank entries dropped rather than fetched: an empty string is
             // not an address, and one of them in the middle of a run would
             // otherwise become a zero-byte page.
-            images: payload.images.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty },
+            images: payload.images.compactMap(absolute),
             statedPages: payload.pages,
             isBroken: payload.broken ?? false,
             usesAjax: payload.rdr_ajax ?? false)
+    }
+
+    /// One page address, as something that can actually be fetched.
+    ///
+    /// The site does not always state these absolutely. "Land of the Sons"
+    /// lists its pages **protocol-relative** — `//img.batcave.biz/…`, with no
+    /// `https:` on the front — and that form is invisible in a browser and
+    /// fatal outside one:
+    ///
+    ///  * As an `<img src>` it resolves against the page and loads perfectly,
+    ///    which is why the site works and why nothing about the reader looks
+    ///    wrong.
+    ///  * Handed to `URLSession` it is a URL with no scheme, and the request
+    ///    is refused before it is sent — "unsupported URL", which names
+    ///    nothing about what is missing.
+    ///
+    /// Both halves of the fetch failed on it for different reasons, and
+    /// neither reason mentioned the address: the direct request refused the
+    /// URL, and the in-page fallback loaded the picture and then could not
+    /// read it back, because resolving against the page had sent it to
+    /// another origin and tainted the canvas.
+    ///
+    /// Resolved against the site rather than patched with a prefix, so
+    /// root-relative (`/img/…`) and plain relative forms come out right too.
+    /// An address that is already absolute passes through untouched.
+    static func absolute(_ address: String) -> String? {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard let base = URL(string: BatCave.base),
+              let url = URL(string: trimmed, relativeTo: base)?.absoluteURL,
+              url.scheme != nil, url.host != nil
+        else { return nil }
+        return url.absoluteString
     }
 
     /// Why a reader page cannot be turned into a download.

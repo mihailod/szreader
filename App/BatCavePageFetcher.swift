@@ -81,13 +81,53 @@ final class BatCavePageFetcher: NSObject {
     /// What the reader's own browsing established, gathered once the reader
     /// page has loaded and handed to every page request after it.
     private struct BatCaveSession {
-        let cookies: String?
         let userAgent: String
         /// The page the images belong to. The image host checks it.
         let referer: String
     }
 
     private var session: BatCaveSession?
+
+    /// Cookies per image host, gathered the first time each host is asked.
+    ///
+    /// One set for `batcave.biz` was enough while every page came from
+    /// `img.batcave.biz`, which inherits the site's cookies. It stops being
+    /// enough the moment a comic's pages are served from somewhere else: that
+    /// host would be handed a session belonging to a different site, and
+    /// refused for a reason no header explains.
+    private var cookiesByHost: [String: String?] = [:]
+
+    private func cookies(for url: URL) async -> String? {
+        guard let host = url.host?.lowercased() else { return nil }
+        if let known = cookiesByHost[host] { return known }
+        let jar = await SiteCookies.header(forURL: url)
+        cookiesByHost[host] = jar
+        return jar
+    }
+
+    /// What a browser would call the relationship between the referring page
+    /// and the thing being fetched.
+    ///
+    /// Three answers, and the middle one is the whole reason this is computed:
+    /// `same-site` covers a different host under the same registrable domain —
+    /// `img.batcave.biz` for a page on `batcave.biz` — while a genuinely
+    /// different site is `cross-site`, and saying otherwise is a false claim
+    /// about two hosts to an edge that checks.
+    static func fetchSite(from referer: String, to target: URL) -> String {
+        guard let from = URL(string: referer), let fromHost = from.host?.lowercased(),
+              let toHost = target.host?.lowercased() else { return "cross-site" }
+        if fromHost == toHost, from.scheme == target.scheme { return "same-origin" }
+        return site(of: fromHost) == site(of: toHost) ? "same-site" : "cross-site"
+    }
+
+    /// A host's registrable-ish domain: its last two labels. The same rough
+    /// rule `HostCooldown` uses, and wrong in the same place — a `.co.uk`
+    /// would collapse too far. Neither host here has that shape.
+    private static func site(of host: String) -> String {
+        let labels = host.split(separator: ".")
+        guard labels.count > 2 else { return host }
+        return labels.suffix(2).joined(separator: ".")
+    }
 
     private func note(_ event: String) {
         // Bounded: a page that redirects in a loop must not grow this without
@@ -149,10 +189,8 @@ final class BatCavePageFetcher: NSObject {
         // Stay on the reader page. It is the referring page for every one of
         // these images, and that turns out to be what the image host checks —
         // see `directImage`.
-        session = BatCaveSession(
-            cookies: await SiteCookies.header(forDomain: BatCave.host),
-            userAgent: await currentUserAgent(),
-            referer: readerURL)
+        session = BatCaveSession(userAgent: await currentUserAgent(),
+                                 referer: readerURL)
 
         // Pages already on disk from an interrupted attempt cost nothing the
         // second time — neither a request nor a second of waiting.
@@ -255,8 +293,10 @@ final class BatCavePageFetcher: NSObject {
         var request = URLRequest(url: url)
         request.setValue(session.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(session.referer, forHTTPHeaderField: "Referer")
-        if let cookies = session.cookies {
-            request.setValue(cookies, forHTTPHeaderField: "Cookie")
+        // For the host actually being asked, not for the site the reader was
+        // browsing. See `cookiesByHost`.
+        if let jar = await cookies(for: url) {
+            request.setValue(jar, forHTTPHeaderField: "Cookie")
         }
         // The headers a browser sends when it is loading a picture for a page,
         // because that is exactly what this is.
@@ -264,7 +304,12 @@ final class BatCavePageFetcher: NSObject {
                          forHTTPHeaderField: "Accept")
         request.setValue("image", forHTTPHeaderField: "Sec-Fetch-Dest")
         request.setValue("no-cors", forHTTPHeaderField: "Sec-Fetch-Mode")
-        request.setValue("same-site", forHTTPHeaderField: "Sec-Fetch-Site")
+        // Worked out rather than asserted. This said `same-site` for every
+        // request, which is a claim about two hosts and is simply false when a
+        // comic's pages come from another site — and it is a header the edge
+        // in front of these images reads.
+        request.setValue(Self.fetchSite(from: session.referer, to: url),
+                         forHTTPHeaderField: "Sec-Fetch-Site")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { return data }
@@ -294,7 +339,8 @@ final class BatCavePageFetcher: NSObject {
         }
         guard (200..<300).contains(http.statusCode) else {
             throw PageFetchError.pageFailed(
-                page: 0, reason: "HTTP \(http.statusCode)")
+                page: 0,
+                reason: "HTTP \(http.statusCode) from \(url.host ?? "the image host")")
         }
         pagesServed += 1
         return data
@@ -425,6 +471,19 @@ final class BatCavePageFetcher: NSObject {
             return value ?? ""
         }
         return ""
+    }
+
+    /// Whether a refusal reads as "there is nothing here to serve" rather than
+    /// "something went wrong on the way".
+    ///
+    /// A 403 or a 404 on the first page, from a session that is fetching other
+    /// issues perfectly well, is the site declining to offer this one — not a
+    /// fault to be worked around. Deliberately narrow: a timeout, a dropped
+    /// connection or a rate limit are all things that could work next time,
+    /// and telling the reader not to bother would be wrong for every one of
+    /// them.
+    static func looksUnavailable(_ refusal: String) -> Bool {
+        refusal.contains("HTTP 403") || refusal.contains("HTTP 404")
     }
 
     /// What a script actually complained about.
@@ -586,9 +645,29 @@ final class BatCavePageFetcher: NSObject {
                     // Both refusals, because either one alone is misleading:
                     // the direct request and the page see different walls, and
                     // which of them moved is the whole diagnosis.
-                    throw PageFetchError.pageFailed(
-                        page: page,
-                        reason: "direct: \(directRefusal); page: \(Self.scriptReason(error))")
+                    let detail = "direct: \(directRefusal); "
+                               + "page: \(Self.scriptReason(error))"
+
+                    // Nothing has been served and the very first page is
+                    // refused: the site is not offering this issue at all.
+                    //
+                    // Worth telling apart from a fetch that went wrong,
+                    // because the reader can act on one and not the other.
+                    // "Land of the Sons" is the case this was written for — its
+                    // reader page lists addresses on the site's own host rather
+                    // than the image host every other issue uses, and they are
+                    // refused there. It does not open in a browser either, so
+                    // there is nothing here to work around and no point
+                    // retrying.
+                    if self.pagesServed == 0, page == 1,
+                       Self.looksUnavailable(directRefusal) {
+                        throw PageFetchError.pageFailed(
+                            page: page,
+                            reason: "\(BatCave.host) is not serving this issue's pages — "
+                                  + "it does not open on the site either. "
+                                  + "Nothing to retry. (\(detail))")
+                    }
+                    throw PageFetchError.pageFailed(page: page, reason: detail)
                 }
             }
             group.addTask {
