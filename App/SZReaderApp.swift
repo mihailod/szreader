@@ -80,7 +80,7 @@ final class AppModel: ObservableObject {
     /// Persisted as newline-joined text: `AppStorage` cannot hold a Set, and a
     /// newline is the one separator a series name will never contain.
     @AppStorage("seriesFilter") private var seriesFilterRaw = "" {
-        didSet { search(query) }
+        didSet { scheduleSearch() }
     }
 
     var selectedSeries: Set<String> {
@@ -90,7 +90,7 @@ final class AppModel: ObservableObject {
 
     /// Publishers the reader has narrowed to. Empty means every publisher.
     @AppStorage("publisherFilter") private var publisherFilterRaw = "" {
-        didSet { search(query) }
+        didSet { scheduleSearch() }
     }
 
     var selectedPublishers: Set<String> {
@@ -100,9 +100,9 @@ final class AppModel: ObservableObject {
 
     /// Read-state switches. All on, or all off, means show everything —
     /// asking for every state is the same as not asking.
-    @AppStorage("showUnread") var showUnread = false { didSet { search(query) } }
-    @AppStorage("showReading") var showReading = false { didSet { search(query) } }
-    @AppStorage("showRead") var showRead = false { didSet { search(query) } }
+    @AppStorage("showUnread") var showUnread = false { didSet { scheduleSearch() } }
+    @AppStorage("showReading") var showReading = false { didSet { scheduleSearch() } }
+    @AppStorage("showRead") var showRead = false { didSet { scheduleSearch() } }
 
     var readStates: Set<ReadState> {
         var states: Set<ReadState> = []
@@ -114,7 +114,7 @@ final class AppModel: ObservableObject {
 
     /// Heroes the reader has narrowed to. Empty means every hero.
     @AppStorage("heroFilter") private var heroFilterRaw = "" {
-        didSet { search(query) }
+        didSet { scheduleSearch() }
     }
 
     var selectedHeroes: Set<String> {
@@ -143,12 +143,12 @@ final class AppModel: ObservableObject {
     /// stored and keeps it — `@AppStorage` only writes when set, so this
     /// default reaches exactly the people who never chose.
     @AppStorage("shelfSort") var sortOrder: ShelfSort = .default {
-        didSet { search(query) }
+        didSet { scheduleSearch() }
     }
 
     /// Show only comics whose archive is actually on disk.
     @AppStorage("downloadedOnly") var downloadedOnly = false {
-        didSet { search(query) }
+        didSet { scheduleSearch() }
     }
 
     /// How the page thumbnails on disk were rendered — their size, and which
@@ -262,6 +262,44 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Whether a language is showing: whether any of the sources it alone
+    /// decides is on.
+    ///
+    /// Asked of `language.sites`, which leaves archive.org out on purpose. It
+    /// holds every language, so with ex-YU on and English off it is on — and
+    /// counting it would make the English switch report itself on with not one
+    /// English shelf behind it.
+    func isEnabled(_ language: SourceLanguage) -> Bool {
+        language.sites.contains { isEnabled($0) }
+    }
+
+    /// Moves a whole language's sources at once.
+    ///
+    /// Not simply a loop over `setSource`: each call rebuilds the filter menus
+    /// and re-runs the search, and fifteen of those on one tap is a freeze.
+    /// The flags all move first, and the shelf is rebuilt once at the end.
+    func setLanguage(_ language: SourceLanguage, enabled: Bool) {
+        movingLanguage = true
+        for site in language.sites {
+            setSource(site, enabled: enabled)
+        }
+        // Archive.org follows the last language to leave rather than the
+        // first: switching ex-YU off while English is on must not take the
+        // English half of archive.org with it.
+        let sharedStaysOn = enabled || SourceLanguage.allCases.contains {
+            $0 != language && isEnabled($0)
+        }
+        for site in SourceLanguage.sharedSites {
+            setSource(site, enabled: sharedStaysOn)
+        }
+        movingLanguage = false
+        rebuildForVisibleSources()
+    }
+
+    /// True while `setLanguage` is moving a language's switches, which is what
+    /// the per-source work below reads to know it is one of many.
+    private var movingLanguage = false
+
     /// Loads the catalogue the first time its source is switched on, then
     /// rebuilds the shelf around whatever is now visible.
     ///
@@ -275,17 +313,32 @@ final class AppModel: ObservableObject {
             // and now, which froze the app solid for the length of the seed —
             // fifteen seconds for the largest catalogue, with the settings
             // sheet still on screen and nothing moving.
-            seedInBackground(site, announce: true)
+            //
+            // Silent when a language is moving: one switch seeds up to
+            // fifteen sources, and fifteen alerts that each replace the last
+            // amount to one alert naming whichever source happened to finish
+            // second-to-last. The status line still says what is loading.
+            seedInBackground(site, announce: !movingLanguage)
         }
-        // A filter naming a series from a source that is now hidden matches
-        // nothing, and an empty shelf with no visible reason is the most
-        // baffling state the app has. Dropping those selections keeps the
-        // shelf explainable by what is actually on screen.
+        // A language switch moves up to fifteen of these, and the rebuild
+        // below is worth doing once when the last of them has moved — which is
+        // what `setLanguage` does.
+        guard !movingLanguage else { return }
+        rebuildForVisibleSources()
+    }
+
+    /// What the shelf has to redo once the set of visible sources has changed.
+    ///
+    /// A filter naming a series from a source that is now hidden matches
+    /// nothing, and an empty shelf with no visible reason is the most baffling
+    /// state the app has. Dropping those selections keeps the shelf
+    /// explainable by what is actually on screen.
+    private func rebuildForVisibleSources() {
         refreshSourceMenus()
         issueCount = store?.issueCount ?? 0
         downloadedCount = store?.downloadedCount ?? 0
         shippedCount = store?.shippedCount ?? 0
-        search(query)
+        scheduleSearch()
     }
 
     /// Rebuilds the Series, Publisher and Hero menus.
@@ -346,10 +399,24 @@ final class AppModel: ObservableObject {
         let bySite: [IssueSite: [String]]
     }
 
+    /// Written back only where something actually changed.
+    ///
+    /// Each of these three setters lands in an `@AppStorage` string whose
+    /// `didSet` re-runs the search, and `didSet` fires on any assignment,
+    /// equal value or not. Assigned unconditionally, one source switch cost
+    /// four full-library searches — the rebuild's own, plus one for each
+    /// selection that had not changed and, in the usual case, was not even
+    /// set. At thirty thousand rows that is a fetch and a sort of the whole
+    /// shelf, three times over, to discover that no filter had moved.
     private func pruneHiddenSelections() {
-        selectedSeries = selectedSeries.intersection(availableSeries)
-        selectedPublishers = selectedPublishers.intersection(availablePublishers)
-        selectedHeroes = selectedHeroes.intersection(availableHeroes)
+        let series = selectedSeries.intersection(availableSeries)
+        if series != selectedSeries { selectedSeries = series }
+
+        let publishers = selectedPublishers.intersection(availablePublishers)
+        if publishers != selectedPublishers { selectedPublishers = publishers }
+
+        let heroes = selectedHeroes.intersection(availableHeroes)
+        if heroes != selectedHeroes { selectedHeroes = heroes }
     }
     /// A failure worth interrupting for. The status line is too easy to miss,
     /// and a download that silently does nothing looks like a broken app.
@@ -549,7 +616,40 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// A search waiting for the current burst of changes to finish.
+    ///
+    /// Held so the next request can cancel it: the last one asked in a turn is
+    /// the one worth running.
+    private var pendingSearch: Task<Void, Never>?
+
+    /// One search after a burst of changes, instead of one per change.
+    ///
+    /// The things that re-run the search rarely move alone. A source switch
+    /// prunes three filter selections behind it; a language switch seeds
+    /// fifteen catalogues that each land on their own. Every run is a fetch of
+    /// every visible row and a sort of the lot, on this actor — 57 ms on a
+    /// thirty-thousand-issue shelf by arrival, half a second by title — so
+    /// everything that re-searches as bookkeeping rather than because a reader
+    /// asked comes through here.
+    ///
+    /// Not a debounce: nothing waits on a clock. A task scheduled from the
+    /// main actor cannot start until whatever scheduled it has finished
+    /// running, and that window — one turn of synchronous changes — is exactly
+    /// what is worth collapsing.
+    private func scheduleSearch() {
+        pendingSearch?.cancel()
+        pendingSearch = Task { @MainActor [weak self] in
+            guard !Task.isCancelled, let self else { return }
+            self.pendingSearch = nil
+            self.search(self.query)
+        }
+    }
+
     func search(_ text: String) {
+        // Whatever a scheduled search was going to ask, this answers: it reads
+        // the same filters and is about to set the query itself.
+        pendingSearch?.cancel()
+        pendingSearch = nil
         guard let store else { return }
         query = text
         // Every source switched off means an empty shelf, and it has to be
@@ -753,11 +853,11 @@ final class AppModel: ObservableObject {
             // for that before this task is ever started; `start()` likewise
             // refreshes on its own once the launch seeds are away.
             guard wroteRows else { return }
-            self.refreshSourceMenus()
-            self.issueCount = self.store?.issueCount ?? 0
-            self.downloadedCount = self.store?.downloadedCount ?? 0
-            self.shippedCount = self.store?.shippedCount ?? 0
-            self.search(self.query)
+            // The same rebuild a source switch does, and now the same call:
+            // written out again here, it was one more copy to keep in step,
+            // and fifteen seeds landing from one language switch each ran a
+            // search of their own rather than sharing one.
+            self.rebuildForVisibleSources()
         }
     }
 

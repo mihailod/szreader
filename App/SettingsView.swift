@@ -29,6 +29,9 @@ struct SettingsView: View {
                 reading
                     .padding(.top, 8)
 
+                languages
+                    .padding(.top, 8)
+
                 sources
                     .padding(.top, 8)
 
@@ -157,6 +160,37 @@ struct SettingsView: View {
         .frame(maxWidth: 560)
     }
 
+    /// Which languages the shelf draws from.
+    ///
+    /// Above the sources rather than among them, because it is the coarser
+    /// question and the one worth answering first: nineteen switches is a list
+    /// to work through, two is a choice. Nothing here is a setting of its own
+    /// — each switch moves the ones below it, and reads its own state back off
+    /// them.
+    private var languages: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("SOURCES WITH LANGUAGES")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+
+            LanguageList(model: model)
+            .background(Color(.secondarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Text("A language switches the sources below it. Archive.org holds "
+                 + "every language, so it stays while either language is on.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+        }
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: 560)
+    }
+
     /// Which archives the shelf draws from.
     ///
     /// Switching one off hides it everywhere — the shelf, the search and the
@@ -164,7 +198,7 @@ struct SettingsView: View {
     /// downloaded is exactly as it was when it comes back.
     private var sources: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("SOURCES")
+            Text("INDIVIDUAL SOURCES")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)

@@ -45,6 +45,68 @@ struct SourceToggle: View {
     private var detail: String { copy.detail }
 }
 
+/// One switch for a whole language of archives.
+///
+/// Built like `SourceToggle` and sitting directly above the list of them,
+/// because that is what it is: a switch that moves those switches. It stores
+/// nothing itself — what it shows is read back off the sources it moves — so
+/// a reader who turns a language on and then one source of it off sees
+/// exactly that, rather than a group switch insisting otherwise.
+struct LanguageToggle: View {
+    let language: SourceLanguage
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        Toggle(isOn: Binding(
+            get: { model.isEnabled(language) },
+            set: { model.setLanguage(language, enabled: $0) }
+        )) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(language.display)
+                    .font(.headline)
+                    // As on the source rows below: on a narrow phone the stack
+                    // offers one line's height and the label truncates rather
+                    // than wrapping.
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// Which sources this moves, said plainly. In the app layer with the rest
+    /// of the prose — see `SourceCopy` for why copy does not live beside
+    /// `SourceLanguage` in the framework.
+    private var detail: String {
+        switch language {
+        case .exYU:
+            return "StripZona, Stripovi.com and RetroSpec, and Archive.org."
+        case .english:
+            return "Every other source, and Archive.org — it carries both."
+        }
+    }
+}
+
+/// The languages, in the order Settings shows them.
+struct LanguageList: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(SourceLanguage.allCases.enumerated()), id: \.element) { index, language in
+                LanguageToggle(language: language, model: model)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                if index < SourceLanguage.allCases.count - 1 {
+                    Divider().padding(.leading, 16)
+                }
+            }
+        }
+    }
+}
+
 /// The list of sources, wherever it is shown.
 ///
 /// Shared by Settings and the empty shelf, which have always carried the same
