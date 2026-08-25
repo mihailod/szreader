@@ -6,22 +6,20 @@
 </th>
 <th>
   <br>
-  StreamZine 1.0<br><br>
+  StreamZine<br><br>
   Comics & magazines reader<br>
-  that supports StripZona forum.<br><br>
-  20. August 2026<br>
+  that supports many sources.<br><br>
+  August 20th, 2026<br>
   Now on App Store!<br><br>
   <a href="https://apps.apple.com/us/app/streamzine/id6801719481" float="left">
     <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&releaseDate=1276560000&h=7e7b68fad19738b5649a1bfb78ff46e9" alt="Download on the App Store"><br></a><br>
-  Coming soon in 1.1: support for<br>
-  RetroSpec, Archive.org and ComicBook+
 </th>
 </tr>
 </table>
 
 <img src="screenshot.png" alt="Screenshot" width="350">
 
-## New in 1.2 (work in progress)
+## Coming soon in 1.2 (Apple approval in progress...)
 
 * **Added content sources:**
 
@@ -64,8 +62,9 @@ sort by scan size.
 
 ---
 
-## New in 1.1 (Apple approval in progress)
-
+## New in 1.1 (August 24th, 2026)
+  <a href="https://apps.apple.com/us/app/streamzine/id6801719481" float="left">
+    <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&releaseDate=1276560000&h=7e7b68fad19738b5649a1bfb78ff46e9" alt="Download on the App Store"><br></a><br>
 * **Added content sources:**
 
   * **[RetroSpec](https://retrospec.elite.org/users/tomcat/yu/revije.php)**, Tomaž Kac's
@@ -96,7 +95,7 @@ Page Preview Grid.
 
 ---
 
-## 1.0 Features
+## 1.0 Features (Debuted on App Store on August, 20th 2026)
 
   <a href="https://apps.apple.com/us/app/streamzine/id6801719481" float="left">
     <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&releaseDate=1276560000&h=7e7b68fad19738b5649a1bfb78ff46e9" alt="Download on the App Store"><br></a>
