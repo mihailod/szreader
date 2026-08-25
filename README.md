@@ -72,6 +72,7 @@ sort by scan size.
 ## New in 1.1 (August 24th, 2026)
   <a href="https://apps.apple.com/us/app/streamzine/id6801719481" float="left">
     <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&releaseDate=1276560000&h=7e7b68fad19738b5649a1bfb78ff46e9" alt="Download on the App Store"><br></a><br>
+    
 * **Added content sources:**
 
   * **[RetroSpec](https://retrospec.elite.org/users/tomcat/yu/revije.php)**, Tomaž Kac's
