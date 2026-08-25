@@ -1,7 +1,5 @@
 - send more emails
 
-- add sort by scan size
-
 -------------
 
 additional sources:

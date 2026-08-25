@@ -18,12 +18,14 @@ public struct ImportReport: Equatable, Sendable {
     /// Plain-language next step, or nil when the import went fine.
     public var advice: String? {
         if links == 0 && hiddenBlocks > 0 {
-            return "Every download block on this page is still hidden. Like the "
-                 + "posts you want, then import again."
+            return "It seems you are on a topic with no liked posts (all download "
+                 + "links are hidden). Click on [LIKE THIS] on a post you want and "
+                 + "then tap Import again."
         }
         if links == 0 {
-            return "No download links found. Is this a topic page rather than a "
-                 + "forum index?"
+            return "No download links found. Seems you are not on a topic page at "
+                 + "all. Make sure you are on a topic page with links and that you "
+                 + "clicked on [LIKE THIS] to reveal them."
         }
         if hiddenBlocks > 0 && issues > 0 {
             return "Imported what was visible. \(hiddenBlocks) block(s) are still "
@@ -32,6 +34,17 @@ public struct ImportReport: Equatable, Sendable {
         if attributed < links {
             return "\(links - attributed) link(s) could not be matched to an issue "
                  + "and were skipped, rather than guessing at a title."
+        }
+        // Nothing new and nothing wrong: this page has been imported before.
+        // By far the most common empty import — the like quota unlocks a topic
+        // in batches, so people come back to the same page — and the one case
+        // where a bare count of matched links explains nothing at all.
+        if isEmpty {
+            return hiddenBlocks > 0
+                ? "Everything visible here is already in your library. "
+                    + "\(hiddenBlocks) block(s) are still hidden — like those "
+                    + "posts to get the rest."
+                : "Everything on this page is already in your library."
         }
         return nil
     }

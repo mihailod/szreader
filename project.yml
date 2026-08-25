@@ -109,8 +109,8 @@ targets:
         # re-upload of an identical build after a rejected one. It is an
         # integer that only ever increases; it does not reset when
         # MARKETING_VERSION changes.
-        MARKETING_VERSION: "1.2"
-        CURRENT_PROJECT_VERSION: "5"
+        MARKETING_VERSION: "1.3"
+        CURRENT_PROJECT_VERSION: "6"
         INFOPLIST_FILE: App/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"        # iPhone and iPad

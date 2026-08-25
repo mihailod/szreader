@@ -17,8 +17,10 @@ final class ImportReportTests: XCTestCase {
         XCTAssertEqual(report.links, 0)
         XCTAssertEqual(report.hiddenBlocks, 2)
         XCTAssertTrue(report.isEmpty)
-        XCTAssertEqual(report.advice?.contains("still hidden"), true, "\(report.advice ?? "nil")")
-        XCTAssertEqual(report.advice?.contains("Like the posts"), true)
+        XCTAssertEqual(report.advice?.contains("all download links are hidden"), true,
+                       "\(report.advice ?? "nil")")
+        XCTAssertEqual(report.advice?.contains("[LIKE THIS]"), true,
+                       "the message names the forum's own button")
     }
 
     /// A forum index has no download blocks at all — a different problem from
@@ -27,7 +29,10 @@ final class ImportReportTests: XCTestCase {
         let store = try Store()
         let report = try store.importPage(html: "<div>Welcome to the forum index</div>")
         XCTAssertEqual(report.hiddenBlocks, 0)
-        XCTAssertEqual(report.advice?.contains("topic page"), true, "\(report.advice ?? "nil")")
+        // Not just "topic page": both messages say that now, and the point of
+        // this one is that there is nothing on the page to unlock either.
+        XCTAssertEqual(report.advice?.contains("not on a topic page at all"), true,
+                       "\(report.advice ?? "nil")")
     }
 
     /// The common real case: some posts liked, others not.
@@ -85,5 +90,63 @@ final class ImportReportTests: XCTestCase {
         XCTAssertEqual(again.issues, 1, "should add only the newly unlocked issue")
         XCTAssertEqual(again.mirrors, 1)
         XCTAssertEqual(store.issueCount, 2)
+    }
+
+    /// The commonest empty import of all: the same page a second time.
+    ///
+    /// It used to fall through to no advice at all, which left the message
+    /// reading "2 of 2 links matched an issue" — true, and no answer to the
+    /// only question being asked, which is why nothing happened.
+    func testAnAlreadyImportedPageSaysSo() throws {
+        let store = try Store()
+        let html = """
+            <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>
+            <div>017-Klark siti</div><div>http://www.mediafire.com/?FAKEKEY017</div>
+            """
+        XCTAssertFalse(try store.importPage(html: html).isEmpty)
+
+        let again = try store.importPage(html: html)
+        XCTAssertTrue(again.isEmpty)
+        XCTAssertEqual(again.advice, "Everything on this page is already in your library.")
+    }
+
+    /// Already imported, with more still locked — the second half is the part
+    /// there is something to do about.
+    func testAnAlreadyImportedPageStillPointsAtWhatIsLocked() throws {
+        let store = try Store()
+        let html = """
+            <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>
+            <div>017-Klark siti</div>
+            <div>Hidden Content — like this post.</div>
+            """
+        XCTAssertFalse(try store.importPage(html: html).isEmpty)
+
+        let again = try store.importPage(html: html)
+        XCTAssertTrue(again.isEmpty)
+        XCTAssertEqual(again.advice?.contains("already in your library"), true,
+                       "\(again.advice ?? "nil")")
+        XCTAssertEqual(again.advice?.contains("still hidden"), true,
+                       "\(again.advice ?? "nil")")
+    }
+
+    /// Every empty import has something to say. The popup the shelf shows for
+    /// one has nothing else to fall back on.
+    func testEveryEmptyImportHasAdvice() throws {
+        let store = try Store()
+        let pages = [
+            "<div>Welcome to the forum index</div>",
+            "<div>MN_LMS_511</div><div>Hidden Content — like this post.</div>",
+            "<div>013-Some Title</div><div>http://www.mediafire.com/?FAKE0</div>"
+                + "<div>http://www.mediafire.com/?FAKE1</div>",
+        ]
+        for html in pages {
+            let report = try store.importPage(html: html)
+            guard report.isEmpty else { continue }
+            XCTAssertNotNil(report.advice, "no reason given for \(html)")
+        }
+        // And the same page twice, which is the fourth way to import nothing.
+        let twice = "<div>013-Nasilje</div><div>http://www.mediafire.com/?FAKEKEY013</div>"
+        _ = try store.importPage(html: twice)
+        XCTAssertNotNil(try store.importPage(html: twice).advice)
     }
 }
