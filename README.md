@@ -17,7 +17,14 @@
 </tr>
 </table>
 
-<img src="screenshot.png" alt="Screenshot" width="350">
+<table>
+  <tr>
+    <th>StreamZine on iPad</th><th>StreamZine on iPhone</th>
+  </tr>
+<tr>
+  <th><img src="screenshot.png" alt="Screenshot iPad" width="400"></th>
+  <th><img src="screenshotphone.png" alt="Screenshot iPhone" width="150"></th>
+</tr></table>
 
 ## Coming soon in 1.2 (Apple approval in progress...)
 
