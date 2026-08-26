@@ -79,6 +79,129 @@ enum PendingAction: Identifiable {
     }
 }
 
+/// The name a confirmation calls an issue by, or nil when it has none.
+private func issueName(_ issue: StoredIssue) -> String? { issue.title ?? issue.code }
+
+/// The confirmation alerts, attached to whichever view raised the action.
+///
+/// Every view that sets a `PendingAction` has to carry this, not the shelf
+/// alone. An alert is only shown by a view that is itself on screen, so one
+/// asked for on the shelf while the detail sheet is open never appears — and
+/// because `.alert(item:)` presents on a nil-to-value change and nothing else,
+/// the case it never showed stays set. From then on every later confirmation,
+/// from anywhere, is swallowed: first a Remove Download button that does
+/// nothing, then a whole shelf of buttons that do nothing until the app is
+/// relaunched.
+private struct Confirming: ViewModifier {
+    @ObservedObject var model: AppModel
+    @Binding var pending: PendingAction?
+
+    func body(content: Content) -> some View {
+        content.alert(item: $pending) { action in confirmation(for: action) }
+    }
+
+    private func confirmation(for action: PendingAction) -> Alert {
+        switch action {
+        case let .downloadSet(issue, description):
+            return Alert(
+                title: Text("Download the whole set?"),
+                message: Text(description),
+                primaryButton: .default(Text("Download")) { model.download(issue, asSet: true) },
+                secondaryButton: .cancel())
+        case let .removeSet(issue, description):
+            return Alert(
+                title: Text("Remove the whole set?"),
+                message: Text(description),
+                primaryButton: .destructive(Text("Remove")) { model.deleteDownload(issue) },
+                secondaryButton: .cancel(Text("No")))
+        case .deleteDownload(let issue):
+            return Alert(
+                title: Text("Are you sure?"),
+                message: Text(LibraryView.removeDownloadMessage(issueName(issue))),
+                primaryButton: .destructive(Text("Yes")) { model.deleteDownload(issue) },
+                secondaryButton: .cancel(Text("No")))
+        case .remove(let issue):
+            return Alert(
+                title: Text("Are you sure?"),
+                message: Text(LibraryView.deleteMessage(issueName(issue))),
+                primaryButton: .destructive(Text("Yes")) { model.delete(issue) },
+                secondaryButton: .cancel(Text("No")))
+        case .undeletable(let issue):
+            // The explanation alone when there is nothing on disk, and the
+            // action the reader was probably after when there is: what a
+            // delete on a downloaded issue mostly wants back is the space,
+            // and that much this row can give.
+            guard issue.isDownloaded else {
+                return Alert(title: Text("From the app index"),
+                             message: Text(LibraryView.undeletableMessage(downloaded: false)),
+                             dismissButton: .default(Text("OK")))
+            }
+            return Alert(
+                title: Text("From the app index"),
+                message: Text(LibraryView.undeletableMessage(downloaded: true)),
+                primaryButton: .destructive(Text("Remove Download")) {
+                    // Worked out here and handed over afterwards, so a set
+                    // still gets the whole-set warning it would have got from
+                    // the button on the shelf.
+                    var next: PendingAction?
+                    beginRemoveDownload(issue, model: model, pending: &next)
+                    handOver(to: next)
+                },
+                secondaryButton: .cancel(Text("Cancel")))
+        case .removeAllDownloads(let count):
+            return Alert(
+                title: Text("Are you sure?"),
+                message: Text("Remove \(count) downloaded issue\(count == 1 ? "" : "s") "
+                              + "from this device. The library keeps every title, "
+                              + "so nothing needs importing again."),
+                primaryButton: .destructive(Text("Yes")) { model.removeAllDownloads() },
+                secondaryButton: .cancel(Text("No")))
+        case let .removeVisibleDownloads(count, touchesASet):
+            return Alert(
+                title: Text(LibraryView.removeVisibleTitle(count)),
+                message: Text(LibraryView.removeVisibleMessage(count, touchesASet: touchesASet)),
+                primaryButton: .destructive(Text("Yes")) { model.removeVisibleDownloads() },
+                secondaryButton: .cancel(Text("No")))
+        case let .deleteVisible(count, shipped):
+            return Alert(
+                title: Text(LibraryView.deleteVisibleTitle(count)),
+                message: Text(LibraryView.deleteVisibleMessage(
+                    count, shipped: shipped,
+                    wholeLibrary: count == model.deletableCount)),
+                primaryButton: .destructive(Text("Yes")) { model.deleteVisible() },
+                secondaryButton: .cancel(Text("No")))
+        case let .deleteAll(count, shipped):
+            return Alert(
+                title: Text("Are you sure?"),
+                message: Text(LibraryView.deleteAllMessage(count, shipped: shipped)),
+                primaryButton: .destructive(Text("Yes")) { model.deleteEverything() },
+                secondaryButton: .cancel(Text("No")))
+        }
+    }
+
+    /// Raises the next alert once this one has finished going away.
+    ///
+    /// `.alert(item:)` clears its own binding as part of dismissing, so a case
+    /// set from inside a button's action is wiped again before SwiftUI reads
+    /// it and the second alert never appears. Waiting out the dismissal is
+    /// what makes the two read as one flow.
+    private func handOver(to action: PendingAction?) {
+        guard let action else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            pending = action
+        }
+    }
+}
+
+extension View {
+    /// Asks before the destructive actions this view raises. See `Confirming`.
+    fileprivate func confirming(_ pending: Binding<PendingAction?>,
+                                model: AppModel) -> some View {
+        modifier(Confirming(model: model, pending: pending))
+    }
+}
+
 struct LibraryView: View {
     @ObservedObject var model: AppModel
     @State private var selected: StoredIssue?
@@ -106,9 +229,9 @@ struct LibraryView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $selected) { issue in
                 IssueDetail(model: model, issue: issue,
-                            mirrors: model.mirrors(for: issue), pending: $pending)
+                            mirrors: model.mirrors(for: issue))
             }
-            .alert(item: $pending) { action in confirmation(for: action) }
+            .confirming($pending, model: model)
             .fullScreenCover(item: $model.reading) { open in
                 ReadingSurface(model: model, comicID: open.id, title: open.title)
                     // The place is saved on every page turn but the shelf is
@@ -621,98 +744,6 @@ struct LibraryView: View {
             .disabled(model.deletableCount == 0)
     }
 
-    private func confirmation(for action: PendingAction) -> Alert {
-        switch action {
-        case let .downloadSet(issue, description):
-            return Alert(
-                title: Text("Download the whole set?"),
-                message: Text(description),
-                primaryButton: .default(Text("Download")) { model.download(issue, asSet: true) },
-                secondaryButton: .cancel())
-        case let .removeSet(issue, description):
-            return Alert(
-                title: Text("Remove the whole set?"),
-                message: Text(description),
-                primaryButton: .destructive(Text("Remove")) { model.deleteDownload(issue) },
-                secondaryButton: .cancel(Text("No")))
-        case .deleteDownload(let issue):
-            return Alert(
-                title: Text("Are you sure?"),
-                message: Text(Self.removeDownloadMessage(name(issue))),
-                primaryButton: .destructive(Text("Yes")) { model.deleteDownload(issue) },
-                secondaryButton: .cancel(Text("No")))
-        case .remove(let issue):
-            return Alert(
-                title: Text("Are you sure?"),
-                message: Text(Self.deleteMessage(name(issue))),
-                primaryButton: .destructive(Text("Yes")) { model.delete(issue) },
-                secondaryButton: .cancel(Text("No")))
-        case .undeletable(let issue):
-            // The explanation alone when there is nothing on disk, and the
-            // action the reader was probably after when there is: what a
-            // delete on a downloaded issue mostly wants back is the space,
-            // and that much this row can give.
-            guard issue.isDownloaded else {
-                return Alert(title: Text("From the app index"),
-                             message: Text(Self.undeletableMessage(downloaded: false)),
-                             dismissButton: .default(Text("OK")))
-            }
-            return Alert(
-                title: Text("From the app index"),
-                message: Text(Self.undeletableMessage(downloaded: true)),
-                primaryButton: .destructive(Text("Remove Download")) {
-                    // Worked out here and handed over afterwards, so a set
-                    // still gets the whole-set warning it would have got from
-                    // the button on the shelf.
-                    var next: PendingAction?
-                    beginRemoveDownload(issue, model: model, pending: &next)
-                    handOver(to: next)
-                },
-                secondaryButton: .cancel(Text("Cancel")))
-        case .removeAllDownloads(let count):
-            return Alert(
-                title: Text("Are you sure?"),
-                message: Text("Remove \(count) downloaded issue\(count == 1 ? "" : "s") "
-                              + "from this device. The library keeps every title, "
-                              + "so nothing needs importing again."),
-                primaryButton: .destructive(Text("Yes")) { model.removeAllDownloads() },
-                secondaryButton: .cancel(Text("No")))
-        case let .removeVisibleDownloads(count, touchesASet):
-            return Alert(
-                title: Text(Self.removeVisibleTitle(count)),
-                message: Text(Self.removeVisibleMessage(count, touchesASet: touchesASet)),
-                primaryButton: .destructive(Text("Yes")) { model.removeVisibleDownloads() },
-                secondaryButton: .cancel(Text("No")))
-        case let .deleteVisible(count, shipped):
-            return Alert(
-                title: Text(Self.deleteVisibleTitle(count)),
-                message: Text(Self.deleteVisibleMessage(count, shipped: shipped,
-                                                        wholeLibrary: count == model.deletableCount)),
-                primaryButton: .destructive(Text("Yes")) { model.deleteVisible() },
-                secondaryButton: .cancel(Text("No")))
-        case let .deleteAll(count, shipped):
-            return Alert(
-                title: Text("Are you sure?"),
-                message: Text(Self.deleteAllMessage(count, shipped: shipped)),
-                primaryButton: .destructive(Text("Yes")) { model.deleteEverything() },
-                secondaryButton: .cancel(Text("No")))
-        }
-    }
-
-    /// Raises the next alert once this one has finished going away.
-    ///
-    /// `.alert(item:)` clears its own binding as part of dismissing, so a case
-    /// set from inside a button's action is wiped again before SwiftUI reads
-    /// it and the second alert never appears. Waiting out the dismissal is
-    /// what makes the two read as one flow.
-    private func handOver(to action: PendingAction?) {
-        guard let action else { return }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
-            pending = action
-        }
-    }
-
     /// The name goes in only when there is one.
     ///
     /// A magazine listed as "Alef - SF magazin 01" has neither title nor code,
@@ -842,9 +873,7 @@ struct LibraryView: View {
     /// listed only as "Alef - SF magazin 01": the shelf mark already says
     /// "Alef 1", and the placeholder that used to sit here read as though
     /// every issue were actually called "this issue".
-    private func name(_ issue: StoredIssue) -> String? {
-        issue.title ?? issue.code
-    }
+    private func name(_ issue: StoredIssue) -> String? { issueName(issue) }
 
     // MARK: - Content
 
@@ -1649,7 +1678,9 @@ struct IssueDetail: View {
     @ObservedObject var model: AppModel
     let issue: StoredIssue
     let mirrors: [MirrorLink]
-    @Binding var pending: PendingAction?
+    /// This sheet's own, deliberately not the shelf's: the alert has to be
+    /// raised by the view the reader is looking at. See `Confirming`.
+    @State private var pending: PendingAction?
     @Environment(\.dismiss) private var dismiss
     @State private var showingCover = false
 
@@ -1816,6 +1847,10 @@ struct IssueDetail: View {
                         ? { [id = current.id] in await model.firstPage(forIssue: id) }
                         : nil)
         }
+        // On a view of its own, the same rule the shelf already follows:
+        // SwiftUI honours one presentation modifier per view, and the cover
+        // above has claimed this one.
+        .background(Color.clear.confirming($pending, model: model))
     }
 }
 
