@@ -28,21 +28,17 @@
 
 ## Coming soon in 1.3
 
-* **Local Files — copy/Import and read files from your Mac.**
-You can now Import your local files in three ways:
+* **Local Files support** - Import files from your Mac and/or device in three ways:
 
-  * **1. Connect your iPad/iPhone via USB cable** - StreamZine will appear in the Finder's
-**Files** list for your device (like other apps) and you just drag supported files in.
+  1. **Using USB cable** - Connect your device and StreamZine folder will appear
+  in the Finder's **Files** list for it. Drag and drop into it.
 
-  * **2. AirDrop from a Mac** — send files to your device and open them with StreamZine.
+  2. **Using AirDrop** - Send files from your Mac to your device and open them with StreamZine.
 The StreamZine folder also appears under **On My iPad** in the Files app, so you can
 copy into it over Wi-Fi either from iCloud Drive, or a Mac mounted with
 Files ▸ Connect to Server.
 
-  * **3. Import ▸ From Device.** Already have issues on your device?
-Import now has a **From Device** that opens an import file browser. Pick as
-many files as you like, including ones still in **iCloud Drive** — those are
-fetched down first, then added.
+  3. **Import ▸ From Device** - Opens a file browser to find and pick any file from the device itself.
 
 * Local Files is always ON (no Settings switch) because the device itself is the source.
 Remove All Downloads ignores local files; Delete Library asks before deleting them.
