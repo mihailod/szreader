@@ -262,6 +262,32 @@ Two consequences worth knowing:
   one presentation per view, and put beside the settings sheet it is not a bug you see — it is
   a menu item that silently does nothing.
 
+#### Files that are not on the device yet
+
+iCloud Drive shows everything the account holds, downloaded or not, and a file that is not
+downloaded is a placeholder — real name, real size, no bytes. Two things follow, and the
+feature is half-useless without both.
+
+* **The picker allows any file** (`[.data]`), where it used to name the seven readable types.
+  Type filtering greyed out exactly the items this feature exists for: a placeholder's type
+  does not reliably resolve to the one its extension implies, so filtered by type it cannot be
+  tapped at all — and a file already downloaded is the easy case. The filtering moved to the
+  way in, where `LocalFiles.isReadable` was already checked, and a refusal is now named in the
+  status line rather than being an item that ignores taps for invisible reasons.
+* **The bytes are fetched before the copy.** `startDownloadingUbiquitousItem` and then a poll
+  on `ubiquitousItemDownloadingStatus` until it reads `.current`, which is why `take` was split
+  into itself and `copyIn`: the security scope has to be held across both the fetch and the
+  copy, and there is now something in between. Polled rather than observed — the proper
+  instrument is an `NSMetadataQuery`, a live index over the whole ubiquity container, against
+  one local metadata read twice a second here. Copying a placeholder without this gives an
+  empty file and no error at all.
+
+The copy itself moved off the main actor at the same time. These are hundreds of megabytes and
+the shelf should not stop scrolling for the length of one.
+
+Not reproducible on the simulator, which has no iCloud account — this was found on the device
+and has to be confirmed there.
+
 `LocalFiles.scan` lists the folder, flat, and `Store.reconcileLocalFiles` brings the rows into
 line with it. Three things about that are worth knowing before changing any of it:
 
@@ -278,6 +304,20 @@ line with it. Three things about that are worth knowing before changing any of i
   unpacked pages and its captured cover with it. The cover matters more than its few kilobytes:
   SQLite hands the next row the id of a deleted one, so a stale `covers/<id>.jpg` becomes the
   artwork of an issue that no longer exists, sitting on top of one that does.
+
+  That reasoning was right and the fix was half of one. Deleting `covers/<id>.jpg` leaves
+  `CoverStore` — which nothing ever evicted — still holding the picture under the same key,
+  because a local cover is referenced as `szpage:<id>` and the id is precisely what gets
+  reused. So the shelf went on drawing a deleted comic's artwork on top of a new one: import
+  two issues after churning a few, and the second wears the first's cover. `CoverStore.forget`
+  clears all four stores (both colour variants, the monochrome verdict, the disk file), one
+  `AppModel.discardCover` calls it beside the file delete so the five call sites cannot drift,
+  and `captureMissingCovers` calls it before recording a fresh capture — which is also what
+  repairs a device that already went wrong, rather than needing its cache cleared by hand.
+
+  Not unit-testable: `CoverStore` lives in the app target, which has no test target. Verified
+  by red/green on the simulator instead — import A, delete it, import a different B, and watch
+  B wear A's cover with `forget` stubbed out and its own cover with it restored.
 
 ### Whose file is it
 

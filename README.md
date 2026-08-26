@@ -40,7 +40,9 @@ copy into it over Wi-Fi either from iCloud Drive, or a Mac mounted with
 Files ▸ Connect to Server.
 
   * **3. Import ▸ From Device.** Already have issues on your device?
-Import now has a **From Device** that opens an import file browser.
+Import now has a **From Device** that opens an import file browser. Pick as
+many files as you like, including ones still in **iCloud Drive** — those are
+fetched down first, then added.
 
 * Local Files is always ON (no Settings switch) because the device itself is the source.
 Remove All Downloads ignores local files; Delete Library asks before deleting them.

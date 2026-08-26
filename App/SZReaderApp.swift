@@ -814,6 +814,18 @@ final class AppModel: ObservableObject {
                     try library.captureCover(issueID: issueID)
                 }.value
                 if let art {
+                    // Before the row points at it. A capture writes a new
+                    // picture under a reference the caches may already hold
+                    // an *older* picture for — `szpage:<id>`, and SQLite
+                    // reuses the id of a deleted issue. Without this the
+                    // freshly rendered cover is written to disk and never
+                    // seen, because every lookup stops at the cache.
+                    //
+                    // Also what repairs a device that already went wrong:
+                    // this runs for anything lacking a cover, so a shelf
+                    // carrying stale artwork from an earlier build corrects
+                    // itself rather than needing the cache cleared by hand.
+                    CoverStore.shared.forget(art)
                     try? store.setCoverURL(art, issueID: issueID)
                     captured += 1
                 }
@@ -1815,7 +1827,7 @@ final class AppModel: ObservableObject {
             // was the only thing that line could reach. The artwork goes in
             // both cases: SQLite gives the next row this id.
             library?.discardUnpacked(forIssue: issue.id)
-            library?.discardCover(forIssue: issue.id)
+            discardCover(forIssue: issue.id)
             refresh(note: "deleted “\(issue.title ?? issue.code ?? "issue")”")
         } catch {
             status = "delete failed: \(error)"
@@ -1921,7 +1933,7 @@ final class AppModel: ObservableObject {
             for issue in doomed {
                 removeFromDisk(try store.delete(issueID: issue.id))
                 library?.discardUnpacked(forIssue: issue.id)
-                library?.discardCover(forIssue: issue.id)
+                discardCover(forIssue: issue.id)
             }
             refresh(note: "deleted \(doomed.count) issue\(doomed.count == 1 ? "" : "s")")
         } catch {
@@ -2029,11 +2041,11 @@ final class AppModel: ObservableObject {
             // reason — and because the next row written takes its id.
             for id in report.removed {
                 library?.discardUnpacked(forIssue: id)
-                library?.discardCover(forIssue: id)
+                discardCover(forIssue: id)
             }
             for id in report.replaced {
                 library?.discardUnpacked(forIssue: id)
-                library?.discardCover(forIssue: id)
+                discardCover(forIssue: id)
             }
             guard !report.isEmpty else { return }
             refresh(note: Self.scanNote(report))
@@ -2131,16 +2143,36 @@ final class AppModel: ObservableObject {
     /// happening, not eleven.
     func adoptLocalFiles(_ urls: [URL]) {
         guard let localFolder, !urls.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            await self?.takeIn(urls, into: localFolder)
+        }
+    }
+
+    private func takeIn(_ urls: [URL], into localFolder: URL) async {
         var refused: [String] = []
         for url in urls {
-            guard LocalFiles.isReadable(url.lastPathComponent) else {
-                refused.append(url.lastPathComponent)
+            let name = url.lastPathComponent
+            guard LocalFiles.isReadable(name) else {
+                refused.append(name)
                 continue
             }
+            // Held across both the fetch and the copy, which is why this is
+            // here rather than inside `take`: a file that is still in iCloud
+            // needs the same access to be downloaded as to be read.
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
-                _ = try Self.take(url, into: localFolder)
+                if Self.isWaitingOnICloud(url) {
+                    status = "fetching \(name) from iCloud…"
+                    try await Self.fetchFromICloud(url)
+                }
+                // Off the main actor: these are hundreds of megabytes and the
+                // shelf should not stop scrolling for the length of a copy.
+                _ = try await Task.detached(priority: .userInitiated) {
+                    try Self.copyIn(url, into: localFolder)
+                }.value
             } catch {
-                refused.append(url.lastPathComponent)
+                refused.append(name)
             }
         }
         // The scan is what writes the rows and says what arrived, so it goes
@@ -2194,7 +2226,56 @@ final class AppModel: ObservableObject {
         // only thing that needs the access.
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        return try copyIn(url, into: folder)
+    }
 
+    /// Whether the picker handed over a file that is not on the device yet.
+    ///
+    /// iCloud Drive shows everything the account holds, downloaded or not, and
+    /// a file that is not downloaded is a placeholder — the name and the size
+    /// are real, the bytes are not there. Copying one gives an empty or
+    /// missing file rather than an error, so it has to be asked about first.
+    nonisolated private static func isWaitingOnICloud(_ url: URL) -> Bool {
+        let keys: Set<URLResourceKey> = [.isUbiquitousItemKey,
+                                         .ubiquitousItemDownloadingStatusKey]
+        guard let values = try? url.resourceValues(forKeys: keys),
+              values.isUbiquitousItem == true else { return false }
+        return values.ubiquitousItemDownloadingStatus != .current
+    }
+
+    /// How long a fetch is given before it is called a failure.
+    ///
+    /// Generous on purpose: these are comic archives, hundreds of megabytes
+    /// each, and a phone on a slow connection is the ordinary case rather
+    /// than the pathological one. It exists so a fetch that will never finish
+    /// — the file withdrawn, the account signed out — ends in a message
+    /// instead of a spinner nothing clears.
+    nonisolated private static let iCloudTimeout: TimeInterval = 15 * 60
+
+    /// Pulls a file down from iCloud and waits for it to land.
+    ///
+    /// Polled rather than observed. The proper instrument is an
+    /// `NSMetadataQuery`, which is a live index of the whole ubiquity
+    /// container and has to be started, filtered and torn down; this asks one
+    /// file one question twice a second, and the question is answered from
+    /// local metadata rather than the network. For an import the reader is
+    /// sitting in front of, that is the cheaper of the two by a wide margin.
+    nonisolated private static func fetchFromICloud(_ url: URL) async throws {
+        try FileManager.default.startDownloadingUbiquitousItem(at: url)
+        let deadline = Date().addingTimeInterval(iCloudTimeout)
+        while Date() < deadline {
+            try await Task.sleep(for: .milliseconds(500))
+            if !isWaitingOnICloud(url) { return }
+        }
+        throw CocoaError(.userCancelled)
+    }
+
+    /// The copy itself, with the security scope already held by the caller.
+    ///
+    /// Split out from `take` for the one case that has to do something
+    /// *between* opening the scope and copying: a file still in iCloud has to
+    /// be fetched first, and the fetch needs the same access the copy does.
+    nonisolated private static func copyIn(_ url: URL, into folder: URL) throws -> String {
         let name = LocalFiles.vacantName(for: url.lastPathComponent, in: folder)
         let destination = folder.appendingPathComponent(name)
         let fm = FileManager.default
@@ -2208,6 +2289,22 @@ final class AppModel: ObservableObject {
             try fm.copyItem(at: url, to: destination)
         }
         return name
+    }
+
+    /// Throws away an issue's artwork — the file and every cache holding it.
+    ///
+    /// One method because these have to happen together and there are five
+    /// places that need them. Deleting the file alone was the bug: the shelf
+    /// went on drawing the old picture out of `CoverStore`, which nothing
+    /// ever evicted.
+    ///
+    /// The reference is `szpage:<id>`, and the id is the whole problem —
+    /// SQLite reuses the rowid of a deleted issue, so the next comic added
+    /// inherits the last one's cache key along with its number. See
+    /// `CoverStore.forget`.
+    private func discardCover(forIssue id: Int) {
+        library?.discardCover(forIssue: id)
+        CoverStore.shared.forget(Library.coverReference(issueID: id))
     }
 
     /// Deletes the reader's own files, having been asked to.
@@ -2225,7 +2322,7 @@ final class AppModel: ObservableObject {
                 // folder is the reader's, and their next issue goes in it.
                 try? FileManager.default.removeItem(at: file)
                 library?.discardUnpacked(forIssue: id)
-                library?.discardCover(forIssue: id)
+                discardCover(forIssue: id)
             }
             refresh(note: "deleted \(files.count) local file\(files.count == 1 ? "" : "s")")
         } catch {

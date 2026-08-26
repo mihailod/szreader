@@ -667,24 +667,22 @@ struct LibraryView: View {
 
     /// What the Files picker will let the reader choose.
     ///
-    /// The same seven the shelf can read, named as types rather than
-    /// extensions so the picker greys out everything else instead of letting
-    /// a `.txt` be chosen and refused afterwards. The three comic-book ones
-    /// exist only because this app declares them — see `project.yml` — which
-    /// is why they are built by identifier and dropped if absent rather than
-    /// forced. `.zip` and `.pdf` are Apple's own.
+    /// Any file, which is not what this started as. It named the seven types
+    /// the shelf can read, so the picker greyed out everything else — tidier,
+    /// and wrong for the one place a reader most wants this. A file in iCloud
+    /// Drive that has not been downloaded is a placeholder: the name and the
+    /// size are real, the bytes are not there, and its type does not
+    /// necessarily resolve to the one its extension implies. Filtered by
+    /// type, those are the items that cannot be picked — which is precisely
+    /// the case From Device exists for, since a file already on the device is
+    /// the easy one.
     ///
-    /// This is the picker's filter and not the shelf's rule. What is readable
-    /// is `LocalFiles.isReadable`, which is checked again on the way in: a
-    /// file can always be chosen through some other route.
-    static let importableTypes: [UTType] = {
-        let declared = ["com.mihailod.szreader.cbz",
-                        "com.mihailod.szreader.cbr",
-                        "com.mihailod.szreader.cb7",
-                        "com.rarlab.rar-archive",
-                        "org.7-zip.7-zip-archive"].compactMap(UTType.init)
-        return declared + [.zip, .pdf]
-    }()
+    /// So the filtering moved off the picker and onto the way in.
+    /// `LocalFiles.isReadable` was always checked there — a file can arrive
+    /// by routes no picker sees — and anything it turns down is now named in
+    /// the status line rather than being un-tappable for reasons the reader
+    /// cannot see.
+    static let importableTypes: [UTType] = [.data]
 
     private static func importIcon(_ site: IssueSite) -> String {
         switch site {

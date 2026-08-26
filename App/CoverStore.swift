@@ -309,6 +309,26 @@ final class CoverStore: @unchecked Sendable {
 
     // MARK: - Keys
 
+    /// Throws away everything held for one cover reference.
+    ///
+    /// Needed because a reference is not unique for ever. Local-file covers
+    /// are recorded as `szpage:<issue id>`, and SQLite hands the id of a
+    /// deleted row to the next one inserted — so a reader who removes an
+    /// issue and adds another gets a *new* comic under an *old* key, and
+    /// every cache here answers with the artwork of the comic that is gone.
+    /// That is exactly what it looked like: two different issues on the shelf
+    /// wearing the same cover.
+    ///
+    /// All four stores, because a hit in any one of them is enough to serve
+    /// the stale picture: both colour variants in memory, the monochrome
+    /// verdict that outlives them, and the file on disk.
+    func forget(_ url: String) {
+        memory.removeObject(forKey: key(url, false) as NSString)
+        memory.removeObject(forKey: key(url, true) as NSString)
+        colourCast.removeObject(forKey: url as NSString)
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent(digest(url)))
+    }
+
     private func key(_ url: String, _ grayscale: Bool) -> String {
         grayscale ? url + "#gray" : url
     }
