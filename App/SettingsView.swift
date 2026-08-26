@@ -35,6 +35,9 @@ struct SettingsView: View {
                 sources
                     .padding(.top, 8)
 
+                localFiles
+                    .padding(.top, 8)
+
                 // Not decoration: UnRAR's licence requires its second clause
                 // to appear in the licence or documentation of anything that
                 // ships its source, and a submitted binary carries no
@@ -211,6 +214,48 @@ struct SettingsView: View {
             Text("Hiding a source keeps everything you have read and downloaded.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+        }
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: 560)
+    }
+
+    /// The folder the reader fills themselves.
+    ///
+    /// A plain row rather than a switch, because there is nothing to switch:
+    /// what is in the folder is on the shelf. It is here at all because
+    /// nothing else in the app would ever mention it — a reader who has not
+    /// been told cannot discover that plugging the iPad in and dragging a
+    /// file into the Finder window works.
+    private var localFiles: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("YOUR OWN FILES")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(SourceCopy.of(.local).switchTitle)
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(SourceCopy.of(.local).detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color(.secondarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Text("Deleting a file on the computer removes it from the shelf too. "
+                 + "\(AppInfo.name) reads these where they sit and never uploads them.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 16)
                 .padding(.top, 6)
         }

@@ -1,10 +1,12 @@
 import Foundation
 import SwiftUI
 import SZKit
+import UniformTypeIdentifiers
 
 @main
 struct SZReaderApp: App {
     @StateObject private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         // AsyncImage goes through URLSession.shared -> URLCache.shared, whose
@@ -20,6 +22,22 @@ struct SZReaderApp: App {
     var body: some Scene {
         WindowGroup {
             LibraryView(model: model)
+                // A file handed over from outside — AirDropped from a Mac,
+                // sent through the share sheet, or opened with this app from
+                // the Files app. It is copied into the reader's folder and
+                // reaches the shelf the same way a file dragged in over a
+                // cable does.
+                .onOpenURL { url in
+                    guard url.isFileURL else { return }
+                    model.adoptLocalFile(at: url)
+                }
+                // The folder changes while the app is not running — that is
+                // the whole point of it — so what is in it is a question that
+                // has to be asked again every time the app comes back.
+                .onChange(of: scenePhase) { phase in
+                    guard phase == .active else { return }
+                    model.scanLocalFiles()
+                }
         }
     }
 }
@@ -243,6 +261,10 @@ final class AppModel: ObservableObject {
     }
 
     func setSource(_ site: IssueSite, enabled: Bool) {
+        // A source with no switch has nothing to set. Reached in the ordinary
+        // course of things rather than by mistake: Local Files is one of
+        // `SourceLanguage.sharedSites`, and moving a language moves those.
+        guard site.isSwitchable else { return }
         switch site {
         case .stripzona:     showStripZona = enabled
         case .retrospec:     showRetroSpec = enabled
@@ -253,6 +275,11 @@ final class AppModel: ObservableObject {
     }
 
     func isEnabled(_ site: IssueSite) -> Bool {
+        // Always on, and not stored: the reader's own files are on the shelf
+        // because they are on the device. Answering from `storedFlag` would
+        // have them default to off — a folder dragged full of issues that
+        // shows nothing, and no switch anywhere to explain it.
+        guard site.isSwitchable else { return true }
         switch site {
         case .stripzona:     return showStripZona
         case .retrospec:     return showRetroSpec
@@ -597,6 +624,13 @@ final class AppModel: ObservableObject {
             seedFromSavedPages(into: store)
             #endif
 
+            // The folder the reader fills themselves, read before the counts
+            // below so the first frame already shows what is in it. Cheap: a
+            // directory listing and, on the usual launch where nothing has
+            // changed, one read per file to compare its size.
+            scanLocalFiles()
+            watchLocalFiles()
+
             issueCount = store.issueCount
             downloadedCount = store.downloadedCount
             shippedCount = store.shippedCount
@@ -724,10 +758,18 @@ final class AppModel: ObservableObject {
     /// matching for the scanlations failed twice against markup that was
     /// inferred rather than read. Only the last page is kept, so this cannot
     /// grow.
+    /// Under Application Support, not Documents.
+    ///
+    /// It used to be written into Documents, which was invisible and
+    /// therefore harmless — until Local Files made that folder the one the
+    /// Finder shows and the shelf reads. A stray `last-import.html` there is
+    /// a file in the reader's own folder that they did not put there, sitting
+    /// among their issues.
     private func dumpForDiagnosis(_ html: String) {
-        guard let docs = FileManager.default.urls(for: .documentDirectory,
-                                                  in: .userDomainMask).first else { return }
-        try? html.write(to: docs.appendingPathComponent("last-import.html"),
+        guard let support = try? FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true) else { return }
+        try? html.write(to: support.appendingPathComponent("last-import.html"),
                         atomically: true, encoding: .utf8)
     }
 
@@ -1738,6 +1780,12 @@ final class AppModel: ObservableObject {
     /// without spending another Like on a re-import.
     func deleteDownload(_ issue: StoredIssue) {
         guard let store else { return }
+        // Never for one of the reader's own files: removing "the download"
+        // for one means deleting the file itself, and that question is only
+        // ever put as Delete. No button raises this for a local row — every
+        // one of them was changed to say Delete File — and this is here so
+        // that stays true of the next one.
+        guard issue.site != .local else { return }
         do {
             // Issues published as one download share a directory, so there is
             // no removing one of them on its own — the reader has already been
@@ -1761,7 +1809,13 @@ final class AppModel: ObservableObject {
         do {
             let orphan = try store.delete(issueID: issue.id)
             removeFromDisk(orphan)
-            library?.discardPageThumbnails(forIssue: issue.id)
+            // The row is going, so everything keyed on its id goes with it.
+            // For a download `removeFromDisk` has already taken the folder;
+            // for a local file the pages are elsewhere and the file itself
+            // was the only thing that line could reach. The artwork goes in
+            // both cases: SQLite gives the next row this id.
+            library?.discardUnpacked(forIssue: issue.id)
+            library?.discardCover(forIssue: issue.id)
             refresh(note: "deleted “\(issue.title ?? issue.code ?? "issue")”")
         } catch {
             status = "delete failed: \(error)"
@@ -1783,13 +1837,27 @@ final class AppModel: ObservableObject {
     }
 
     /// How many of the comics currently on the shelf are downloaded.
-    var visibleDownloadedCount: Int { results.filter(\.isDownloaded).count }
+    ///
+    /// Not counting the reader's own files, which Remove Visible passes over:
+    /// a warning that offers to free eleven downloads and then frees seven is
+    /// a warning nobody will read twice.
+    var visibleDownloadedCount: Int {
+        results.filter { $0.isDownloaded && $0.site != .local }.count
+    }
 
     /// How many issues in the whole library a delete may actually take.
-    var deletableCount: Int { max(issueCount - shippedCount, 0) }
+    ///
+    /// Less the reader's own files, which it passes over: a warning that
+    /// counts them and then leaves them is a warning that has lied about the
+    /// only number in it.
+    var deletableCount: Int {
+        max(issueCount - shippedCount - localFileTotals.count, 0)
+    }
 
     /// The same question about the shelf as it stands.
-    var visibleDeletableCount: Int { results.filter { !$0.isCatalogued }.count }
+    var visibleDeletableCount: Int {
+        results.filter { !$0.isCatalogued && $0.site != .local }.count
+    }
 
     /// Whether any downloaded comic on the shelf belongs to a set, so the
     /// warning can say that removing it reaches issues that are not shown.
@@ -1812,7 +1880,12 @@ final class AppModel: ObservableObject {
         guard let store else { return }
         do {
             var removed = 0
-            for issue in results where issue.isDownloaded {
+            // Local files are passed over here as they are in Remove All:
+            // `deleteDownload` hands back the recorded path for removal, and
+            // for one of these that path is the reader's own file in their
+            // own folder. There is no download to reclaim — the file is the
+            // issue — so there is nothing here for it to do but damage.
+            for issue in results where issue.isDownloaded && issue.site != .local {
                 // A set shares one directory, so removing any member removes
                 // every issue in it — including any the shelf is not showing.
                 if let library, try library.removeSegmentDownload(issueID: issue.id) {
@@ -1840,10 +1913,15 @@ final class AppModel: ObservableObject {
             // Shipped rows are passed over rather than refused: nothing can
             // bring one back, so a bulk delete takes only what an Import
             // returns.
-            let doomed = results.filter { !$0.isCatalogued }
+            // Local files are passed over as well as shipped rows, and for
+            // the mirror-image reason: a shipped row cannot be got back at
+            // all, and one of these can only be got back by fetching a cable.
+            // Neither is what a reader clearing the shelf has agreed to.
+            let doomed = results.filter { !$0.isCatalogued && $0.site != .local }
             for issue in doomed {
                 removeFromDisk(try store.delete(issueID: issue.id))
-                library?.discardPageThumbnails(forIssue: issue.id)
+                library?.discardUnpacked(forIssue: issue.id)
+                library?.discardCover(forIssue: issue.id)
             }
             refresh(note: "deleted \(doomed.count) issue\(doomed.count == 1 ? "" : "s")")
         } catch {
@@ -1854,7 +1932,10 @@ final class AppModel: ObservableObject {
     func deleteEverything() {
         guard let store else { return }
         do {
-            let count = store.issueCount - store.shippedCount
+            // What this is actually about to take: not the reader's own
+            // files, which it passes over and which are asked about next.
+            // Counting them here reported "deleted 2 issues" for one.
+            let count = deletableCount
             for file in try store.deleteImported() { removeFromDisk(file) }
             // Thumbnails for what is left are rebuilt from the archives still
             // on disk, so discarding the lot costs a redraw and never a
@@ -1866,13 +1947,307 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Local Files
+
+    /// The folder the reader fills themselves — the app's Documents
+    /// directory, which is what iOS shows in the Finder over a cable and
+    /// under "On My iPad" in the Files app.
+    ///
+    /// Nothing the app downloads goes here; downloads live under Application
+    /// Support. That separation is what lets a flat scan of this folder mean
+    /// "the reader's issues" and nothing else.
+    private let localFolder = Library.localFilesFolder()
+
+    /// Notices files arriving and leaving while the app is in front of the
+    /// reader — which is the ordinary case, because the iPad is plugged into
+    /// the computer they are dragging from. Held for the life of the model;
+    /// releasing it stops the watch.
+    private var localWatcher: LocalFilesWatcher?
+
+    /// Sizes as the last scan saw them.
+    ///
+    /// What tells a file that has finished copying from one still arriving —
+    /// see `LocalFiles.settled`. Kept here rather than in the store because
+    /// it describes this run of the app watching a folder change, not
+    /// anything about the library.
+    private var lastSeenSizes: [String: Int64] = [:]
+
+    /// A re-scan owed to a file that was still being written when the last
+    /// one ran. Cancelled and replaced rather than stacked, so a folder full
+    /// of arriving files owes exactly one.
+    private var localRescan: Task<Void, Never>?
+
+    /// How many of the reader's own files are on the shelf, and what they
+    /// weigh. Read on demand rather than published: the one screen that asks
+    /// is a confirmation, and it wants the answer at the moment it is put.
+    var localFileTotals: (count: Int, bytes: Int64) {
+        store?.localFileTotals ?? (0, 0)
+    }
+
+    /// Brings the shelf into line with the folder.
+    ///
+    /// Run at launch and again every time the app comes back to the front,
+    /// because the folder changes while the app is not looking: that is the
+    /// whole point of it. A reader who drags four issues in over the cable
+    /// and unplugs expects to find four issues, and one who drags an issue to
+    /// the Trash expects it gone.
+    ///
+    /// Silent when nothing changed, which is nearly always. `refresh` re-runs
+    /// the search and rebuilds the filter menus, and doing that on every
+    /// return to the foreground would be a visible stutter bought for nothing.
+    func scanLocalFiles() {
+        guard let store, let localFolder else { return }
+        // The dump an earlier build wrote into Documents, when nothing showed
+        // that folder to anyone. It is invisible to the scan — not a readable
+        // extension — but perfectly visible in the Finder, where it is a file
+        // the reader did not put there sitting among their issues. Removed
+        // once, on the first launch of a build that can see it.
+        try? FileManager.default.removeItem(
+            at: localFolder.appendingPathComponent("last-import.html"))
+        do {
+            // Everything in the folder, and then only the part of it that has
+            // finished arriving. The rest is left for the re-scan below: a
+            // row written from half a file is an issue that will not open.
+            let all = LocalFiles.scan(localFolder)
+            let (ready, waiting) = LocalFiles.settled(all, against: lastSeenSizes)
+            lastSeenSizes = Dictionary(all.map { ($0.name, $0.bytes) },
+                                       uniquingKeysWith: { first, _ in first })
+            if waiting.isEmpty {
+                localRescan?.cancel()
+                localRescan = nil
+            } else {
+                scheduleLocalRescan()
+            }
+            // Removals are worked out from the whole folder, not from the
+            // part of it that settled: a file being copied over an existing
+            // one is not a file that has gone.
+            let report = try store.reconcileLocalFiles(
+                ready, present: Set(all.map(\.name)))
+            // Pages unpacked from a file that has gone, or that came back
+            // holding different bytes, are pages of an issue that is no
+            // longer there. The row's artwork goes with it for the same
+            // reason — and because the next row written takes its id.
+            for id in report.removed {
+                library?.discardUnpacked(forIssue: id)
+                library?.discardCover(forIssue: id)
+            }
+            for id in report.replaced {
+                library?.discardUnpacked(forIssue: id)
+                library?.discardCover(forIssue: id)
+            }
+            guard !report.isEmpty else { return }
+            refresh(note: Self.scanNote(report))
+            // A file that arrived with no artwork gets it from its own first
+            // page, exactly as a finished download does.
+            captureMissingCovers()
+        } catch {
+            status = "reading your files failed: \(Library.reason(error))"
+        }
+    }
+
+    /// What a scan says for itself, in the status line.
+    ///
+    /// Only the halves that happened: "added 3" after a drag in, "removed 1"
+    /// after a delete in the Finder, and both when a reader did their tidying
+    /// in one session at the computer.
+    static func scanNote(_ report: LocalFilesReport) -> String {
+        var parts: [String] = []
+        if report.added > 0 { parts.append("added \(report.added)") }
+        if !report.removed.isEmpty { parts.append("removed \(report.removed.count)") }
+        if !report.replaced.isEmpty { parts.append("replaced \(report.replaced.count)") }
+        let what = parts.joined(separator: ", ")
+        let total = report.added + report.removed.count + report.replaced.count
+        return "\(IssueSite.local.display.lowercased()): \(what) "
+            + "file\(total == 1 ? "" : "s")"
+    }
+
+    /// Starts watching the folder, so a file dragged in over the cable shows
+    /// up on the shelf without the app being restarted.
+    ///
+    /// Every change lands back here in `scanLocalFiles`, which is the same
+    /// path the launch and foreground scans take — the watch decides *when*
+    /// to look, and nothing about what is found.
+    private func watchLocalFiles() {
+        guard localWatcher == nil, let localFolder else { return }
+        localWatcher = LocalFilesWatcher(directory: localFolder) { [weak self] in
+            Task { @MainActor in self?.scanLocalFiles() }
+        }
+    }
+
+    /// Looks again shortly, for a file that was still being written.
+    ///
+    /// The copy of a large issue takes a while and its directory entry
+    /// appears at the start of it, so the event that woke the watcher arrives
+    /// long before the file is whole. Nothing else will wake it — the writes
+    /// that follow are to the file, not to the folder — so the second look
+    /// has to be asked for.
+    private func scheduleLocalRescan() {
+        localRescan?.cancel()
+        localRescan = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(LocalFiles.settleTime))
+            guard !Task.isCancelled else { return }
+            self?.scanLocalFiles()
+        }
+    }
+
+    /// Takes in a file handed to the app from outside — AirDrop, the share
+    /// sheet, or Open With in the Files app.
+    ///
+    /// Copied into the folder rather than read where it lies. A file opened
+    /// in place belongs to whoever handed it over: iCloud can evict it, the
+    /// other app can delete it, and the shelf would be holding a row that
+    /// stops working for reasons nothing here can see. Once it is in the
+    /// folder it is the same thing as a file dragged in over a cable, and one
+    /// scan puts it on the shelf.
+    func adoptLocalFile(at url: URL) {
+        guard let localFolder else { return }
+        guard LocalFiles.isReadable(url.lastPathComponent) else {
+            status = "\(url.lastPathComponent) is not a file this app can open"
+            return
+        }
+        do {
+            _ = try Self.take(url, into: localFolder)
+            scanLocalFiles()
+        } catch {
+            status = "could not take in \(url.lastPathComponent): "
+                   + "\(Library.reason(error))"
+        }
+    }
+
+    /// Takes in files the reader chose through Import ▸ From Device.
+    ///
+    /// The way in for everything already sitting on the iPad. AirDrop is the
+    /// case that made it necessary: iOS routes an AirDropped document to the
+    /// Files app's Downloads folder rather than to whichever app claims the
+    /// type, and no declaration this app can make changes that — which left
+    /// the reader holding a comic on their own device with no way to hand it
+    /// over except the share sheet, if they thought to look there.
+    ///
+    /// A copy, never a move, and that is the whole difference from the Inbox
+    /// case in `take`. These files are the reader's, sitting where they put
+    /// them, and Downloads is a folder they may well go back to.
+    ///
+    /// One scan for the batch. Picking eleven issues should read as one thing
+    /// happening, not eleven.
+    func adoptLocalFiles(_ urls: [URL]) {
+        guard let localFolder, !urls.isEmpty else { return }
+        var refused: [String] = []
+        for url in urls {
+            guard LocalFiles.isReadable(url.lastPathComponent) else {
+                refused.append(url.lastPathComponent)
+                continue
+            }
+            do {
+                _ = try Self.take(url, into: localFolder)
+            } catch {
+                refused.append(url.lastPathComponent)
+            }
+        }
+        // The scan is what writes the rows and says what arrived, so it goes
+        // first and the complaint goes after it — a refusal is the thing the
+        // reader needs to see, and a status set before this would be
+        // overwritten by the scan's own note.
+        scanLocalFiles()
+        guard !refused.isEmpty else { return }
+        status = refused.count == 1
+            ? "could not take in \(refused[0])"
+            : "could not take in \(refused.count) of \(urls.count) files"
+    }
+
+    /// Takes in files dragged onto the shelf from another app.
+    ///
+    /// The iPad gesture for this, and the one a reader reaches for first with
+    /// Files open beside the app in Split View. It arrives as a promise
+    /// rather than a file: the URL below is real only for as long as the
+    /// handler that produced it runs, which is why the copy happens there,
+    /// off the main actor, rather than being handed back to it.
+    func adoptDropped(_ providers: [NSItemProvider]) {
+        guard let localFolder else { return }
+        for provider in providers {
+            provider.loadInPlaceFileRepresentation(
+                forTypeIdentifier: UTType.data.identifier
+            ) { url, _, _ in
+                guard let url, LocalFiles.isReadable(url.lastPathComponent) else { return }
+                let taken = try? Self.take(url, into: localFolder)
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if taken == nil {
+                        self.status = "could not take in \(url.lastPathComponent)"
+                    }
+                    self.scanLocalFiles()
+                }
+            }
+        }
+    }
+
+    /// Puts one arriving file in the folder, and answers what it is called
+    /// there.
+    ///
+    /// Synchronous and off the actor on purpose. A dropped file is handed
+    /// over as a URL that stops resolving the moment the completion handler
+    /// which produced it returns, so this cannot wait for a hop to the main
+    /// actor — by the time it arrived there would be nothing to copy.
+    nonisolated private static func take(_ url: URL, into folder: URL) throws -> String {
+        // A URL from another app's container comes security-scoped, and
+        // reading it without asking fails with a permission error that reads
+        // like a missing file. Balanced immediately: the copy below is the
+        // only thing that needs the access.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        let name = LocalFiles.vacantName(for: url.lastPathComponent, in: folder)
+        let destination = folder.appendingPathComponent(name)
+        let fm = FileManager.default
+        // iOS drops what another app hands over into Documents/Inbox and
+        // leaves it there for good. Moved rather than copied when it is
+        // already ours, so the same issue is not on the device twice — once
+        // on the shelf and once in a folder nothing ever empties.
+        if LocalFiles.isInInbox(url, of: folder) {
+            try fm.moveItem(at: url, to: destination)
+        } else {
+            try fm.copyItem(at: url, to: destination)
+        }
+        return name
+    }
+
+    /// Deletes the reader's own files, having been asked to.
+    ///
+    /// Only ever from the question put after Delete Library. Nothing else in
+    /// the app deletes these in bulk: they came off a computer over a cable
+    /// and no import brings one back, so this is the one path that removes
+    /// them and it is spelled out to the reader first.
+    func deleteLocalFiles() {
+        guard let store else { return }
+        do {
+            let files = try store.deleteLocalIssues()
+            for (id, file) in files {
+                // The file itself, and never the folder it sits in: that
+                // folder is the reader's, and their next issue goes in it.
+                try? FileManager.default.removeItem(at: file)
+                library?.discardUnpacked(forIssue: id)
+                library?.discardCover(forIssue: id)
+            }
+            refresh(note: "deleted \(files.count) local file\(files.count == 1 ? "" : "s")")
+        } catch {
+            status = "delete failed: \(Library.reason(error))"
+        }
+    }
+
     /// The archive and the directory it was unpacked into. Removing the row
     /// without the bytes would silently keep the disk full.
+    ///
+    /// The folder only when it is one of ours. A downloaded archive sits
+    /// alone in `comics/<id>`, so deleting the folder is how the unpacked
+    /// pages go with it. A local file sits in the reader's own folder among
+    /// their other issues — and this line, written when every path led to the
+    /// former, would have deleted the lot.
     private func removeFromDisk(_ file: URL?) {
         guard let file else { return }
         let fm = FileManager.default
         try? fm.removeItem(at: file)
-        try? fm.removeItem(at: file.deletingLastPathComponent())
+        let folder = file.deletingLastPathComponent()
+        guard library?.owns(folder) == true else { return }
+        try? fm.removeItem(at: folder)
     }
 
     private func refresh(note: String) {

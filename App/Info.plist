@@ -6,6 +6,78 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>StreamZine</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeIconFiles</key>
+			<array>
+				<string>doc-cbz-22x29</string>
+				<string>doc-cbz-64</string>
+				<string>doc-cbz-320</string>
+			</array>
+			<key>CFBundleTypeName</key>
+			<string>Comic Book Archive (ZIP)</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.mihailod.szreader.cbz</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeIconFiles</key>
+			<array>
+				<string>doc-cbr-22x29</string>
+				<string>doc-cbr-64</string>
+				<string>doc-cbr-320</string>
+			</array>
+			<key>CFBundleTypeName</key>
+			<string>Comic Book Archive (RAR)</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.mihailod.szreader.cbr</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeIconFiles</key>
+			<array>
+				<string>doc-cb7-22x29</string>
+				<string>doc-cb7-64</string>
+				<string>doc-cb7-320</string>
+			</array>
+			<key>CFBundleTypeName</key>
+			<string>Comic Book Archive (7z)</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.mihailod.szreader.cb7</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Issue</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+				<string>public.zip-archive</string>
+				<string>com.rarlab.rar-archive</string>
+				<string>org.7-zip.7-zip-archive</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -24,6 +96,8 @@
 	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.books</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSExceptionDomains</key>
@@ -51,6 +125,8 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
@@ -73,6 +149,104 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Comic Book Archive (ZIP)</string>
+			<key>UTTypeIconFiles</key>
+			<array>
+				<string>doc-cbz-22x29</string>
+				<string>doc-cbz-64</string>
+				<string>doc-cbz-320</string>
+			</array>
+			<key>UTTypeIdentifier</key>
+			<string>com.mihailod.szreader.cbz</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>cbz</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Comic Book Archive (RAR)</string>
+			<key>UTTypeIconFiles</key>
+			<array>
+				<string>doc-cbr-22x29</string>
+				<string>doc-cbr-64</string>
+				<string>doc-cbr-320</string>
+			</array>
+			<key>UTTypeIdentifier</key>
+			<string>com.mihailod.szreader.cbr</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>cbr</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Comic Book Archive (7z)</string>
+			<key>UTTypeIconFiles</key>
+			<array>
+				<string>doc-cb7-22x29</string>
+				<string>doc-cb7-64</string>
+				<string>doc-cb7-320</string>
+			</array>
+			<key>UTTypeIdentifier</key>
+			<string>com.mihailod.szreader.cb7</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>cb7</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.archive</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>RAR archive</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.rarlab.rar-archive</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>rar</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-rar-compressed</string>
+					<string>application/vnd.rar</string>
+				</array>
+			</dict>
+		</dict>
 	</array>
 </dict>
 </plist>

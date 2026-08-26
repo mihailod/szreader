@@ -30,6 +30,20 @@ int sz7z_list(const char *archivePath, char *buffer, size_t capacity, size_t *ne
  * Returns SZ7Z_OK, or an SRes code from the SDK. */
 int sz7z_extract_all(const char *archivePath, const char *destinationDir);
 
+/* Extracts only the archive's first image entry into `destinationDir`, and
+ * writes its name into `nameBuffer` (NUL-terminated).
+ *
+ * The same bargain as the RAR shim's equivalent, for the same reason. 7z is
+ * solid, so `SzArEx_Extract` decompresses the whole block an entry lives in —
+ * but the first page lives in the *first* block, so this costs one block
+ * rather than the archive. That is what makes a thumbnail affordable when
+ * opening the comic is not.
+ *
+ * Returns SZ7Z_OK, or an SZ_ERROR_* code. SZ_ERROR_NO_ARCHIVE when the
+ * archive holds no image at all. */
+int sz7z_extract_first_image(const char *archivePath, const char *destinationDir,
+                             char *nameBuffer, size_t nameCapacity);
+
 #ifdef __cplusplus
 }
 #endif

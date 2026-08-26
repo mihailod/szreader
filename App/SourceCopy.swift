@@ -46,6 +46,7 @@ struct SourceCopy {
         case .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
             return spectrum(site)
         case .atarimania:    return atarimania
+        case .local:         return local
         case .vintageAppleMagazines, .vintageAppleBooks:
             return vintageApple(site)
         default:             return bombJack(site)
@@ -76,7 +77,11 @@ struct SourceCopy {
     static var credits: [Credit] {
         var seen: Set<String> = []
         var out: [Credit] = []
-        for site in IssueSite.allCases {
+        // Sources only. Local Files is the reader's own folder — there is no
+        // archive behind it to acknowledge, and a paragraph thanking them for
+        // their own files would be the one entry on this screen that credits
+        // nobody. See `IssueSite.isSwitchable`.
+        for site in IssueSite.allCases where site.isSwitchable {
             let copy = of(site)
             let credit = Credit(heading: copy.creditHeading, body: copy.credit)
             // First occurrence wins, which puts the shared block where the
@@ -182,6 +187,24 @@ struct SourceCopy {
     /// No count and no shelf claim, because switching this on adds nothing:
     /// there is no index to seed. What it adds is an entry in the Import menu,
     /// which is what the second sentence says.
+    /// The reader's own files. The only entry here that is not a switch.
+    ///
+    /// `switchTitle` and `detail` are still the words shown — Settings prints
+    /// them as a plain row rather than a toggle, because there is nothing to
+    /// turn off. `shelfPhrase` and the credit are never read: the first-run
+    /// sentence lists sources a reader can switch on, and there is nobody to
+    /// thank for a file they copied over themselves. Both loops skip anything
+    /// with no switch, and this is the only such source.
+    private static let local = SourceCopy(
+        switchTitle: IssueSite.local.settingsName,
+        detail: "Issues you copy onto the iPad yourself. Connect it to a "
+              + "computer and drag files into StreamZine in the Finder, or "
+              + "send one over AirDrop — they appear on the shelf on their own.",
+        shelfPhrase: "issues you copy onto the iPad yourself",
+        creditHeading: IssueSite.local.settingsName,
+        credit: "Files you copy onto the device are your own. The app reads "
+              + "them where they sit and never uploads them anywhere.")
+
     private static let batcave = SourceCopy(
         switchTitle: IssueSite.batcave.settingsName,
         detail: "A large open repository of comics and magazines. "

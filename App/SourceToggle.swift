@@ -118,9 +118,13 @@ struct SourceList: View {
     @ObservedObject var model: AppModel
 
     /// The sources that stand on their own.
+    ///
+    /// Switchable ones. Local Files has no switch — the folder on the device
+    /// is not something to be turned off — and Settings shows it as a plain
+    /// row underneath this list instead.
     private var standalone: [IssueSite] {
         IssueSite.allCases.filter {
-            $0.bombjackCategory == nil && $0.spectrumGroup == nil
+            $0.isSwitchable && $0.bombjackCategory == nil && $0.spectrumGroup == nil
                 && $0.vintageAppleGroup == nil
         }
     }

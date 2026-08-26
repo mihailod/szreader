@@ -48,5 +48,11 @@ public enum SourceLanguage: String, CaseIterable, Sendable {
 
     /// Sources that carry every language, and so stay on for as long as any
     /// language is on.
-    public static let sharedSites: [IssueSite] = [.archive]
+    ///
+    /// Local Files is here for the same reason archive.org is, arrived at
+    /// from the other direction: archive.org holds every language, and the
+    /// folder on the device holds whatever the reader drags into it. Neither
+    /// can be filed under one language without being wrong about half of what
+    /// it carries.
+    public static let sharedSites: [IssueSite] = [.archive, .local]
 }

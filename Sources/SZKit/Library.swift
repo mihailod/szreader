@@ -66,6 +66,26 @@ public struct LibraryPaths: Sendable {
     public var allPageThumbnails: URL {
         root.appendingPathComponent("thumbs", isDirectory: true)
     }
+
+    /// Whether a file is one this app put on the device.
+    ///
+    /// The question every delete now has to ask, and it arrived with Local
+    /// Files. Until then every path the library held named something under
+    /// this root — downloaded by the app, and the app's to remove or unpack
+    /// or throw away. A local file is the reader's, sitting in the folder
+    /// they drag things into, and two pieces of code that had always been
+    /// right were suddenly one row away from deleting it: the unpacker, which
+    /// deletes an archive once its pages are out, and the shelf's own delete,
+    /// which removes a file *and the folder it sits in*.
+    ///
+    /// Compared as path components rather than as strings, so a root of
+    /// "…/comics" cannot be held to contain "…/comics-elsewhere/file.cbr".
+    public func owns(_ url: URL) -> Bool {
+        let mine = root.standardizedFileURL.pathComponents
+        let theirs = url.standardizedFileURL.pathComponents
+        guard theirs.count > mine.count else { return false }
+        return Array(theirs.prefix(mine.count)) == mine
+    }
 }
 
 public struct DownloadOutcome: Equatable, Sendable {
@@ -393,6 +413,51 @@ public final class Library {
         try? FileManager.default.removeItem(at: paths.allPageThumbnails)
     }
 
+    /// Throws away everything unpacked from one issue's archive.
+    ///
+    /// For a download this is done by deleting the file and the folder it
+    /// sits in, which are the same folder. A local file sits in the reader's
+    /// own folder and its pages sit here, so the two have to be said
+    /// separately — and this is the half the app owns.
+    public func discardUnpacked(forIssue issueID: Int) {
+        try? FileManager.default.removeItem(at: paths.directory(forIssue: issueID))
+        discardPageThumbnails(forIssue: issueID)
+    }
+
+    /// Throws away the artwork captured from an issue's own first page.
+    ///
+    /// For when the *row* goes, never for when its download does — the cover
+    /// is kept outside the download's folder precisely so that reclaiming
+    /// space leaves the shelf looking as it did.
+    ///
+    /// Worth doing rather than leaving to rot, and not only for the few
+    /// kilobytes: SQLite hands out the next id above the highest in the
+    /// table, so the id of a deleted row is handed to the next one written.
+    /// A stale `covers/<id>.jpg` is then the artwork of an issue that no
+    /// longer exists, sitting on top of one that does. A folder of local
+    /// files is where this would show up first, because deleting the last of
+    /// them and dropping in another is an ordinary afternoon.
+    public func discardCover(forIssue issueID: Int) {
+        try? FileManager.default.removeItem(at: paths.coverFile(forIssue: issueID))
+    }
+
+    /// Whether a file is one the app downloaded, rather than one the reader
+    /// put on the device themselves. See `LibraryPaths.owns`.
+    public func owns(_ url: URL) -> Bool { paths.owns(url) }
+
+    /// The folder the reader's own files are read from.
+    ///
+    /// The app's Documents directory: the one iOS shows in the Finder when
+    /// the iPad is plugged in, and under "On My iPad" in the Files app.
+    /// Everything the app downloads lives elsewhere — under Application
+    /// Support, excluded from backup — so this folder holds the reader's
+    /// files and nothing else, which is what makes a flat scan of it
+    /// meaningful.
+    public static func localFilesFolder() -> URL? {
+        try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask,
+                                     appropriateFor: nil, create: true)
+    }
+
     /// Drops what is left over from unwrapping an inner archive.
     ///
     /// A RAR volume set whose volumes join into a single .cbr leaves three
@@ -492,6 +557,17 @@ public final class Library {
               Self.readsBackWhole(standalone),
               let recorded = try? store.downloadedFile(issueID: issueID)?.path
         else { return }
+
+        // A file this app did not download is not this app's to delete.
+        //
+        // Everything below assumes the recorded path names an archive under
+        // the comics root, fetched from a mirror and reproducible from it:
+        // that is what makes deleting it safe once the pages are out. A local
+        // file is neither. It sits in the folder the reader drags files into,
+        // its siblings are their other issues, and there is no second copy
+        // anywhere — so opening one would have deleted it out of the Finder,
+        // along with anything beside it sharing a stem.
+        guard paths.owns(recorded) else { return }
 
         let fm = FileManager.default
         discardUnwrapped(forIssue: issueID)

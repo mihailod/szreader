@@ -9,6 +9,28 @@ options:
 
 # SZKit and the vendored CUnrar come from the package in this same directory,
 # so there is one source of truth: `swift test` and the app build the same code.
+# Project-wide, and the version is here rather than on the app because the
+# app is no longer the only thing that carries one. iOS refuses to install a
+# bundle whose extension disagrees with it about CFBundleVersion, and the
+# App Store rejects the upload — so two targets reading one number is not
+# tidiness, it is the only arrangement that ships.
+settings:
+  base:
+    # The single source of truth for the app's version.
+    #
+    # MARKETING_VERSION is what a reader sees — "1.3". Bump it when the
+    # release is worth naming. 1.2 (5) went to review on its own; everything
+    # since is 1.3 (6), and the next submission is what moves either number.
+    #
+    # CURRENT_PROJECT_VERSION is the build number. The App Store rejects an
+    # upload whose build number it has seen before for the same marketing
+    # version, so this has to go up for *every* submission — including a
+    # re-upload of an identical build after a rejected one. It is an integer
+    # that only ever increases; it does not reset when MARKETING_VERSION
+    # changes.
+    MARKETING_VERSION: "1.3"
+    CURRENT_PROJECT_VERSION: "6"
+
 packages:
   SZKit:
     path: .
@@ -32,6 +54,11 @@ targets:
     dependencies:
       - package: SZKit
         product: SZKit
+      # Embedded in the app, which is the only way an extension ships. The
+      # Files app loads it out of the installed bundle; nothing in StreamZine
+      # itself ever calls it.
+      - target: SZReaderThumbnail
+        embed: true
 
     # xcodegen OWNS this file and rewrites it on every generate, so anything
     # needed at runtime has to be declared here. Without UILaunchScreen the app
@@ -59,6 +86,128 @@ targets:
         # The app reads them back off its own bundle at runtime.
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Local Files. Together these two put the app's Documents folder in
+        # front of the reader: `UIFileSharingEnabled` lists StreamZine in the
+        # Finder's Files tab when the iPad is plugged in — drag issues in,
+        # drag them out, delete them there — and
+        # `LSSupportsOpeningDocumentsInPlace` puts the same folder under
+        # "On My iPad" in the Files app, which is how a file arrives over
+        # Wi-Fi without a cable at all.
+        #
+        # Only Documents is exposed. Everything the app downloads lives under
+        # Application Support and stays invisible, which is what keeps a flat
+        # scan of Documents meaning "the reader's own files" — see
+        # `LocalFiles.scan`.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        # What the app will accept from AirDrop, the share sheet and Open
+        # With. Four of the seven formats have no type of their own on iOS —
+        # checked against the system's own list in MobileCoreTypes.bundle,
+        # which declares `pdf`, `zip` and `7z`, and neither `rar` nor any of
+        # the comic-book spellings. An extension nothing declares is handed a
+        # throwaway `dyn.…` identifier that no app can be matched against, so
+        # anything missing from that list has to be declared here or it simply
+        # cannot be opened.
+        #
+        # `cbz`/`cbr`/`cb7` are *exported*: nobody owns them the way a vendor
+        # owns its own format, and these are this app's spellings of them.
+        # Named after the bundle id, which is the one prefix that cannot
+        # collide with another app's declaration of the same extension.
+        # Declared as `public.data`, not `public.archive` — a `.cbr` is as
+        # often a zip as a rar, and claiming the archive type for a file the
+        # app has not sniffed yet would be asserting something not known.
+        #
+        # `rar` is *imported*, and that is the whole difference between the
+        # two keys: RARLAB owns `com.rarlab.rar-archive`, so this is a
+        # declaration of somebody else's type, written so the app defers to
+        # theirs if a real archiver is ever installed beside it. It was
+        # referenced by the document types below before it was declared
+        # anywhere, which bound nothing at all — a plain `.rar` would not open.
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.mihailod.szreader.cbz
+            UTTypeDescription: Comic Book Archive (ZIP)
+            UTTypeConformsTo: [public.data]
+            UTTypeIconFiles: [doc-cbz-22x29, doc-cbz-64, doc-cbz-320]
+            UTTypeTagSpecification:
+              public.filename-extension: [cbz]
+          - UTTypeIdentifier: com.mihailod.szreader.cbr
+            UTTypeDescription: Comic Book Archive (RAR)
+            UTTypeConformsTo: [public.data]
+            UTTypeIconFiles: [doc-cbr-22x29, doc-cbr-64, doc-cbr-320]
+            UTTypeTagSpecification:
+              public.filename-extension: [cbr]
+          - UTTypeIdentifier: com.mihailod.szreader.cb7
+            UTTypeDescription: Comic Book Archive (7z)
+            UTTypeConformsTo: [public.data]
+            UTTypeIconFiles: [doc-cb7-22x29, doc-cb7-64, doc-cb7-320]
+            UTTypeTagSpecification:
+              public.filename-extension: [cb7]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.rarlab.rar-archive
+            UTTypeDescription: RAR archive
+            UTTypeConformsTo: [public.data, public.archive]
+            UTTypeTagSpecification:
+              public.filename-extension: [rar]
+              public.mime-type: [application/x-rar-compressed, application/vnd.rar]
+        # `LSHandlerRank` differs between the two entries below, and that
+        # difference is what decides whether an AirDropped issue opens here or
+        # is parked in Files for the reader to hand over by themselves.
+        #
+        # `Owner` for the comic-book extensions: on a device with this app
+        # installed they are this app's, and claiming them is what makes the
+        # iPad open one directly rather than asking. Another reader that
+        # claims them too puts the choice back in front of the reader, which
+        # is the right outcome for that case.
+        #
+        # `Alternate` for the rest, and firmly: `pdf`, `zip`, `rar` and `7z`
+        # belong to Books, to Files, and to whatever archiver is installed.
+        # Becoming the device's default handler for every zip would be a
+        # comics reader taking over a file type it has no business owning.
+        #
+        # `Viewer` rather than `Editor` on both, and it has to be said: an
+        # entry with no `CFBundleTypeRole` is one Launch Services is entitled
+        # to skip. The app opens an issue and never writes one back.
+        #
+        # One entry per comic-book format rather than one listing all three,
+        # and the icons are the only reason: `CFBundleTypeIconFiles` belongs
+        # to the entry, so three formats sharing an entry can only ever share
+        # one icon. Split, a `.cbr` and a `.cbz` are told apart in the Files
+        # app at a glance.
+        #
+        # The icons are named twice on purpose — here and as `UTTypeIconFiles`
+        # on the declarations above. Which of the two keys iOS reads is not
+        # documented and Apple's own forum thread on the question ends without
+        # an answer, so both are given. Drawn by `scripts/document-icons.py`,
+        # from the app icon's own colours.
+        #
+        # No icon on the entry below it, deliberately. `pdf`, `zip`, `rar` and
+        # `7z` are other people's types and this app is `Alternate` on all
+        # four; putting StreamZine's artwork on every zip on the device would
+        # be claiming in pictures what the rank gives up in words.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Comic Book Archive (ZIP)
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.mihailod.szreader.cbz]
+            CFBundleTypeIconFiles: [doc-cbz-22x29, doc-cbz-64, doc-cbz-320]
+          - CFBundleTypeName: Comic Book Archive (RAR)
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.mihailod.szreader.cbr]
+            CFBundleTypeIconFiles: [doc-cbr-22x29, doc-cbr-64, doc-cbr-320]
+          - CFBundleTypeName: Comic Book Archive (7z)
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.mihailod.szreader.cb7]
+            CFBundleTypeIconFiles: [doc-cb7-22x29, doc-cb7-64, doc-cb7-320]
+          - CFBundleTypeName: Issue
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.adobe.pdf
+              - public.zip-archive
+              - com.rarlab.rar-archive
+              - org.7-zip.7-zip-archive
         UILaunchScreen:
           UIColorName: ""
         UISupportedInterfaceOrientations:
@@ -98,19 +247,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mihailod.szreader
         PRODUCT_NAME: SZReader
-        # The single source of truth for the app's version.
-        #
-        # MARKETING_VERSION is what a reader sees — "1.2". Bump it when the
-        # release is worth naming.
-        #
-        # CURRENT_PROJECT_VERSION is the build number. The App Store rejects an
-        # upload whose build number it has seen before for the same marketing
-        # version, so this has to go up for *every* submission — including a
-        # re-upload of an identical build after a rejected one. It is an
-        # integer that only ever increases; it does not reset when
-        # MARKETING_VERSION changes.
-        MARKETING_VERSION: "1.3"
-        CURRENT_PROJECT_VERSION: "6"
         INFOPLIST_FILE: App/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"        # iPhone and iPad
@@ -125,3 +261,63 @@ targets:
       configs:
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+
+  # Draws the cover of a .cbz/.cbr/.cb7 for the Files app.
+  #
+  # iOS has no thumbnailer for comic archives, so without this one of two
+  # things happens: the reader sees a flat document icon, or they see a picture
+  # drawn by whatever other comic reader they have installed — which vanishes
+  # when they delete it. The app declares `Owner` on these three types; this is
+  # the other half of that claim.
+  #
+  # Deliberately not offered for `pdf`, `zip`, `rar` or `7z`. The app is
+  # `Alternate` on those, iOS already draws PDFs, and thumbnailing every zip on
+  # the device is exactly the overreach the rank gives up.
+  SZReaderThumbnail:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+
+    sources:
+      - path: Thumbnail
+        excludes:
+          - "Info.plist"
+          - "**/.*.sw?"
+          - "**/*~"
+
+    dependencies:
+      - package: SZKit
+        product: SZKit
+
+    info:
+      path: Thumbnail/Info.plist
+      properties:
+        CFBundleDisplayName: StreamZine Thumbnails
+        # Read from the build settings above, exactly as the app's are. Left
+        # to itself xcodegen writes "1" here, and a build whose extension
+        # disagrees with its app about either number will not install.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.quicklook.thumbnail
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ThumbnailProvider
+          NSExtensionAttributes:
+            QLSupportedContentTypes:
+              - com.mihailod.szreader.cbz
+              - com.mihailod.szreader.cbr
+              - com.mihailod.szreader.cb7
+            # Every size is worth drawing. The default refuses the small ones,
+            # which are the list rows — the place a reader browsing a folder of
+            # comics actually looks.
+            QLThumbnailMinimumDimension: 0
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mihailod.szreader.thumbnail
+        PRODUCT_NAME: SZReaderThumbnail
+        INFOPLIST_FILE: Thumbnail/Info.plist
+        SWIFT_VERSION: "5.9"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: MUYBB8YH5X
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CLANG_CXX_LANGUAGE_STANDARD: "c++14"

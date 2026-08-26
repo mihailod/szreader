@@ -1,5 +1,6 @@
 import SwiftUI
 import SZKit
+import UniformTypeIdentifiers
 
 enum LibraryLayout: String {
     case list, grid
@@ -42,6 +43,11 @@ func beginRemoveDownload(_ issue: StoredIssue, model: AppModel, pending: inout P
 /// and answers.
 @MainActor
 func beginDelete(_ issue: StoredIssue, model: AppModel, pending: inout PendingAction?) {
+    // A local file is deleted from the device along with its row — there is
+    // no library entry to keep once the file is gone, and a row that outlived
+    // it would come straight back on the next scan anyway. Its own case
+    // because the sentence has to say that plainly.
+    if issue.site == .local { pending = .deleteLocalFile(issue); return }
     pending = issue.isCatalogued ? .undeletable(issue) : .remove(issue)
 }
 
@@ -63,6 +69,13 @@ enum PendingAction: Identifiable {
     /// does the same to all of them, so both are asked about first.
     case downloadSet(StoredIssue, String)
     case removeSet(StoredIssue, String)
+    /// One of the reader's own files. Deleting it removes the file from the
+    /// device, which no other delete in this app does.
+    case deleteLocalFile(StoredIssue)
+    /// The question put after Delete Library, when the reader has files of
+    /// their own on the device. Both numbers travel with it so the question
+    /// can say what it is about to remove before it removes it.
+    case deleteLocalFiles(count: Int, bytes: Int64)
 
     var id: String {
         switch self {
@@ -73,6 +86,8 @@ enum PendingAction: Identifiable {
         case .undeletable(let i): return "shipped-\(i.id)"
         case .removeAllDownloads: return "all-downloads"
         case .deleteAll: return "all"
+        case .deleteLocalFile(let i): return "local-\(i.id)"
+        case .deleteLocalFiles: return "all-local"
         case .removeVisibleDownloads: return "visible-downloads"
         case .deleteVisible: return "visible"
         }
@@ -171,11 +186,35 @@ private struct Confirming: ViewModifier {
                 primaryButton: .destructive(Text("Yes")) { model.deleteVisible() },
                 secondaryButton: .cancel(Text("No")))
         case let .deleteAll(count, shipped):
+            let local = model.localFileTotals
             return Alert(
                 title: Text("Are you sure?"),
-                message: Text(LibraryView.deleteAllMessage(count, shipped: shipped)),
-                primaryButton: .destructive(Text("Yes")) { model.deleteEverything() },
+                message: Text(LibraryView.deleteAllMessage(count, shipped: shipped,
+                                                           local: local.count)),
+                primaryButton: .destructive(Text("Yes")) {
+                    model.deleteEverything()
+                    // Asked second, and only when there is something to ask
+                    // about. Delete Library leaves these where they are —
+                    // nothing in the app can bring one back — so removing
+                    // them is a separate answer to a separate question.
+                    guard local.count > 0 else { return }
+                    handOver(to: .deleteLocalFiles(count: local.count, bytes: local.bytes))
+                },
                 secondaryButton: .cancel(Text("No")))
+        case .deleteLocalFile(let issue):
+            return Alert(
+                title: Text("Are you sure?"),
+                message: Text(LibraryView.deleteLocalFileMessage(issueName(issue))),
+                primaryButton: .destructive(Text("Delete")) { model.delete(issue) },
+                secondaryButton: .cancel(Text("Keep")))
+        case let .deleteLocalFiles(count, bytes):
+            return Alert(
+                title: Text(IssueSite.local.display),
+                message: Text(LibraryView.deleteLocalFilesMessage(count, bytes: bytes)),
+                primaryButton: .destructive(Text("Delete")) { model.deleteLocalFiles() },
+                // "Keep", not "No": the question is which of two things to do
+                // with the files, and both answers are an action.
+                secondaryButton: .cancel(Text("Keep")))
         }
     }
 
@@ -211,6 +250,8 @@ struct LibraryView: View {
     /// Set when Import was tapped with every source switched off, so the
     /// reader is told why rather than shown a browser onto nothing.
     @State private var promptingForSource = false
+    /// Set when Import ▸ From Device was chosen, presenting the Files picker.
+    @State private var importingFiles = false
     @AppStorage("libraryLayout") private var layoutRaw = LibraryLayout.grid.rawValue
     @State private var pending: PendingAction?
 
@@ -227,6 +268,26 @@ struct LibraryView: View {
             // No navigation bar: the app is stripzona-only, so a title row says
             // nothing, and its search field slid the toolbar away when focused.
             .toolbar(.hidden, for: .navigationBar)
+            // An issue dragged onto the shelf from Files in the next pane
+            // over. The iPad gesture for handing a file to an app, and the
+            // one a reader with a Split View open reaches for before they
+            // think of the share sheet.
+            //
+            // The whole shelf is the target rather than a strip of it: there
+            // is nowhere on this screen a dropped issue could mean anything
+            // else, and a drop zone the reader has to find is a gesture that
+            // looks broken everywhere they try it first.
+            //
+            // `.data` rather than the app's own comic-book types: what a
+            // drag offers is decided by whoever started it, and Files
+            // advertises a plain file long before it advertises the type this
+            // app declared for the extension. Anything not readable is
+            // dropped on the floor by `adoptDropped`, which asks
+            // `LocalFiles.isReadable` exactly as every other way in does.
+            .onDrop(of: [.data], isTargeted: nil) { providers in
+                model.adoptDropped(providers)
+                return true
+            }
             .sheet(item: $selected) { issue in
                 IssueDetail(model: model, issue: issue,
                             mirrors: model.mirrors(for: issue))
@@ -270,6 +331,25 @@ struct LibraryView: View {
             }
         }
         .sheet(isPresented: $showingSettings) { SettingsView(model: model) }
+        // On a view of its own, for the reason this file has had to learn
+        // more than once: SwiftUI honours one presentation modifier per view,
+        // and the line above already claims this one. `fileImporter` is a
+        // presentation like any other, and added beside the sheet it is not a
+        // bug you see — it is a menu item that silently does nothing.
+        .background(
+            Color.clear
+                .fileImporter(isPresented: $importingFiles,
+                              allowedContentTypes: Self.importableTypes,
+                              allowsMultipleSelection: true) { result in
+                    switch result {
+                    case .success(let urls): model.adoptLocalFiles(urls)
+                    case .failure(let error):
+                        // Cancelling is not a failure and does not arrive
+                        // here, so anything that does is worth saying.
+                        model.status = "could not open the picker: \(error.localizedDescription)"
+                    }
+                }
+        )
         // Importing into a hidden source would land a page of issues nowhere
         // the reader can see them — the shelf would be exactly as empty
         // afterwards, and nothing on screen would say why.
@@ -534,33 +614,40 @@ struct LibraryView: View {
             // StripZona unconditionally, so a reader who had switched the
             // forum off was still offered it — the one entry in the menu that
             // led nowhere they had asked to go.
-            switch importSources.count {
-            case 0:
-                // Nothing on. The button still exists, because it is the one
-                // control the first screen is built around, and it says so
-                // rather than opening a browser onto a source the reader has
-                // hidden.
-                Button { promptForASource() } label: { importLabel }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(Device.isPhone ? .regular : .large)
-            case 1:
-                // One source is not a choice, so it is not a menu.
-                Button { browsing = BrowseTarget(importSources[0]) } label: { importLabel }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(Device.isPhone ? .regular : .large)
-            default:
-                Menu {
-                    ForEach(importSources, id: \.self) { site in
-                        Button { browsing = BrowseTarget(site) } label: {
-                            Label(site.display, systemImage: Self.importIcon(site))
-                        }
+            // Always a menu, which it did not used to be: there were three
+            // shapes here — a plain button when one source was on, another
+            // when none was, a menu otherwise — on the reasoning that one
+            // source is not a choice. From Device ended that. It never
+            // depends on a source being switched on, so there are always at
+            // least two ways in and the button is always a menu.
+            Menu {
+                ForEach(importSources, id: \.self) { site in
+                    Button { browsing = BrowseTarget(site) } label: {
+                        Label(site.display, systemImage: Self.importIcon(site))
                     }
-                } label: {
-                    importLabel
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(Device.isPhone ? .regular : .large)
+                if !importSources.isEmpty { Divider() }
+                // Last, and below a divider, because it is the one entry that
+                // brings nothing over the network — everything above reaches
+                // an archive, this reaches the iPad the reader is holding.
+                Button { importingFiles = true } label: {
+                    Label("From Device", systemImage: "iphone")
+                }
+                if importSources.isEmpty {
+                    Divider()
+                    // The menu already shows there is nothing online to open;
+                    // this is what says why and offers the way back. Reached
+                    // only from here, which is why the button that used to
+                    // carry it could stop being a special case.
+                    Button { promptForASource() } label: {
+                        Label("Online Sources…", systemImage: "switch.2")
+                    }
+                }
+            } label: {
+                importLabel
             }
+            .buttonStyle(.borderedProminent)
+            .controlSize(Device.isPhone ? .regular : .large)
     }
 
     /// The sources Import can actually open, in menu order.
@@ -577,6 +664,27 @@ struct LibraryView: View {
     private var importSources: [IssueSite] {
         [.stripzona, .archive, .comicbookplus, .batcave].filter(model.isEnabled)
     }
+
+    /// What the Files picker will let the reader choose.
+    ///
+    /// The same seven the shelf can read, named as types rather than
+    /// extensions so the picker greys out everything else instead of letting
+    /// a `.txt` be chosen and refused afterwards. The three comic-book ones
+    /// exist only because this app declares them — see `project.yml` — which
+    /// is why they are built by identifier and dropped if absent rather than
+    /// forced. `.zip` and `.pdf` are Apple's own.
+    ///
+    /// This is the picker's filter and not the shelf's rule. What is readable
+    /// is `LocalFiles.isReadable`, which is checked again on the way in: a
+    /// file can always be chosen through some other route.
+    static let importableTypes: [UTType] = {
+        let declared = ["com.mihailod.szreader.cbz",
+                        "com.mihailod.szreader.cbr",
+                        "com.mihailod.szreader.cb7",
+                        "com.rarlab.rar-archive",
+                        "org.7-zip.7-zip-archive"].compactMap(UTType.init)
+        return declared + [.zip, .pdf]
+    }()
 
     private static func importIcon(_ site: IssueSite) -> String {
         switch site {
@@ -682,18 +790,25 @@ struct LibraryView: View {
         // Green for the only action that adds something. No red here: in this
         // menu red is reserved for the three below the divider, and this one
         // reclaims disk without touching the library.
-        Button {
-            if issue.isDownloaded {
-                beginRemoveDownload(issue, model: model, pending: &pending)
-            } else {
-                beginDownload(issue, model: model, pending: &pending)
+        //
+        // Left out entirely for one of the reader's own files: it is on the
+        // device because they put it there, there is nothing to fetch, and
+        // "Remove Download" on one would mean deleting their file — which is
+        // what Delete below the divider says it does, in those words.
+        if issue.site != .local {
+            Button {
+                if issue.isDownloaded {
+                    beginRemoveDownload(issue, model: model, pending: &pending)
+                } else {
+                    beginDownload(issue, model: model, pending: &pending)
+                }
+            } label: {
+                Label(issue.isDownloaded ? "Remove Download" : "Download",
+                      systemImage: issue.isDownloaded ? "trash" : "arrow.down.circle")
             }
-        } label: {
-            Label(issue.isDownloaded ? "Remove Download" : "Download",
-                  systemImage: issue.isDownloaded ? "trash" : "arrow.down.circle")
+            .tint(issue.isDownloaded ? nil : Color.green)
+            .disabled(model.downloading.contains(issue.id))
         }
-        .tint(issue.isDownloaded ? nil : Color.green)
-        .disabled(model.downloading.contains(issue.id))
 
         // Second, because like the item above it this is about the issue in
         // hand rather than the shelf.
@@ -856,15 +971,41 @@ struct LibraryView: View {
 
     /// Delete Library, which reaches everything an Import can bring back and
     /// nothing else.
-    static func deleteAllMessage(_ count: Int, shipped: Int) -> String {
+    ///
+    /// `local` is how many of the reader's own files are on the shelf. They
+    /// are not deleted here — the question about them is put separately, once
+    /// this one has been answered — and saying so is what stops "resetting
+    /// the app to empty" being a promise this does not keep.
+    static func deleteAllMessage(_ count: Int, shipped: Int, local: Int = 0) -> String {
+        let asked = local == 0 ? ""
+            : (local == 1 ? " Your one local file is asked about next."
+                          : " Your \(local) local files are asked about next.")
         guard shipped > 0 else {
             let items = count == 1 ? "the one item" : "all \(count) items"
-            return "Delete \(items) and every download, resetting the app to "
-                + "empty. This cannot be undone."
+            let scope = local == 0 ? ", resetting the app to empty" : ""
+            return "Delete \(items) and every download\(scope). "
+                + "This cannot be undone.\(asked)"
         }
         let items = count == 1 ? "the one imported item" : "all \(count) imported items"
         return "Delete \(items) and every download of them. Items that "
-            + "cannot be imported again stay. This cannot be undone."
+            + "cannot be imported again stay. This cannot be undone.\(asked)"
+    }
+
+    /// The question the reader asked for by name: how many of their own files
+    /// there are, what they weigh, and whether to remove them too.
+    static func deleteLocalFilesMessage(_ count: Int, bytes: Int64) -> String {
+        let size = IssueDetail.size(bytes)
+        let files = count == 1 ? "your one local file" : "all \(count) local files"
+        return "Would you like to delete \(files) (\(size)) too? "
+            + "They are removed from this iPad, and getting them back means "
+            + "copying them over again."
+    }
+
+    /// One of them, deleted on its own from the shelf.
+    static func deleteLocalFileMessage(_ name: String?) -> String {
+        let subject = name.map { "“\($0)”" } ?? "this item"
+        return "Delete \(subject) from the library and remove the file from "
+            + "this iPad. Getting it back means copying it over again."
     }
 
     /// The title, or the code when the post gave none.
@@ -1040,8 +1181,14 @@ struct LibraryView: View {
     /// scan that reads "(0MB)" is a scan the reader will think is broken.
     private func removeOrDownloadTitle(_ issue: StoredIssue) -> String {
         guard issue.isDownloaded else { return "Download" }
-        guard let size = model.downloadedSizes[issue.id] else { return "Remove Download" }
-        return "Remove Download (\(IssueDetail.mb(size)))"
+        // The reader's own file is sized in the units it actually has —
+        // `size` rather than `mb`, which would call a 300 KB PDF "0MB".
+        if issue.site == .local {
+            return "Delete File"
+                + (model.downloadedSizes[issue.id].map { " (\(IssueDetail.size($0)))" } ?? "")
+        }
+        return "Remove Download"
+            + (model.downloadedSizes[issue.id].map { " (\(IssueDetail.mb($0)))" } ?? "")
     }
 
     private func rowActions(_ issue: StoredIssue) -> some View {
@@ -1054,7 +1201,9 @@ struct LibraryView: View {
                 // a permanently greyed-out twin of the button next to it says
                 // nothing a reader cannot already see from the cover.
                 Button {
-                    if issue.isDownloaded {
+                    if issue.site == .local {
+                        beginDelete(issue, model: model, pending: &pending)
+                    } else if issue.isDownloaded {
                         beginRemoveDownload(issue, model: model, pending: &pending)
                     } else {
                         beginDownload(issue, model: model, pending: &pending)
@@ -1268,7 +1417,11 @@ struct LibraryView: View {
         // one archive split by category — and listing them separately repeated
         // the same nine words seven times over.
         var phrases: [String] = []
-        for site in IssueSite.allCases {
+        // What this sentence offers is switches, so a source without one has
+        // no place in it — the reader cannot switch on their own folder, and
+        // naming it here would send them to Settings looking for a control
+        // that is not there.
+        for site in IssueSite.allCases where site.isSwitchable {
             let phrase = SourceCopy.of(site).shelfPhrase
             if !phrases.contains(phrase) { phrases.append(phrase) }
         }
@@ -1707,14 +1860,43 @@ struct IssueDetail: View {
     /// that frees it, rather than somewhere else on the screen.
     private var removeOrDownloadTitle: String {
         guard current.isDownloaded else { return "Download" }
-        guard let size = downloadedSize else { return "Remove Download" }
-        return "Remove Download (\(Self.mb(size)))"
+        // As on the shelf row: one of the reader's own files was never
+        // downloaded, so there is no download to remove — only the file, and
+        // the button says so, sized in the units the file actually has.
+        if current.site == .local {
+            return "Delete File" + (downloadedSize.map { " (\(Self.size($0)))" } ?? "")
+        }
+        return "Remove Download" + (downloadedSize.map { " (\(Self.mb($0)))" } ?? "")
+    }
+
+    /// How the row got onto the shelf.
+    ///
+    /// Three answers, not two. "Imported" covers everything the reader
+    /// brought in over the network — a forum page, an archive.org item — and
+    /// a file copied over a cable is not that: nothing was imported and no
+    /// import will bring it back, which is exactly the distinction the rest
+    /// of the app makes when it passes these over in a bulk delete.
+    static func arrival(_ issue: StoredIssue) -> String {
+        if issue.isCatalogued { return "Shipped index" }
+        return issue.site == .local ? "Imported (local file)" : "Imported"
     }
 
     /// Whole megabytes, decimal, matching the shelf's own storage readout.
     /// A 34 MB scan is not a figure anyone reads to one decimal place.
     static func mb(_ bytes: Int64) -> String {
         "\(Int((Double(bytes) / 1_000_000).rounded()))MB"
+    }
+
+    /// The same, except that it never says "0MB".
+    ///
+    /// Every download this app makes is a scan of megabytes, so whole
+    /// megabytes was always enough. A file the reader copies over need not be
+    /// — a short PDF is a few hundred kilobytes — and "Delete File (0MB)"
+    /// reads as a bug in the app rather than as a small file.
+    static func size(_ bytes: Int64) -> String {
+        bytes < 1_000_000
+            ? "\(max(1, Int((Double(bytes) / 1_000).rounded())))KB"
+            : mb(bytes)
     }
 
     /// The row as it stands now, not as it was when the sheet opened.
@@ -1745,7 +1927,9 @@ struct IssueDetail: View {
                         // buttons would fire whichever they liked.
                         HStack(spacing: 12) {
                             Button {
-                                if current.isDownloaded {
+                                if current.site == .local {
+                                    beginDelete(current, model: model, pending: &pending)
+                                } else if current.isDownloaded {
                                     beginRemoveDownload(current, model: model, pending: &pending)
                                 } else {
                                     beginDownload(current, model: model, pending: &pending)
@@ -1816,15 +2000,20 @@ struct IssueDetail: View {
                     // The row's own stamp, not its site: archive.org is both
                     // a shipped index and a source the reader browses, and
                     // only the rows the seed wrote came with the app.
-                    LabeledContent("Arrived by",
-                                   value: issue.isCatalogued ? "Shipped index" : "Imported")
+                    LabeledContent("Arrived by", value: Self.arrival(issue))
                 }
-                Section("Mirrors") {
-                    ForEach(Array(mirrors.enumerated()), id: \.offset) { index, mirror in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(index == 0 ? "primary" : "drugi sken \(index)")
-                                .font(.caption).foregroundStyle(.secondary)
-                            Text(mirror.host).font(.body.monospaced())
+                // Only when there are any. A local file has none and never
+                // will — nothing fetched it and nothing can — so the heading
+                // on its own over an empty space reads as a panel that failed
+                // to load rather than as a fact about the issue.
+                if !mirrors.isEmpty {
+                    Section("Mirrors") {
+                        ForEach(Array(mirrors.enumerated()), id: \.offset) { index, mirror in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(index == 0 ? "primary" : "drugi sken \(index)")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                Text(mirror.host).font(.body.monospaced())
+                            }
                         }
                     }
                 }

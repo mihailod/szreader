@@ -26,6 +26,42 @@
   <th><img src="screenshotphone.png" alt="Screenshot iPhone" width="150"></th>
 </tr></table>
 
+## Coming soon in 1.3
+
+* **Local Files — copy and read files from your Mac.**
+Connect the iPad/iPhone via USB cable and StreamZine appears in the Finder's
+**Files** list (like other apps). Then just drag supported files in.
+
+  * **No cable needed.** You can also AirDrop from a Mac — AirDrop sends to
+the iPad/iPhone, and you Open With in the Files app.
+The same folder also appears under **On My iPad** in the Files app, so you can
+copy into it over Wi-Fi: from iCloud Drive, or straight off a Mac mounted with
+Files ▸ Connect to Server.
+
+  * **Or just drag it in.** Open Files beside StreamZine in Split View and drag
+an issue onto the shelf.
+
+  * **Import ▸ From Device.** Already have issues on the iPad — AirDropped,
+downloaded in Safari, sitting in iCloud Drive? Import now has a **From Device**
+entry that is always there, whatever sources you have switched on. Pick as many
+files as you like from anywhere in Files and they land on the shelf. (AirDrop
+puts files in **Downloads** rather than handing them to an app — that is iOS's
+choice, not something an app can ask to change — so this is the tidy way to
+pick them up.)
+
+  * **Your comics look like your comics in Files.** StreamZine draws the cover
+of every `.cbz`, `.cbr` and `.cb7` on the device, so browsing a folder of issues
+in the Files app shows the artwork rather than a row of identical document
+icons.
+
+  * NOTE: Local Files is always on (no Settings switch), because the folder
+on the device *is* the source. The bulk
+actions leave your own files alone — Remove All Downloads and Delete Library
+ignore them, and Delete Library asks separately, by name and by size, before
+removing any.
+
+---
+
 ## Coming soon in 1.2 (Apple approval in progress...)
 
 * **Added content sources:**

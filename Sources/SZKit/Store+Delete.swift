@@ -36,13 +36,25 @@ extension Store {
     /// The bulk counterpart to `deleteDownload`: reclaims the disk without
     /// costing a single re-import, which matters because re-importing is
     /// gated by the daily Like quota.
+    /// A local file is not a download and is passed over by both, here and in
+    /// every bulk delete below.
+    ///
+    /// "Remove All Downloads" means the space taken by things that can be
+    /// fetched again — every one of which the app fetched in the first place.
+    /// The reader's own files can be fetched again by nobody: removing one
+    /// means going and finding it on a computer, which is not what a reader
+    /// reclaiming space has agreed to. `deleteLocalIssues` is the one path
+    /// that touches them, and it is asked for by name.
+    static var notLocal: String { "issue.site <> '\(IssueSite.local.rawValue)'" }
+
     @discardableResult
     public func deleteAllDownloads() throws -> [URL] {
+        let kept = "SELECT id FROM issue WHERE \(Self.notLocal)"
         var files: [URL] = []
-        try db.query("SELECT path FROM download") { row in
+        try db.query("SELECT path FROM download WHERE issue_id IN (\(kept))") { row in
             if let p = row.string(0) { files.append(resolvedURL(p)) }
         }
-        try db.execute("DELETE FROM download")
+        try db.run("DELETE FROM download WHERE issue_id IN (\(kept))")
         return files
     }
 
@@ -72,7 +84,14 @@ extension Store {
         let args = stamps.map { SQLValue.text($0) }
         // Every statement below reads this against the issue table, so the
         // issues themselves must go last — after it, it names nothing.
-        let doomed = "SELECT id FROM issue WHERE IFNULL(source, '') NOT IN (\(holes))"
+        //
+        // Local files are excluded here as well as from the downloads above.
+        // Delete Library empties the library of everything an Import could
+        // bring back, and an Import brings back none of them — the way to get
+        // one back is to plug the iPad in and copy it over again. The app
+        // asks about them separately, after this has run.
+        let doomed = "SELECT id FROM issue WHERE IFNULL(source, '') NOT IN (\(holes)) "
+                   + "AND \(Self.notLocal)"
 
         var files: [URL] = []
         try db.query("SELECT path FROM download WHERE issue_id IN (\(doomed))", args) { row in

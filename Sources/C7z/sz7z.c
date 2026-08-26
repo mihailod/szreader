@@ -166,6 +166,108 @@ static int sz7z_make_directories(const char *path) {
     return 1;
 }
 
+/* Whether an entry name ends in an extension a page is stored as.
+ *
+ * Extension rather than content: the whole point is to decompress nothing we
+ * do not need, and deciding by content would mean extracting the `.nfo` to
+ * discover it is an `.nfo`. */
+static int sz7z_looks_like_image(const char *name) {
+    static const char *kImages[] = {
+        "jpg", "jpeg", "png", "gif", "bmp", "webp", "tif", "tiff", "heic", NULL,
+    };
+    const char *dot = strrchr(name, '.');
+    if (!dot) return 0;
+
+    char ext[8];
+    size_t n = strlen(dot + 1);
+    if (n == 0 || n >= sizeof(ext)) return 0;
+    for (size_t i = 0; i < n; i++) {
+        char c = dot[1 + i];
+        ext[i] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+    }
+    ext[n] = '\0';
+
+    for (int i = 0; kImages[i]; i++) {
+        if (strcmp(ext, kImages[i]) == 0) return 1;
+    }
+    return 0;
+}
+
+int sz7z_extract_first_image(const char *archivePath, const char *destinationDir,
+                             char *nameBuffer, size_t nameCapacity) {
+    SZ7zArchive archive;
+    SRes res = sz7z_open(&archive, archivePath);
+    if (res != SZ_OK) return (int)res;
+
+    UInt32 blockIndex = 0xFFFFFFFF;
+    Byte *outBuffer = NULL;
+    size_t outBufferSize = 0;
+    int found = 0;
+
+    sz7z_make_directories(destinationDir);
+
+    for (UInt32 i = 0; i < archive.db.NumFiles && res == SZ_OK && !found; i++) {
+        if (SzArEx_IsDir(&archive.db, i)) continue;
+
+        char *name = sz7z_entry_name(&archive.db, i);
+        if (!name) { res = SZ_ERROR_MEM; break; }
+
+        /* Same refusal as the full extraction: an entry naming "../" or an
+         * absolute path writes outside the destination, and a comic has no
+         * reason to carry one. */
+        if (name[0] == '/' || strstr(name, "..") != NULL || !sz7z_looks_like_image(name)) {
+            free(name);
+            continue;
+        }
+        if (nameBuffer && strlen(name) + 1 > nameCapacity) {
+            free(name);
+            res = SZ_ERROR_OUTPUT_EOF;
+            break;
+        }
+
+        size_t offset = 0, sizeProcessed = 0;
+        res = SzArEx_Extract(&archive.db, &archive.look.vt, i, &blockIndex,
+                             &outBuffer, &outBufferSize, &offset, &sizeProcessed,
+                             &sz7zAlloc, &sz7zAlloc);
+        if (res != SZ_OK) { free(name); break; }
+
+        size_t pathLength = strlen(destinationDir) + 1 + strlen(name) + 1;
+        char *path = (char *)malloc(pathLength);
+        if (!path) { free(name); res = SZ_ERROR_MEM; break; }
+        snprintf(path, pathLength, "%s/%s", destinationDir, name);
+
+        char *lastSlash = strrchr(path, '/');
+        if (lastSlash) {
+            *lastSlash = '\0';
+            sz7z_make_directories(path);
+            *lastSlash = '/';
+        }
+
+        CSzFile file;
+        if (OutFile_Open(&file, path) == 0) {
+            size_t remaining = sizeProcessed;
+            if (File_Write(&file, outBuffer + offset, &remaining) != 0
+                || remaining != sizeProcessed) {
+                res = SZ_ERROR_WRITE;
+            } else {
+                if (nameBuffer) memcpy(nameBuffer, name, strlen(name) + 1);
+                found = 1;
+            }
+            File_Close(&file);
+        } else {
+            res = SZ_ERROR_WRITE;
+        }
+        free(path);
+        free(name);
+    }
+
+    ISzAlloc_Free(&sz7zAlloc, outBuffer);
+    sz7z_close(&archive);
+    if (res != SZ_OK) return (int)res;
+    /* Opened and whole, but with no page in it. Its own outcome, not a fault. */
+    return found ? SZ7Z_OK : SZ_ERROR_NO_ARCHIVE;
+}
+
 int sz7z_extract_all(const char *archivePath, const char *destinationDir) {
     SZ7zArchive archive;
     SRes res = sz7z_open(&archive, archivePath);

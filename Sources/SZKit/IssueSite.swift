@@ -70,6 +70,15 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     case bombjackHardware
     case bombjackGames
     case bombjackOther
+    // The reader's own files, copied onto the device over a cable or handed
+    // to the app from AirDrop or the Files app.
+    //
+    // A source like the others in every way the shelf cares about — a row, a
+    // cover, a page count, a place in the filters — and unlike any of them in
+    // where the file comes from: nothing here was downloaded, and nothing can
+    // be. The folder on the device *is* the source, which is why this one has
+    // no switch (`isSwitchable`) and no catalogue.
+    case local
 
     /// How the source is spelled in front of a reader.
     public var display: String {
@@ -89,6 +98,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
             guard let group = spectrumGroup else { return rawValue }
             return "Spectrum Computing: \(group.display)"
         case .atarimania:    return "Atarimania"
+        case .local:         return "Local Files"
         case .vintageAppleMagazines, .vintageAppleBooks:
             guard let group = vintageAppleGroup else { return rawValue }
             return "Vintage Apple: \(group.display)"
@@ -132,7 +142,7 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     /// time, and `Store.importComicBookPlus` is what reads one.
     public var catalogueResource: String? {
         switch self {
-        case .stripzona, .comicbookplus, .batcave: return nil
+        case .stripzona, .comicbookplus, .batcave, .local: return nil
         case .stripovi:                            return "stripovi-catalog"
         case .retrospec:                 return "retrospec-catalog"
         case .archive:                   return "archive-catalog"
@@ -161,10 +171,25 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .bombjackOther:              return .other
         case .stripzona, .retrospec, .archive, .comicbookplus, .batcave, .stripovi,
              .spectrumMagazines, .spectrumFanzines, .spectrumBooks, .atarimania,
-             .vintageAppleMagazines, .vintageAppleBooks:
+             .vintageAppleMagazines, .vintageAppleBooks, .local:
             return nil
         }
     }
+
+    /// Whether the reader chooses to see this source at all.
+    ///
+    /// True of every archive: they are libraries the app can draw from, and
+    /// switching one off is how a reader says they do not want it. False of
+    /// Local Files alone, and the difference is who put the issues there. A
+    /// switch that hid them would hide the reader's own files from the reader
+    /// — and, worse, hide them behind a control they would have to already
+    /// know about to find.
+    ///
+    /// Read by the settings list (which offers no switch for it), by
+    /// `SourceLanguage` (which must not sweep it up in a language it belongs
+    /// to no more than the cable does), and by the app's `isEnabled`, which
+    /// answers yes for it always.
+    public var isSwitchable: Bool { self != .local }
 
     /// The Vintage Apple shelf this source carries, or nil if it is not one.
     public var vintageAppleGroup: VintageApple.Group? {
