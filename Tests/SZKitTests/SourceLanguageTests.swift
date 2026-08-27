@@ -30,7 +30,8 @@ final class SourceLanguageTests: XCTestCase {
     /// one language without being wrong about half of what it carries.
     func testExYUSites() {
         XCTAssertEqual(SourceLanguage.exYU.sites,
-                       [.stripzona, .stripovi, .retrospec])
+                       [.stripzona, .stripovi, .retrospec,
+                        .popboksDzuboks, .popboksRitam])
         for shared in SourceLanguage.sharedSites {
             XCTAssertFalse(SourceLanguage.exYU.sites.contains(shared))
             XCTAssertFalse(SourceLanguage.english.sites.contains(shared))

@@ -44,7 +44,8 @@ public enum SourceLanguage: String, CaseIterable, Sendable {
         }
     }
 
-    private static let exYUSites: [IssueSite] = [.stripzona, .stripovi, .retrospec]
+    private static let exYUSites: [IssueSite] = [.stripzona, .stripovi, .retrospec,
+                                                 .popboksDzuboks, .popboksRitam]
 
     /// Sources that carry every language, and so stay on for as long as any
     /// language is on.

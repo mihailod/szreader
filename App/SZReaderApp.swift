@@ -1401,6 +1401,16 @@ final class AppModel: ObservableObject {
             return
         }
 
+        // Here rather than beside BatCave's branch above, for the reason
+        // Stripovi is: its mirror is the issue's own folder on popboks.com, so
+        // the generic cooldown test already covers it and there is nothing to
+        // repeat. What it cannot use is everything *below* — there is no
+        // archive to fetch, only tiles to reassemble.
+        if let magazine = issue.site.popboksMagazine {
+            downloadPopBoks(issue, magazine: magazine, library: library, cooldown: cooldown)
+            return
+        }
+
         downloading.insert(issueID)
         progress[issueID] = 0
         status = "downloading “\(name)”…"
@@ -1650,6 +1660,131 @@ final class AppModel: ObservableObject {
                                + "\(RetryAfter.phrase(left)) before trying again. "
                                + "The pages already fetched are kept, so it will "
                                + "carry on from where it stopped.")
+                    return
+                }
+
+                try? store.setDownloadFailed(true, issueID: issueID)
+                self.search(self.query)
+                self.status = "download failed"
+                self.failure = Failure(
+                    title: "Download failed",
+                    message: "\u{201C}\(name)\u{201D} could not be fetched.\n\n"
+                           + Library.reason(error))
+            }
+        }
+    }
+
+    /// Fetches a PopBoks issue, a page at a time, a page being a grid of
+    /// tiles.
+    ///
+    /// The slowest download in the app by a wide margin, and not because of
+    /// its size: a 68-page issue is about 42 MB, which is unremarkable, and
+    /// some 2,400 requests, which is not. So the progress line counts pages
+    /// rather than bytes — bytes would sit near zero for minutes and then jump
+    /// — and the fetcher does its own pacing.
+    ///
+    /// A dedicated transport rather than the shared throttled one, for the
+    /// reason Stripovi uses one: that throttle spaces every host 1.5 seconds
+    /// apart, which here would turn one issue into an hour.
+    private func downloadPopBoks(_ issue: StoredIssue, magazine: PopBoks.Magazine,
+                                 library: Library, cooldown: HostCooldown) {
+        guard let store else { return }
+        let issueID = issue.id
+        let name = issue.title ?? issue.code ?? "issue"
+
+        guard let code = issue.code, let archiveID = Int(code),
+              let catalogue = try? PopBoksCatalog.shipped(magazine),
+              let entry = catalogue.issues.first(where: { $0.id == archiveID }) else {
+            failure = Failure(
+                title: "Download failed",
+                message: "\u{201C}\(name)\u{201D} is not in the shipped index. "
+                       + "Switch the source off and on again to rebuild the shelf.")
+            return
+        }
+
+        downloading.insert(issueID)
+        progress[issueID] = 0
+        status = "fetching \u{201C}\(name)\u{201D}\u{2026}"
+
+        Task { @MainActor [weak self] in
+            // Bound on the main actor for the same reason as `seedInBackground`:
+            // the fetcher's progress closure runs off it, and must capture an
+            // immutable optional rather than read a weak variable.
+            let model = self
+            do {
+                let fetcher = PopBoksFetcher(transport: URLSessionTransport())
+                let result = try await fetcher.fetch(
+                    issue: entry, in: catalogue,
+                    into: library.directory(forIssue: issueID)) { done, total in
+                        Task { @MainActor in
+                            guard let model, total > 0 else { return }
+                            model.progress[issueID] = Double(done) / Double(total)
+                            model.status = "fetching \u{201C}\(name)\u{201D} \u{2014} "
+                                         + "page \(done) of \(total)"
+                        }
+                    }
+
+                guard let self else { return }
+                try store.recordDownload(issueID: issueID, mirrorURL: issue.code ?? "",
+                                         path: result.file, bytes: result.bytes)
+                self.downloading.remove(issueID)
+                self.progress[issueID] = nil
+                self.transferred[issueID] = nil
+                try? store.setDownloadFailed(false, issueID: issueID)
+
+                // The archive's 150-pixel listing thumbnail stands in until
+                // the issue's own first page can replace it.
+                let captured = try? await Task.detached(priority: .utility) {
+                    try library.captureCover(issueID: issueID)
+                }.value
+                if let captured { try? store.setCoverURL(captured, issueID: issueID) }
+
+                let mb = Double(result.bytes) / 1_048_576
+                var note = String(format: "fetched %d pages, %.1f MB", result.pages, mb)
+                note += " (\(result.tiles) tiles)"
+                // Pages the archive counts but does not hold. Said out loud
+                // because the issue really is short and a reader who counts
+                // will notice — and nothing here can fix it.
+                if !result.missingFromSource.isEmpty {
+                    let gone = result.missingFromSource.count
+                    note += " \u{2014} \(gone) page\(gone == 1 ? "" : "s") "
+                          + "missing from the archive"
+                }
+                // A page the archive holds all but a corner of. Rare — one
+                // known case in 208 issues — and worth saying, because that
+                // page really does have a white patch on it and nothing here
+                // can mend it.
+                if result.blankTiles > 0 {
+                    note += " \u{2014} \(result.blankTiles) missing "
+                          + "tile\(result.blankTiles == 1 ? "" : "s") left blank"
+                }
+                self.refresh(note: note)
+            } catch {
+                guard let self else { return }
+                self.downloading.remove(issueID)
+                self.progress[issueID] = nil
+                self.transferred[issueID] = nil
+
+                if error is CancellationError {
+                    self.search(self.query)
+                    self.status = "stopped"
+                    return
+                }
+
+                if let refusal = error as? DownloadError, refusal.isRateLimited {
+                    var stated: TimeInterval?
+                    if case .rateLimited(_, let wait) = refusal { stated = wait }
+                    cooldown.begin(forHost: PopBoks.host, wait: stated)
+                    self.search(self.query)
+                    self.status = "asked to wait"
+                    let left = cooldown.remaining(forHost: PopBoks.host) ?? 0
+                    self.failure = Failure(
+                        title: "Too many requests",
+                        message: "\u{201C}\(name)\u{201D} was not finished.\n\n"
+                               + refusal.description
+                               + "\n\nDownloads from \(PopBoks.host) will wait "
+                               + "\(RetryAfter.phrase(left)) before trying again. The "
+                               + "pages already fetched are kept.")
                     return
                 }
 

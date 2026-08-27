@@ -53,7 +53,12 @@ public extension Store {
         // nothing. Worse than the time is the peak — the seeds run
         // concurrently, one per enabled source, so fourteen fully decoded
         // catalogues could be live at once.
-        let stamp = Self.digest(data)
+        // The digest, plus the seed's own revision where it has one — see
+        // `IssueSite.seedRevision`. Without that, a seed that changes what it
+        // writes is invisible here: the bytes it reads are identical, so the
+        // stamp matches and the change never reaches a library that had
+        // already seeded.
+        let stamp = Self.stamp(digest: Self.digest(data), site: site)
         if try meta(Self.catalogueStamp(for: site)) == stamp { return .alreadyCurrent }
         // Stripovi ships a different shape, because its comics are not files.
         // Routed here rather than from the app so that "this source has a
@@ -61,6 +66,14 @@ public extension Store {
         // `catalogueResource` and does not need to know there are two formats.
         if site == .stripovi {
             return try seedStripovi(try StripoviCatalog.decode(data), stamp: stamp)
+        }
+        // PopBoks ships a third shape, because its issues are not files either
+        // — and unlike Stripovi's, its pages are not files. Routed here for
+        // the same reason Stripovi is: "this source has a shipped index" stays
+        // one question with one answer, and `AppModel` asks
+        // `catalogueResource` without needing to know there are three formats.
+        if site.popboksMagazine != nil {
+            return try seedPopBoks(try PopBoksCatalog.decode(data), stamp: stamp)
         }
         // Stamped by content, not by the date inside it. `generated` is a
         // calendar day, so two builds on one day are indistinguishable — and
@@ -87,6 +100,20 @@ public extension Store {
     /// the catalogue on every single launch.
     static func digest(_ data: Data) -> String {
         SHA256.hex(data)
+    }
+
+    /// What is stored to say "this source is up to date".
+    ///
+    /// The catalogue's digest on its own for almost every source, because for
+    /// almost every source the file is the whole of what the seed writes. A
+    /// source whose seed has changed what it writes carries its revision
+    /// alongside — see `IssueSite.seedRevision` — so that a library holding
+    /// the previous seed's rows notices and re-runs.
+    ///
+    /// Appended rather than mixed in, so a stamp stays readable in the `meta`
+    /// table and it is obvious from the value which revision wrote it.
+    static func stamp(digest: String, site: IssueSite) -> String {
+        site.seedRevision == 0 ? digest : "\(digest)/r\(site.seedRevision)"
     }
 
     /// Applies a catalogue, skipping the work when this exact build of it is

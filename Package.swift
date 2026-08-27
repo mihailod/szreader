@@ -171,6 +171,14 @@ let package = Package(
         .executableTarget(name: "vintageapple-build", dependencies: ["SZKit", "BuildSupport"],
                           path: "Sources/VintageAppleBuild",
                           swiftSettings: [.swiftLanguageMode(.v6)]),
+        // Mostly a measuring tool. PopBoks publishes its whole index inside
+        // the script that draws each magazine's front page, so there is
+        // nothing to crawl — but it records no page *sizes*, and this archive
+        // serves tiles rather than pages, so the grid each issue is cut into
+        // has to be probed for. See `PopBoksCatalog.Issue.rows`.
+        .executableTarget(name: "popboks-build", dependencies: ["SZKit", "BuildSupport"],
+                          path: "Sources/PopBoksBuild",
+                          swiftSettings: [.swiftLanguageMode(.v6)]),
         // Still v5: the concurrency tests deliberately share one Store across
         // threads to prove the locking works, which mode 6 cannot see is safe.
         .testTarget(name: "SZKitTests", dependencies: ["SZKit"],

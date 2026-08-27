@@ -27,6 +27,10 @@ spike/*.csv
 # Section pages and PDF headers `vintageapple-build` has already fetched.
 .vintageapple-cache/
 
+# The two index scripts, plus ~25,000 HEAD results from measuring every
+# issue's tile grid. Derived and bulky, same as the caches above.
+.popboks-cache/
+
 # --- Build artefacts ---------------------------------------------------
 .build/
 .swiftpm/

@@ -32,7 +32,7 @@ simulator. `unrar` and the LZMA SDK are vendored under `Sources/CUnrar` and
 ## Test fixtures
 
 Saved pages under `Tests/Fixtures/`, one directory per source: `retrospec`, `bombjack`,
-`batcave`, `comicbookplus`, `stripovi`, `atarimania`, `vintageapple`. They are public,
+`batcave`, `comicbookplus`, `stripovi`, `atarimania`, `vintageapple`, `popboks`. They are public,
 static pages carrying no private links, so those tests run on a fresh clone with no
 network. Archive.org's are inline in the tests instead — trimmed copies of the real
 metadata responses for the items the import was built against.
@@ -45,7 +45,7 @@ of its links were understood.
 
 ## Shipped catalogues
 
-Sixteen JSON files under `Sources/SZKit/Resources/`, each seeded by a switch in Settings.
+Eighteen JSON files under `Sources/SZKit/Resources/`, each seeded by a switch in Settings.
 They are rebuilt by hand, and every tool refuses to write a catalogue that fails its own checks.
 
 ```sh
@@ -54,15 +54,35 @@ swift run archive-build        # archive-catalog.json
 swift run bombjack-build       # bombjack-*.json (seven)
 swift run atarimania-build     # atarimania-catalog.json
 swift run vintageapple-build   # vintageapple-magazines.json, vintageapple-books.json
+swift run popboks-build        # popboks-dzuboks.json, popboks-ritam.json
 ```
 
 They are Swift tools rather than scripts so they use the same code the app runs and the tests
 cover. All but `archive-build` cache what they fetch — `.retrospec-cache/`, `.bombjack-cache/`,
-`.atarimania-cache/`, `.vintageapple-cache/` — so a second run costs nothing and `--no-network`
+`.atarimania-cache/`, `.vintageapple-cache/`, `.popboks-cache/` — so a second run costs nothing and `--no-network`
 rebuilds from the cache alone. Deleting a cache directory is how you ask for fresh copies.
 `archive-build` makes a dozen requests to archive.org's metadata API and caches nothing.
 
 `vintageapple-build` takes `--group magazines|books` to write one shelf rather than both.
+
+`popboks-build` takes `--magazine dzuboks|ritam` to write one of the two rather than both.
+
+### PopBoks
+
+The odd one in a different way from `spectrum-build`: almost all of its work is *measuring*.
+Both magazines publish their entire index as literal arrays inside the script that draws their
+front page, so there is nothing to crawl — two files and the index is read. What the scripts do
+not record is the tile grid each page is cut into, and that archive stores no page images at
+all: a page is a 5x7 grid of 256-pixel tiles which the app fetches and stitches back together.
+
+So the tool probes every issue's first, middle and last page, walking outwards along **two**
+rows and **two** columns and keeping the largest answer. Two of each because the archive has
+holes *in* the measuring lines — one missing tile made Džuboks 88 measure four columns wide,
+and another made Džuboks 34 measure three rows tall, when both are ordinary seven-row pages.
+Either measurement would have shipped a catalogue that silently cropped real pages.
+
+That is ~25,000 HEAD requests, cached, so only the first run costs anything.
+
 
 ### Spectrum Computing
 

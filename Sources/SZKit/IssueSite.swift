@@ -70,6 +70,18 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     case bombjackHardware
     case bombjackGames
     case bombjackOther
+    // PopBoks: two ex-Yugoslav music magazines, scanned complete.
+    //
+    // A shipped index like Stripovi's, and unlike any of them in what it
+    // downloads: this archive publishes no page files at all, only 256-pixel
+    // tiles, so a page is assembled from thirty-five of them before it is
+    // written. See `PopBoksPage`.
+    //
+    // Two switches rather than one. They are different magazines from
+    // different decades — Džuboks ran 1974-1985 and Ritam 1989-1995 — and a
+    // reader may well want one and not the other.
+    case popboksDzuboks
+    case popboksRitam
     // The reader's own files, copied onto the device over a cable or handed
     // to the app from AirDrop or the Files app.
     //
@@ -98,6 +110,13 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
             guard let group = spectrumGroup else { return rawValue }
             return "Spectrum Computing: \(group.display)"
         case .atarimania:    return "Atarimania"
+        case .popboksDzuboks, .popboksRitam:
+            // "PopBoks: Džuboks" rather than "Džuboks". As with the groups
+            // below, this string is written into the publisher column and the
+            // search index of every seeded row, and a magazine's name on its
+            // own in a publisher filter does not say which archive it is from.
+            guard let magazine = popboksMagazine else { return rawValue }
+            return "PopBoks: \(magazine.display)"
         case .local:         return "Local Files"
         case .vintageAppleMagazines, .vintageAppleBooks:
             guard let group = vintageAppleGroup else { return rawValue }
@@ -149,6 +168,8 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
             return spectrumGroup?.resource
         case .atarimania:                return "atarimania-catalog"
+        case .popboksDzuboks, .popboksRitam:
+            return popboksMagazine?.resource
         case .vintageAppleMagazines, .vintageAppleBooks:
             return vintageAppleGroup?.resource
         default:                         return bombjackCategory?.resource
@@ -171,10 +192,56 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
         case .bombjackOther:              return .other
         case .stripzona, .retrospec, .archive, .comicbookplus, .batcave, .stripovi,
              .spectrumMagazines, .spectrumFanzines, .spectrumBooks, .atarimania,
-             .vintageAppleMagazines, .vintageAppleBooks, .local:
+             .vintageAppleMagazines, .vintageAppleBooks, .popboksDzuboks,
+             .popboksRitam, .local:
             return nil
         }
     }
+
+    /// Bumped when the *seed* starts writing something that the catalogue
+    /// file itself does not reflect.
+    ///
+    /// A seed is normally stamped with a digest of the bytes it read, which
+    /// answers "is this build of the catalogue already in?" in one row read
+    /// and no decode. That question is the wrong one whenever the seed's own
+    /// behaviour changes: PopBoks began writing a mirror row per issue without
+    /// its catalogue changing by a byte, so every library that had already
+    /// seeded it would have skipped the correction for ever and kept issues
+    /// that could not say where they came from.
+    ///
+    /// Folded into the stamp rather than checked separately, so the cheap path
+    /// stays cheap — the comparison is still one string against one row.
+    /// Non-zero only where it is needed, because giving every source a
+    /// revision would change every stamp at once and re-seed all twenty-eight
+    /// thousand rows on the next launch to fix two hundred.
+    public var seedRevision: Int {
+        switch self {
+        // 1: writes the issue's folder on the archive as its mirror, so the
+        //    info panel names where it came from like every other source.
+        case .popboksDzuboks, .popboksRitam: return 1
+        default:                             return 0
+        }
+    }
+
+    /// The PopBoks magazine this source carries, or nil if it is not one.
+    ///
+    /// The counterpart of `bombjackCategory` and `spectrumGroup`, and here for
+    /// the same reason: one place that knows which case is which magazine, so
+    /// a switch label, a catalogue file and a download path cannot drift.
+    public var popboksMagazine: PopBoks.Magazine? {
+        switch self {
+        case .popboksDzuboks: return .dzuboks
+        case .popboksRitam:   return .ritam
+        default:              return nil
+        }
+    }
+
+    /// The two that make up PopBoks, in the order the settings list shows
+    /// them.
+    public static let popboksSites: [IssueSite] =
+        PopBoks.Magazine.inMenuOrder.compactMap { magazine in
+            IssueSite.allCases.first { $0.popboksMagazine == magazine }
+        }
 
     /// Whether the reader chooses to see this source at all.
     ///

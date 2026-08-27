@@ -28,20 +28,26 @@
 
 ## Coming soon in 1.3
 
+* **Added content source:**
+
+  * **[PopBoks](https://www.popboks.com)** — The scanned archives of two
+ex-Yugoslav music magazines: **Džuboks** (1974–1985) and **Ritam** (1989–1995),
+in two switchable sub-sources.
+
 * **Local Files support** - Import files from your Mac and/or device in three ways:
 
   1. **Using USB cable** - Connect your device and StreamZine folder will appear
   in the Finder's **Files** list for it. Drag and drop into it.
 
   2. **Using AirDrop** - Send files from your Mac to your device and open them with StreamZine.
-The StreamZine folder also appears under **On My iPad** in the Files app, so you can
-copy into it over Wi-Fi either from iCloud Drive, or a Mac mounted with
-Files ▸ Connect to Server.
+  The StreamZine folder also appears under **On My iPad** in the Files app, so you can
+  copy into it over Wi-Fi either from iCloud Drive, or a Mac mounted with
+  Files ▸ Connect to Server.
 
   3. **Import ▸ From Device** - Opens a file browser to find and pick any file from the device itself.
 
-* Local Files is always ON (no Settings switch) because the device itself is the source.
-Remove All Downloads ignores local files; Delete Library asks before deleting them.
+  * Local Files is always ON (no Settings switch) because the device itself is the source.
+  Remove All Downloads ignores local files; Delete Library asks before deleting them.
 
 ---
 

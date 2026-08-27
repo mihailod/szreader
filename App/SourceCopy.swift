@@ -46,6 +46,8 @@ struct SourceCopy {
         case .spectrumMagazines, .spectrumFanzines, .spectrumBooks:
             return spectrum(site)
         case .atarimania:    return atarimania
+        case .popboksDzuboks, .popboksRitam:
+            return popboks(site)
         case .local:         return local
         case .vintageAppleMagazines, .vintageAppleBooks:
             return vintageApple(site)
@@ -284,6 +286,51 @@ struct SourceCopy {
               + "downloads each issue from the site on demand. This is an "
               + "independent reader, not affiliated with or endorsed by "
               + "Atarimania, and it hosts none of their scans.")
+
+    /// The two PopBoks magazines, described from which one they are.
+    ///
+    /// One shape rather than two blocks, as with the groups below: they are
+    /// two magazines from one archive, and a second copy of the disclaimer is
+    /// a second chance for one of them to drift.
+    ///
+    /// "magazines" throughout, which is simply what these are — a music press
+    /// archive with not a comic in it. The house rule that bars the other word
+    /// in this layer never comes up.
+    private static func popboks(_ site: IssueSite) -> SourceCopy {
+        let magazine = site.popboksMagazine
+        return SourceCopy(
+            switchTitle: magazine?.display ?? "PopBoks",
+            detail: detail(for: magazine),
+            shelfPhrase: "ex-Yugoslav music magazines",
+            // The society is named first and the site second, because the
+            // archive is their work and popboks.com is where they put it.
+            creditHeading: "PopBoks / Društvo ljubitelja popularne kulture",
+            // Credited to the people who made it, the way RetroSpec and
+            // BombJack are: both of these magazines are readable today because
+            // this society scanned them page by page, and neither run survives
+            // in full anywhere else.
+            credit: "The PopBoks sources index the scanned archives of the "
+                  + "Yugoslav music magazines Džuboks (1974\u{2013}1985) and Ritam "
+                  + "(1989\u{2013}1995), published by Društvo ljubitelja popularne "
+                  + "kulture at popboks.com and dljpk.com. The app ships the "
+                  + "index and fetches an issue from the archive only when you "
+                  + "ask for it. This is an independent reader, not affiliated "
+                  + "with or endorsed by PopBoks or the society, and it hosts "
+                  + "none of their scans.")
+    }
+
+    /// What one PopBoks magazine holds, in the terms someone choosing would
+    /// use.
+    private static func detail(for magazine: PopBoks.Magazine?) -> String {
+        switch magazine {
+        case .ritam:
+            return "The Belgrade music magazine, 1989\u{2013}1995 \u{2014} 25 issues "
+                 + "across its four runs, including the 1993 yearbook."
+        case .dzuboks, .none:
+            return "The Yugoslav rock magazine, 1974\u{2013}1985 \u{2014} 183 issues "
+                 + "scanned from paper, the whole run bar eleven."
+        }
+    }
 
     /// The two Vintage Apple shelves, described from their group.
     private static func vintageApple(_ site: IssueSite) -> SourceCopy {

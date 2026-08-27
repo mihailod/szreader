@@ -1367,10 +1367,27 @@ struct LibraryView: View {
 
     /// Three distinct empty cases, because "nothing here" for three different
     /// reasons needs three different next steps.
-    /// Every source is switched off, so the shelf is blank by instruction
-    /// rather than because the library is empty. Checked before everything
-    /// else: with nothing switched on there is no library to describe.
-    private var allSourcesOff: Bool { model.visibleSites.isEmpty }
+    /// Every source the reader can switch is off, so the shelf is blank by
+    /// instruction rather than because the library is empty. Checked before
+    /// everything else: with nothing switched on there is no library to
+    /// describe.
+    ///
+    /// **Local Files does not count, and leaving it out is the whole of this
+    /// test.** It has no switch — `isEnabled` answers yes for it always, so
+    /// that a folder the reader filled cannot be hidden by a control that does
+    /// not exist — which meant `visibleSites` was never empty and this was
+    /// never true. The shelf then fell through to "nothing matches that search
+    /// / filter", blaming a search for a shelf emptied by the switches, with
+    /// no way out offered: `offersSourceSwitches` reads this too, so the
+    /// button to Settings went with it.
+    ///
+    /// `issueCount` is deliberately not consulted. It counts the whole table
+    /// rather than what is showing, so a library with sources switched off
+    /// still counts every hidden row — testing it here would restore exactly
+    /// the wrong answer for anyone who had seeded anything.
+    private var allSourcesOff: Bool {
+        !model.visibleSites.contains(where: \.isSwitchable)
+    }
 
     private var emptyIcon: String {
         if allSourcesOff { return "eye.slash" }

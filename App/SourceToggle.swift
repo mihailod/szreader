@@ -82,7 +82,7 @@ struct LanguageToggle: View {
     private var detail: String {
         switch language {
         case .exYU:
-            return "StripZona, Stripovi.com and RetroSpec, and Archive.org."
+            return "StripZona, Stripovi.com, RetroSpec and PopBoks, and Archive.org."
         case .english:
             return "Every other source, and Archive.org — it carries both."
         }
@@ -125,7 +125,7 @@ struct SourceList: View {
     private var standalone: [IssueSite] {
         IssueSite.allCases.filter {
             $0.isSwitchable && $0.bombjackCategory == nil && $0.spectrumGroup == nil
-                && $0.vintageAppleGroup == nil
+                && $0.vintageAppleGroup == nil && $0.popboksMagazine == nil
         }
     }
 
@@ -137,12 +137,27 @@ struct SourceList: View {
                     .padding(.vertical, 10)
                 Divider().padding(.leading, 16)
             }
+            popboksGroup
+            Divider().padding(.leading, 16)
             bombJackGroup
             Divider().padding(.leading, 16)
             spectrumGroup
             Divider().padding(.leading, 16)
             vintageAppleGroup
         }
+    }
+
+    /// The two magazines, under one heading — same shape as the groups below.
+    ///
+    /// First among the groups because it is the only ex-YU one, and the
+    /// standalone switches above it are mostly ex-YU too: a reader who came
+    /// for the Yugoslav shelves finds them together rather than past three
+    /// archives of English computer press.
+    private var popboksGroup: some View {
+        grouped(title: "PopBoks",
+                blurb: "Scanned ex-Yugoslav music magazines \u{2014} the complete "
+                     + "runs of Džuboks and Ritam.",
+                sites: IssueSite.popboksSites)
     }
 
     /// The two, under one heading — same shape as the groups above.
