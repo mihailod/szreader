@@ -1857,14 +1857,22 @@ struct IssueDetail: View {
     /// changes when a download finishes or is removed.
     @State private var downloadedSize: Int64?
 
-    /// "Downloading… 20% (2MB of 10MB)".
+    /// "Downloading… 20% (2MB of 10MB)", or "Downloading… 20% (page 8 of 40)".
     ///
-    /// The byte counts appear only when the downloader reported them. The
-    /// page-image sources count pages instead, and there the line stays the
-    /// percentage alone rather than showing a size nobody measured.
+    /// Whichever figure the source actually reports: the archive downloads
+    /// weigh bytes, the page-image sources count pages, and the status line
+    /// along the bottom has always named both. A reader who opens this sheet
+    /// to watch a download should not have to look somewhere else to see how
+    /// far along it is, so what the bar says, this says.
     private var downloadingText: String {
+        // Extraction follows the transfer inside the same wait, and it is the
+        // one stretch with nothing to count.
+        if model.stage[current.id] == .unpacking { return "Unpacking…" }
         guard let fraction = model.progress[current.id] else { return "Downloading…" }
         let percent = String(format: "Downloading… %.0f%%", fraction * 100)
+        if case .pages(let done, let total)? = model.stage[current.id] {
+            return "\(percent) (page \(done) of \(total))"
+        }
         guard let bytes = model.transferred[current.id], bytes.expected > 0 else {
             return percent
         }

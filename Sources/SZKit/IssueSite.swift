@@ -15,19 +15,43 @@ import Foundation
 /// folder. One table and a column saying where a row came from keeps every
 /// one of those call sites correct without touching them.
 public enum IssueSite: String, Sendable, CaseIterable, Equatable {
+    // The order below is the order a reader meets these in: it is what the
+    // Settings list, the shelf's source filter and the Acknowledgements
+    // screen all walk, and none of them keeps an order of its own.
+    //
+    // Two rules make it. The ex-Yugoslav sources come first, then Archive.org
+    // — which carries both languages and belongs to neither — then the
+    // English archives; and inside each of those, comics before retro
+    // computing before music. That is the order of what this app is for, not
+    // of when a source happened to be added.
     case stripzona
+    // A shipped index like RetroSpec's, but of loose page images rather than
+    // archives: 31 Croatian web comics, none of which is a file. Its
+    // catalogue is its own shape for that reason — see `StripoviCatalog`.
+    case stripovi
     case retrospec
+    // PopBoks: two ex-Yugoslav music magazines, scanned complete.
+    //
+    // A shipped index like Stripovi's, and unlike any of them in what it
+    // downloads: this archive publishes no page files at all, only 256-pixel
+    // tiles, so a page is assembled from thirty-five of them before it is
+    // written. See `PopBoksPage`.
+    //
+    // Two switches rather than one. They are different magazines from
+    // different decades — Džuboks ran 1974-1985 and Ritam 1989-1995 — and a
+    // reader may well want one and not the other.
+    case popboksDzuboks
+    case popboksRitam
+    // Both languages at once, which is why it sits between them rather than
+    // in either: the archive holds the ex-Yugoslav scans and the English ones
+    // alike, and `SourceLanguage` counts it in both.
     case archive
-    case comicbookplus
     // Like StripZona and Comic Book Plus, a source with no shipped index:
     // the site publishes tens of thousands of issues and no catalogue of
     // them, so it arrives a page at a time through the browser. Unlike
     // either, one page is one issue rather than a run — see `BatCavePage`.
     case batcave
-    // A shipped index like RetroSpec's, but of loose page images rather than
-    // archives: 31 Croatian web comics, none of which is a file. Its
-    // catalogue is its own shape for that reason — see `StripoviCatalog`.
-    case stripovi
+    case comicbookplus
     // A shipped index like RetroSpec's, but assembled rather than scraped:
     // ZXDB stores a URL template per magazine and `spectrum-build` expands it
     // against each issue, then asks archive.org what that item really holds.
@@ -39,21 +63,6 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     case spectrumMagazines
     case spectrumFanzines
     case spectrumBooks
-    // Atarimania: 85 titles of scanned Atari press, one direct PDF per issue.
-    //
-    // One source rather than split, unlike BombJack and the Sinclair shelves:
-    // at ~1,900 issues it seeds in a fraction of a second, and the material is
-    // one archive of one machine's press with no natural seam to split on.
-    case atarimania
-    // Vintage Apple: the Apple-world press, books and manuals, as static
-    // tables of PDFs.
-    //
-    // Two switches, and the split is about worth rather than size: the
-    // magazines are largely on archive.org already — which holds more Byte
-    // than this site does — while the books are about half unavailable
-    // anywhere else. See `VintageApple.Group`.
-    case vintageAppleMagazines
-    case vintageAppleBooks
     // BombJack ships as seven catalogues rather than one.
     //
     // As a single source it was 18,219 rows: fifteen seconds to seed, which
@@ -70,18 +79,21 @@ public enum IssueSite: String, Sendable, CaseIterable, Equatable {
     case bombjackHardware
     case bombjackGames
     case bombjackOther
-    // PopBoks: two ex-Yugoslav music magazines, scanned complete.
+    // Atarimania: 85 titles of scanned Atari press, one direct PDF per issue.
     //
-    // A shipped index like Stripovi's, and unlike any of them in what it
-    // downloads: this archive publishes no page files at all, only 256-pixel
-    // tiles, so a page is assembled from thirty-five of them before it is
-    // written. See `PopBoksPage`.
+    // One source rather than split, unlike BombJack and the Sinclair shelves:
+    // at ~1,900 issues it seeds in a fraction of a second, and the material is
+    // one archive of one machine's press with no natural seam to split on.
+    case atarimania
+    // Vintage Apple: the Apple-world press, books and manuals, as static
+    // tables of PDFs.
     //
-    // Two switches rather than one. They are different magazines from
-    // different decades — Džuboks ran 1974-1985 and Ritam 1989-1995 — and a
-    // reader may well want one and not the other.
-    case popboksDzuboks
-    case popboksRitam
+    // Two switches, and the split is about worth rather than size: the
+    // magazines are largely on archive.org already — which holds more Byte
+    // than this site does — while the books are about half unavailable
+    // anywhere else. See `VintageApple.Group`.
+    case vintageAppleMagazines
+    case vintageAppleBooks
     // The reader's own files, copied onto the device over a cable or handed
     // to the app from AirDrop or the Files app.
     //

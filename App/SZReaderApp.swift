@@ -91,6 +91,15 @@ final class AppModel: ObservableObject {
     /// their counts and their warnings have to say how much is actually
     /// going.
     @Published var shippedCount = 0
+    /// How many of the reader's own files are on the shelf.
+    ///
+    /// Published, unlike `localFileTotals` beside the folder scan: Settings
+    /// names this number in a heading, and a heading cannot put a database
+    /// query in a view body — that view redraws on every switch thrown and on
+    /// every line the status bar writes. Refreshed wherever the other counts
+    /// are, which covers the folder itself: a scan that found anything ends
+    /// in `refresh(note:)`.
+    @Published var localFileCount = 0
     /// 0...1 per issue being fetched, for the progress bar.
     @Published var progress: [Int: Double] = [:]
     /// Series the reader has narrowed to. Empty means every series.
@@ -306,7 +315,7 @@ final class AppModel: ObservableObject {
     /// and re-runs the search, and fifteen of those on one tap is a freeze.
     /// The flags all move first, and the shelf is rebuilt once at the end.
     func setLanguage(_ language: SourceLanguage, enabled: Bool) {
-        movingLanguage = true
+        movingSeveral = true
         for site in language.sites {
             setSource(site, enabled: enabled)
         }
@@ -319,13 +328,33 @@ final class AppModel: ObservableObject {
         for site in SourceLanguage.sharedSites {
             setSource(site, enabled: sharedStaysOn)
         }
-        movingLanguage = false
+        movingSeveral = false
         rebuildForVisibleSources()
     }
 
-    /// True while `setLanguage` is moving a language's switches, which is what
-    /// the per-source work below reads to know it is one of many.
-    private var movingLanguage = false
+    /// Moves an archive's catalogues together, as the one switch they are
+    /// shown as.
+    ///
+    /// PopBoks ships as two catalogues — Džuboks and Ritam — and is one
+    /// archive of one society's scanning to everybody who is not this app's
+    /// seeder, so Settings offers one switch for it. Batched like
+    /// `setLanguage` and for the same reason: each `setSource` rebuilds the
+    /// filter menus and re-runs the search, and that is worth doing once.
+    func setSources(_ sites: [IssueSite], enabled: Bool) {
+        guard sites.count > 1 else {
+            for site in sites { setSource(site, enabled: enabled) }
+            return
+        }
+        movingSeveral = true
+        for site in sites { setSource(site, enabled: enabled) }
+        movingSeveral = false
+        rebuildForVisibleSources()
+    }
+
+    /// True while several switches are being moved as one — a language, or an
+    /// archive shown as a single switch — which is what the per-source work
+    /// below reads to know it is one of many.
+    private var movingSeveral = false
 
     /// Loads the catalogue the first time its source is switched on, then
     /// rebuilds the shelf around whatever is now visible.
@@ -341,16 +370,18 @@ final class AppModel: ObservableObject {
             // fifteen seconds for the largest catalogue, with the settings
             // sheet still on screen and nothing moving.
             //
-            // Silent when a language is moving: one switch seeds up to
-            // fifteen sources, and fifteen alerts that each replace the last
-            // amount to one alert naming whichever source happened to finish
-            // second-to-last. The status line still says what is loading.
-            seedInBackground(site, announce: !movingLanguage)
+            // Silent when one switch is moving several sources: alerts that
+            // each replace the last amount to one alert naming whichever
+            // source happened to finish second-to-last, and the count in it
+            // would cover only that one. True of a language's fifteen and of
+            // PopBoks's two alike. The status line still says what is
+            // loading.
+            seedInBackground(site, announce: !movingSeveral)
         }
         // A language switch moves up to fifteen of these, and the rebuild
         // below is worth doing once when the last of them has moved — which is
         // what `setLanguage` does.
-        guard !movingLanguage else { return }
+        guard !movingSeveral else { return }
         rebuildForVisibleSources()
     }
 
@@ -365,6 +396,7 @@ final class AppModel: ObservableObject {
         issueCount = store?.issueCount ?? 0
         downloadedCount = store?.downloadedCount ?? 0
         shippedCount = store?.shippedCount ?? 0
+        localFileCount = store?.localFileTotals.count ?? 0
         scheduleSearch()
     }
 
@@ -492,6 +524,28 @@ final class AppModel: ObservableObject {
     struct TransferBytes: Sendable, Equatable {
         let received: Int64
         let expected: Int64
+    }
+
+    /// What a download in flight is doing right now, in the words the status
+    /// bar uses.
+    ///
+    /// The status line has always said more than the sheet did: the
+    /// page-image sources count pages there while the sheet showed a bare
+    /// percentage, and the unpacking that follows an archive download was
+    /// named there and nowhere else. Both live here so the panel a reader
+    /// opens says the same thing as the line along the bottom.
+    ///
+    /// Beside `transferred` rather than inside it: bytes off the wire are
+    /// measured, these are the phase they were measured in, and only the
+    /// archive sources report both.
+    @Published var stage: [Int: DownloadStage] = [:]
+
+    enum DownloadStage: Sendable, Equatable {
+        /// A page-image source, part-way through reassembling an issue.
+        case pages(done: Int, total: Int)
+        /// An archive is here and is being extracted. No count to give —
+        /// extraction is all-or-nothing.
+        case unpacking
     }
 
     /// One report from the downloader, crossing threads.
@@ -634,6 +688,7 @@ final class AppModel: ObservableObject {
             issueCount = store.issueCount
             downloadedCount = store.downloadedCount
             shippedCount = store.shippedCount
+            localFileCount = store.localFileTotals.count
             downloadedSizes = store.downloadedBytesByIssue
             diskUsage = library?.diskUsage ?? 0
             freeSpace = Self.freeSpace()
@@ -1464,6 +1519,7 @@ final class AppModel: ObservableObject {
                 // the bar holds near the end rather than pretending to know.
                 if let self {
                     self.progress[issueID] = Self.transferShare
+                    self.stage[issueID] = .unpacking
                     self.status = "unpacking “\(name)”…"
                 }
                 try await Task.detached(priority: .userInitiated) {
@@ -1474,6 +1530,7 @@ final class AppModel: ObservableObject {
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
                 self.transferred[issueID] = nil
+                self.stage[issueID] = nil
                 // A success clears any earlier failure mark.
                 try? self.store?.setDownloadFailed(false, issueID: issueID)
 
@@ -1500,6 +1557,7 @@ final class AppModel: ObservableObject {
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
                 self.transferred[issueID] = nil
+                self.stage[issueID] = nil
 
                 // A host asking for a pause is not a download that failed.
                 // Nothing is wrong with the link, so nothing is marked on the
@@ -1598,6 +1656,7 @@ final class AppModel: ObservableObject {
                     into: library.directory(forIssue: issueID)) { done, total in
                         guard let self, total > 0 else { return }
                         self.progress[issueID] = Double(done) / Double(total)
+                        self.stage[issueID] = .pages(done: done, total: total)
                         self.status = "fetching \u{201C}\(name)\u{201D} \u{2014} page \(done) of \(total)"
                     }
 
@@ -1607,6 +1666,7 @@ final class AppModel: ObservableObject {
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
                 self.transferred[issueID] = nil
+                self.stage[issueID] = nil
                 try? store.setDownloadFailed(false, issueID: issueID)
 
                 // The series poster stands in for every issue of a run until
@@ -1624,6 +1684,7 @@ final class AppModel: ObservableObject {
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
                 self.transferred[issueID] = nil
+                self.stage[issueID] = nil
 
                 // A cancelled fetch is not a failure: the pages already on
                 // disk are kept and the next attempt resumes from them, so
@@ -1719,6 +1780,7 @@ final class AppModel: ObservableObject {
                         Task { @MainActor in
                             guard let model, total > 0 else { return }
                             model.progress[issueID] = Double(done) / Double(total)
+                            model.stage[issueID] = .pages(done: done, total: total)
                             model.status = "fetching \u{201C}\(name)\u{201D} \u{2014} "
                                          + "page \(done) of \(total)"
                         }
@@ -1730,6 +1792,7 @@ final class AppModel: ObservableObject {
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
                 self.transferred[issueID] = nil
+                self.stage[issueID] = nil
                 try? store.setDownloadFailed(false, issueID: issueID)
 
                 // The archive's 150-pixel listing thumbnail stands in until
@@ -1764,6 +1827,7 @@ final class AppModel: ObservableObject {
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
                 self.transferred[issueID] = nil
+                self.stage[issueID] = nil
 
                 if error is CancellationError {
                     self.search(self.query)
@@ -1844,6 +1908,7 @@ final class AppModel: ObservableObject {
                         Task { @MainActor in
                             guard let model, total > 0 else { return }
                             model.progress[issueID] = Double(done) / Double(total)
+                            model.stage[issueID] = .pages(done: done, total: total)
                             model.status = "fetching \u{201C}\(name)\u{201D} \u{2014} "
                                          + "page \(done) of \(total)"
                         }
@@ -1855,6 +1920,7 @@ final class AppModel: ObservableObject {
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
                 self.transferred[issueID] = nil
+                self.stage[issueID] = nil
                 try? store.setDownloadFailed(false, issueID: issueID)
 
                 // The site's listing tile stands in until the comic's own
@@ -1888,6 +1954,7 @@ final class AppModel: ObservableObject {
                 self.downloading.remove(issueID)
                 self.progress[issueID] = nil
                 self.transferred[issueID] = nil
+                self.stage[issueID] = nil
 
                 if error is CancellationError {
                     self.search(self.query)
@@ -2486,6 +2553,7 @@ final class AppModel: ObservableObject {
         issueCount = store?.issueCount ?? 0
         downloadedCount = store?.downloadedCount ?? 0
         shippedCount = store?.shippedCount ?? 0
+        localFileCount = store?.localFileTotals.count ?? 0
         // Before the search below it, which sorts on these when the shelf is
         // in Scan Size order.
         downloadedSizes = store?.downloadedBytesByIssue ?? [:]

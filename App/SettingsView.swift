@@ -172,7 +172,7 @@ struct SettingsView: View {
     /// them.
     private var languages: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("SOURCES WITH LANGUAGES")
+            Text("SOURCE CATEGORIES BY LANGUAGES")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
@@ -182,8 +182,7 @@ struct SettingsView: View {
             .background(Color(.secondarySystemBackground),
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            Text("A language switches the sources below it. Archive.org holds "
-                 + "every language, so it stays while either language is on.")
+            Text("A category switches all its sources.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -201,16 +200,28 @@ struct SettingsView: View {
     /// downloaded is exactly as it was when it comes back.
     private var sources: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("INDIVIDUAL SOURCES")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 6)
+            // Three cards rather than one, in the order the shelf itself is
+            // organised: the ex-Yugoslav archives, then the one that carries
+            // every language, then the English ones. Nineteen switches under
+            // a single heading were a list to be searched; under three they
+            // are a list to be read, and a reader who wants one language can
+            // stop after the band that holds it.
+            ForEach(Array(SourceSegment.allCases.enumerated()), id: \.element) { index, segment in
+                Text(segment.heading)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 16)
+                    .padding(.top, index == 0 ? 0 : 14)
+                    .padding(.bottom, 6)
 
-            SourceList(model: model)
-            .background(Color(.secondarySystemBackground),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                SourceList(model: model, segment: segment)
+                .background(Color(.secondarySystemBackground),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
 
+            // Once, under the last card: it is true of every switch above it,
+            // and repeated three times it would read as three different
+            // promises.
             Text("Hiding a source keeps everything you have read and downloaded.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -228,9 +239,24 @@ struct SettingsView: View {
     /// nothing else in the app would ever mention it — a reader who has not
     /// been told cannot discover that plugging the iPad in and dragging a
     /// file into the Finder window works.
+    /// "YOUR OWN FILES (13 items)", or "(no items yet)" when the folder is
+    /// empty.
+    ///
+    /// The count is in the heading because this card has no switch and no
+    /// number anywhere else: a reader who dragged files in over the cable and
+    /// unplugged comes here to find out whether the app saw them, and the
+    /// answer used to be a sentence describing the feature rather than the
+    /// state of their folder. "Items", not "issues": what is in there is
+    /// whatever they put in there.
+    private var localFilesHeading: String {
+        let count = model.localFileCount
+        guard count > 0 else { return "YOUR OWN FILES (no items yet)" }
+        return "YOUR OWN FILES (\(count) item\(count == 1 ? "" : "s"))"
+    }
+
     private var localFiles: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("YOUR OWN FILES")
+            Text(localFilesHeading)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
@@ -250,14 +276,6 @@ struct SettingsView: View {
             .padding(.vertical, 10)
             .background(Color(.secondarySystemBackground),
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-            Text("Deleting a file on the computer removes it from the shelf too. "
-                 + "\(AppInfo.name) reads these where they sit and never uploads them.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
         }
         .multilineTextAlignment(.leading)
         .frame(maxWidth: 560)

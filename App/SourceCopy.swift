@@ -161,8 +161,7 @@ struct SourceCopy {
         // No count, because there is no catalogue to count — switching this on
         // adds nothing to the shelf and puts an entry in the Import menu,
         // which is what the second sentence says.
-        detail: "\(comicBookPlusHolds.prefix(1).uppercased())\(comicBookPlusHolds.dropFirst()). "
-              + "Browse a title and Import brings its issues onto the shelf.",
+        detail: "Public-domain Golden Age comics and magazines. Browse and bulk Import.",
         shelfPhrase: "public-domain Golden Age comics and pulp magazines",
         creditHeading: "\(IssueSite.comicbookplus.settingsName) (free account needed)",
         // The same disclaimer as the other three, plus the fact specific to
@@ -198,10 +197,10 @@ struct SourceCopy {
     /// thank for a file they copied over themselves. Both loops skip anything
     /// with no switch, and this is the only such source.
     private static let local = SourceCopy(
-        switchTitle: IssueSite.local.settingsName,
-        detail: "Issues you copy onto the iPad yourself. Connect it to a "
-              + "computer and drag files into StreamZine in the Finder, or "
-              + "send one over AirDrop — they appear on the shelf on their own.",
+        // The one row in Settings with no switch beside it, which read as a
+        // switch that had gone missing. The name says why there is none.
+        switchTitle: "\(IssueSite.local.settingsName) (always enabled)",
+        detail: "Manually (USB or AirDrop) imported items.",
         shelfPhrase: "issues you copy onto the iPad yourself",
         creditHeading: IssueSite.local.settingsName,
         credit: "Files you copy onto the device are your own. The app reads "
@@ -209,8 +208,7 @@ struct SourceCopy {
 
     private static let batcave = SourceCopy(
         switchTitle: IssueSite.batcave.settingsName,
-        detail: "A large open repository of comics and magazines. "
-              + "Browse the site and Import brings one issue onto the shelf.",
+        detail: "Import from a large open repository of comics and magazines.",
         shelfPhrase: "a large open repository of comics and magazines",
         creditHeading: "BatCave",
         // The same disclaimer the other four carry. It is the sentence doing
@@ -338,10 +336,9 @@ struct SourceCopy {
         return SourceCopy(
             switchTitle: site.vintageAppleGroup?.display ?? "Vintage Apple",
             detail: books
-                ? "Scanned Apple and Mac books, programming guides, manuals and "
-                + "catalogues, including the Inside Macintosh series."
-                : "Scanned Apple-world magazines — Byte, Macworld, MacUser, "
-                + "PC World, Softalk and Apple's develop.",
+                ? "Apple and Mac books, programming guides, manuals and more "
+                + "including the Inside Macintosh series."
+                : "Byte, Macworld, MacUser, and more.",
             shelfPhrase: "scanned Apple magazines and books",
             creditHeading: "Vintage Apple",
             credit: "The Vintage Apple sources index the scanned Apple magazine "
@@ -380,8 +377,7 @@ struct SourceCopy {
     private static func detail(for group: Spectrum.Group?) -> String {
         switch group {
         case .fanzines:
-            return "User-group newsletters and fanzines for the Sinclair "
-                 + "machines, scanned from paper."
+            return "User-group newsletters and fanzines for all Sinclair machines."
         case .books:
             return "The Sinclair programming library by imprint — Usborne, "
                  + "Interface, Melbourne House and more."
@@ -406,11 +402,10 @@ struct SourceCopy {
             return "Scanned computer books, by platform — programming, reference "
                  + "and beginners' guides."
         case .hardware:
-            return "Manuals and reference cards for machines, drives and "
-                 + "peripherals."
+            return "Manuals and reference cards for computers and peripherals."
         case .games:
             return "Printed matter that came with games — manuals, box art, "
-                 + "reference cards and keyboard overlays. Not the games."
+                 + "reference cards and keyboard overlays."
         case .other, .none:
             return "Newsletters, user-group bulletins, software manuals, "
                  + "advertising and catalogues."
