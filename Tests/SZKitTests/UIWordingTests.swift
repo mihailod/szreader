@@ -18,7 +18,7 @@ final class UIWordingTests: XCTestCase {
     /// Named one by one rather than by scanning all of `Sources`, so adding a
     /// file of copy is a decision somebody makes here rather than something
     /// this quietly starts or stops covering.
-    private static let copyInTheKit = ["DeleteCopy.swift"]
+    private static let copyInTheKit = ["DeleteCopy.swift", "SyncCopy.swift"]
 
     private static func sourcesShowingWords() throws -> [(String, String)] {
         let app = root.appendingPathComponent("App")

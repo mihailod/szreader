@@ -215,6 +215,15 @@ final class AppModel: ObservableObject {
     /// precisely the set of people with clipped ones.
     @AppStorage("pageRenderStamp") private var pageRenderStamp = ""
 
+    /// Whether this device has been told that a library arriving from iCloud
+    /// brings no files with it.
+    ///
+    /// Deliberately not synced, and this is the key that most obviously must
+    /// not be: the iPad showing the notice and the flag travelling ahead of
+    /// the reader would silence it on the one device that had never seen it.
+    /// Every device explains itself once, to whoever is holding it.
+    @AppStorage("cloudLinksExplained") private var cloudLinksExplained = false
+
     // MARK: - Sources
 
     /// Whether the forum's issues are shown. On by default: importing a page
@@ -331,8 +340,12 @@ final class AppModel: ObservableObject {
     /// Spelled out rather than left implicit so that adding a preference makes
     /// somebody decide. `PreferenceKeyCoverageTests` fails on any stored key
     /// that is in neither list.
+    /// - `cloudLinksExplained` is a sentence this device has shown to the
+    ///   person holding it. Synced, it would reach a device before that
+    ///   person did and answer a question they had not been asked yet.
     static let deviceOnlyDefaultsKeys = [
         "pageRenderStamp", "retroSpecDefaultResolved", "smartZoomOfferedIn",
+        "cloudLinksExplained",
     ]
 
     /// Sources the reader has switched on.    /// Sources the reader has switched on. Empty is a real answer — it means
@@ -342,18 +355,27 @@ final class AppModel: ObservableObject {
         Set(IssueSite.allCases.filter(isEnabled))
     }
 
-    /// Told to the reader after switching a source on, so a shelf that just
-    /// grew says where the issues came from and how to undo it.
+    /// Told to the reader when the shelf grew under them, and why.
+    ///
+    /// Two things do that: throwing a source switch, and a sync bringing a
+    /// library over from another device. Both are a shelf that suddenly holds
+    /// things nobody asked for on this screen, and both are worth one sentence.
     @Published var sourceNotice: SourceNotice?
 
-    /// One switch-on, in the words shown to whoever threw the switch.
+    /// One of those, in the words shown to whoever caused it.
     ///
-    /// Carries the source as well as the sentence: both places that show this
-    /// are alerts, and an alert titled "RetroSpec" over a message about
-    /// archive.org is worse than no title at all.
+    /// Carries its own title rather than a source: both places that show this
+    /// are alerts, an alert titled "RetroSpec" over a message about
+    /// archive.org is worse than no title at all — and the library arriving
+    /// from iCloud has no source to name.
     struct SourceNotice: Equatable {
-        let site: IssueSite
+        let title: String
         let message: String
+
+        /// A source that has just been switched on, titled with its name.
+        static func source(_ site: IssueSite, _ message: String) -> SourceNotice {
+            SourceNotice(title: site.display, message: message)
+        }
     }
 
     func setSource(_ site: IssueSite, enabled: Bool) {
@@ -590,6 +612,11 @@ final class AppModel: ObservableObject {
                     self.status = ""
                     return
                 }
+                // Before the rebuild, so the count it reads is the one the
+                // reader is about to be shown.
+                if outcome.merged.added > 0 {
+                    self.explainCloudLinks(count: outcome.merged.added)
+                }
                 // Rebuilt rather than searched: arriving issues can bring
                 // editions, heroes and publishers the filter menus have never
                 // offered, and a shelf that gained four hundred issues behind a
@@ -605,6 +632,28 @@ final class AppModel: ObservableObject {
                 self?.status = "iCloud sync failed: \(Library.reason(error))"
             }
         }
+    }
+
+    /// Says once, on this device, that a full shelf with no files is expected.
+    ///
+    /// The confusing state is specific and worth a sentence: every issue is
+    /// there, every cover is grey, and nothing opens. It reaches a reader two
+    /// ways, and both end in the same place —
+    ///
+    /// - a new device, where the sync brings the whole library across and
+    ///   nothing was ever downloaded here;
+    /// - a restored one, where the shelf came back inside the iCloud *backup*
+    ///   and the downloads did not, because the folder they live in is
+    ///   excluded from backup on purpose.
+    ///
+    /// Only when this device holds nothing at all. Zero and not "few": a
+    /// reader with even one download has already met the idea, and explaining
+    /// it to them is noise.
+    private func explainCloudLinks(count: Int) {
+        guard !cloudLinksExplained, count > 0, downloadedCount == 0 else { return }
+        cloudLinksExplained = true
+        sourceNotice = SourceNotice(title: SyncCopy.restoredLibraryTitle,
+                                    message: SyncCopy.restoredLibraryMessage(count: count))
     }
 
     /// Asks the account what the reader's other device has changed.
@@ -996,6 +1045,15 @@ final class AppModel: ObservableObject {
             if !forgotten.isEmpty {
                 status = "\(forgotten.count) download\(forgotten.count == 1 ? " is" : "s are") "
                        + "no longer on this device, and can be fetched again"
+                // Cleared before the notice is offered below.
+                //
+                // `UserDefaults` is inside an iCloud backup, so a restored
+                // device brings this flag back saying it has already
+                // explained itself — and suppresses the sentence in exactly
+                // the case that needs it. A device that has just lost every
+                // file it had is in a new situation whatever it was told last
+                // year.
+                cloudLinksExplained = false
             }
 
             issueCount = store.issueCount
@@ -1007,11 +1065,26 @@ final class AppModel: ObservableObject {
             freeSpace = Self.freeSpace()
             refreshSourceMenus()
             search("")
+            // After the counts, which is what it reads. The restored device
+            // arrives here with a full shelf and no downloads and no sync has
+            // run yet — its number is what the sweep just forgot, since those
+            // are the issues the reader actually had.
+            if !forgotten.isEmpty { explainCloudLinks(count: forgotten.count) }
             // After the shelf exists, and deliberately so: adopting a filter
             // from another device re-runs the query, and there has to be a
             // query to re-run. Before it, the first frame would be drawn from
             // this device's settings and then rearranged under the reader.
             startPreferenceSync()
+            // And the library itself, on the launch as well as on every
+            // return to the front.
+            //
+            // Not left to the scene phase alone. `onChange` reports changes,
+            // and a cold launch is the one moment there is nothing to change
+            // from — so the first run of a fresh install would show an empty
+            // shelf until the reader happened to switch away and back. That is
+            // the worst possible time for it: a new device has nothing else to
+            // show, and an empty shelf reads as sync not working at all.
+            syncLibrary()
             resolveTitles()
             // Anything downloaded whose artwork went away since. See the
             // method: the capture at download time only ever fires once, and
@@ -1250,9 +1323,8 @@ final class AppModel: ObservableObject {
                 if announce, report.inserted > 0 {
                     // "issues", never "comics": these catalogues are
                     // magazines, and the word has to be true of both.
-                    self.sourceNotice = SourceNotice(
-                        site: site,
-                        message: "\(report.inserted) \(site.display) issues are now in "
+                    self.sourceNotice = .source(
+                        site, "\(report.inserted) \(site.display) issues are now in "
                                + "your library. You can hide them again in Settings.")
                 }
                 self.status = report.isEmpty ? "" : "\(site.display) ready"

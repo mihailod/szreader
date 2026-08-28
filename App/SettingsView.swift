@@ -69,7 +69,7 @@ struct SettingsView: View {
         // The same notice the shelf shows, because a source can be switched
         // on from either place and the answer to "where did six hundred
         // magazines come from" should not depend on which.
-        .alert(model.sourceNotice?.site.display ?? "", isPresented: Binding(
+        .alert(model.sourceNotice?.title ?? "", isPresented: Binding(
             get: { model.sourceNotice != nil },
             set: { if !$0 { model.sourceNotice = nil } }
         )) {

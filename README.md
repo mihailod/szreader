@@ -49,6 +49,12 @@ in two switchable sub-sources.
   * Local Files is always ON (no Settings switch) because the device itself is the source.
   Remove All Downloads ignores local files; Delete Library asks before deleting them.
 
+* **iCloud sync across devices** (if signed into the same iCloud account).
+What is synced: Settings, Library, read status,
+pages you stopped on, Importing and deleting. Restoring from iCloud
+and installing on a new device pulls the library in. The only thing not
+synced are downloads -- content download is still your responsibility. 
+
 ---
 
 ## Coming soon in 1.2 (Apple approval in progress...)

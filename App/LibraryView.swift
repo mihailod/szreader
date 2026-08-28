@@ -385,7 +385,7 @@ struct LibraryView: View {
         // Shown wherever the switch was thrown. The empty shelf carries the
         // same switches, so a reader can enable a source without ever opening
         // Settings — and then needs telling what just arrived.
-        .alert(model.sourceNotice?.site.display ?? "", isPresented: Binding(
+        .alert(model.sourceNotice?.title ?? "", isPresented: Binding(
             get: { model.sourceNotice != nil && !showingSettings },
             set: { if !$0 { model.sourceNotice = nil } }
         )) {

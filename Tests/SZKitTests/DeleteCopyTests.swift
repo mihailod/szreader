@@ -179,3 +179,36 @@ extension DeleteCopyTests {
         XCTAssertFalse(message.lowercased().contains("icloud"), message)
     }
 }
+
+/// The sentence shown once per device when a library arrives with no files.
+final class SyncCopyTests: XCTestCase {
+
+    func testItNamesHowManyLinksCameBack() {
+        XCTAssertEqual(SyncCopy.restoredLibraryMessage(count: 2_854),
+                       "Your 2854 library links were restored from iCloud and are "
+                     + "ready for individual re-download.")
+    }
+
+    /// Three agreements in one sentence — "link", "were", "are" — which is
+    /// exactly the shape that reads wrong for one and nobody notices.
+    func testOneLinkReadsAsOne() {
+        XCTAssertEqual(SyncCopy.restoredLibraryMessage(count: 1),
+                       "Your 1 library link was restored from iCloud and is "
+                     + "ready for individual re-download.")
+    }
+
+    /// It promises links, not files. The whole point is that the reading
+    /// material did not come with them.
+    func testItDoesNotPromiseTheFiles() {
+        let message = SyncCopy.restoredLibraryMessage(count: 12)
+        XCTAssertTrue(message.contains("re-download"), message)
+        XCTAssertFalse(message.lowercased().contains("downloaded and ready"), message)
+    }
+
+    func testItNeverSaysComic() {
+        for count in [1, 2, 2_854] {
+            let lowered = SyncCopy.restoredLibraryMessage(count: count).lowercased()
+            XCTAssertFalse(lowered.contains("comic") && !lowered.contains("magazine"))
+        }
+    }
+}

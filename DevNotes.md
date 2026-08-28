@@ -388,3 +388,112 @@ exist because 18,219 rows took fifteen seconds, which iOS kills an app for durin
 split a source by *what the material is* or what it is worth, not by size: the Sinclair shelves
 separate magazines from fanzines from books, and Vintage Apple separates magazines that
 archive.org already holds from books that it does not.
+
+## iCloud
+
+Four things sync, and each one merges by a different rule. Getting a rule wrong does not break
+anything loudly — it produces a library that quietly disagrees with itself — so the rules are
+worth knowing before touching any of it.
+
+**Settings** ride `NSUbiquitousKeyValueStore`: ~33 flat keys, no schema, no container. Which keys
+travel is a decision, not a default — `syncedDefaultsKeys` and `deviceOnlyDefaultsKeys` in
+`AppModel`, and `PreferenceKeyCoverageTests` fails on any `@AppStorage` key in neither list. Three
+keys are deliberately local because they describe *this* device rather than what the reader wants:
+`pageRenderStamp` (how the thumbnails on this disk were drawn), `retroSpecDefaultResolved`, and
+`cloudLinksExplained` (a sentence this device has shown to whoever is holding it).
+
+**Everything else** rides CloudKit's private database, in a **custom zone** — only a custom zone
+answers "what changed since this token", and that question is the whole design. It makes the check
+on every foreground one cheap round trip that usually answers nothing, and it is the only way a
+deletion is distinguishable from an absence.
+
+### What travels, and what does not
+
+Only issues no catalogue can rebuild: **2,854 of 29,749** on a real library. The other nine rows in
+ten come from an index inside the app and are recreated by throwing a source switch — which already
+syncs. Sending them would be tens of thousands of records to reconstruct what a boolean
+reconstructs, and would race the seeder writing the same rows.
+
+Local Files never travel, and not only because the files are absent: `reconcileLocalFiles` deletes
+any `site = local` row whose file is not in the folder, so a synced local row would be created and
+destroyed on the next scan.
+
+Downloads never travel. They are third-party files, they are `isExcludedFromBackup` on purpose, and
+a library of them is measured in gigabytes.
+
+### Identity
+
+`issue.id` is a rowid and means nothing on another device. `IssueIdentity` is `issue_identity_v3`'s
+five terms — site, code, number, `title_folded`, series — SHA-256'd into a record name every device
+computes identically, so two devices that imported the same page independently produce the same
+record and the merge deduplicates itself. Zero collisions across 2,854 real issues.
+
+Two details that look like fussiness and are not. `title_folded` is carried verbatim rather than
+recomputed, because the import folds `title ?? code ?? ""` — recomputing from `title` alone invents
+a second identity for every issue that has no title. And the terms are joined by a **C0 control
+character**: a printable separator occurs in real titles, and `("a", "b|c")` and `("a|b", "c")` are
+then the same issue.
+
+### The merge rules
+
+| What | Rule |
+| --- | --- |
+| Pointers | Union, `COALESCE` on every field. A device that knows less cannot blank what this one knows. |
+| Reading state | Newest wins, **whole**. |
+| Deletions | A fact of their own, in `deleted_record`. |
+
+Reading state is the one worth arguing about. Three of its four values are monotonic, so per-field
+maxima look safe — and are not. Unmarking an issue clears `read_at` and `started_at` together, and a
+per-field merge restores both from the other device's older copy, leaving an issue that can never be
+unmarked while a second device exists. Hence `read_state_at`, which is not derivable from the four
+columns beside it.
+
+Union is right for the first merge and wrong as a standing rule: to a merge that only ever adds, an
+issue deleted here is an issue the other device has and this one lacks, so it comes back. A deletion
+is therefore recorded *before* the row goes — afterwards there is nothing left to derive its record
+name from — and applied through `deleteWithoutRecording`, or two devices tell each other about the
+same removal for ever.
+
+### Things that cost a build to find
+
+**`modifyRecords(atomically: false)` throws only on total failure.** Per-record rejections sit in
+`saveResults`, and discarding that value — the obvious thing to write — makes every rejection
+silent while reporting success. What it was rejecting: a freshly built `CKRecord` carries no change
+tag, and CloudKit will not let a tagless record overwrite one that exists. So *creates* landed and
+*updates* did not, which is why pointers synced and reading state did not. `CloudKitLibrary.write`
+now merges onto the server's copy and retries.
+
+**Nothing syncs unless something calls it.** Three separate bugs, all the same shape: reading state
+did not sync, then deletions did not, then a cold launch showed an empty shelf — each time the
+engine was correct and nothing invoked it. `scheduleSync()` now lives in `refresh(note:)`, the
+chokepoint every shelf-changing mutation already goes through, with the reader's page turns asking
+for themselves. **The whole suite covers what a sync does and none of it covers when the app decides
+to run one**, which is where all three bugs were.
+
+**A column added for syncing is `NULL` on every library that already exists.** `read_state_at`
+needed a backfill or no pre-existing reading state would ever have left the device. Stamped *old*,
+so any genuine change afterwards wins.
+
+### Before shipping
+
+**Deploy the CloudKit schema to Production** — record types `Issue` and `Reading`, in the CloudKit
+Console. It auto-creates in Development only, so a dev build works perfectly while the App Store
+build talks to an empty database.
+
+Development and Production are separate databases and the sync marks know nothing about the
+difference, which would have left the first App Store build believing it had already sent
+everything. `LibrarySync` now treats a *full* read that returns nothing, to a device whose marks
+claim thousands sent, as a fresh account and re-uploads. That also covers clearing iCloud data by
+hand.
+
+`iCloud.com.mihailod.szreader` and the kvstore identifier are both **one-way doors** once shipped:
+change either and every reader's data is orphaned.
+
+### What was deliberately not built
+
+A "restore my downloads" button. The mirrors rot — `markMirrorDead` and the "drugi sken" alternates
+exist because of it — the file hosts rate-limit, which is what `HostCooldown` is for, and the
+page-image sources are roughly a thousand requests an issue. A button that half-works and gets the
+reader IP-blocked is worse than none. Instead a device with a full shelf and no files says so once
+(`SyncCopy.restoredLibraryMessage`). If it is ever wanted, the next step is one synced boolean and a
+"Downloaded elsewhere" filter — not a queue.
