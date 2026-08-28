@@ -28,13 +28,10 @@
 
 ## Coming soon in 1.3
 
-* **Added content source:**
+* **Added content source:** **[PopBoks](https://www.popboks.com)** - Scanned archives of
+  cult ex-Yugoslav music magazines **Džuboks** (1974–1985) and **Ritam** (1989–1995).
 
-  * **[PopBoks](https://www.popboks.com)** — The scanned archives of two
-ex-Yugoslav music magazines: **Džuboks** (1974–1985) and **Ritam** (1989–1995),
-in two switchable sub-sources.
-
-* **Local Files support** - Import files from your Mac and/or device in three ways:
+* **Local Files support** - Import files from your Mac and/or device:
 
   1. **Using USB cable** - Connect your device and StreamZine folder will appear
   in the Finder's **Files** list for it. Drag and drop into it.
@@ -44,16 +41,16 @@ in two switchable sub-sources.
   copy into it over Wi-Fi either from iCloud Drive, or a Mac mounted with
   Files ▸ Connect to Server.
 
-  3. **Import ▸ From Device** - Opens a file browser to find and pick any file from the device itself.
+  3. **Within the app: Import ▸ From Device** - Opens a file browser to find and pick
+  any file from the device itself.
 
   * Local Files is always ON (no Settings switch) because the device itself is the source.
   Remove All Downloads ignores local files; Delete Library asks before deleting them.
 
-* **iCloud sync across devices** (if signed into the same iCloud account).
-What is synced: Settings, Library, read status,
-pages you stopped on, Importing and deleting. Restoring from iCloud
-and installing on a new device pulls the library in. The only thing not
-synced are downloads -- content download is still your responsibility. 
+* **iCloud sync across devices** signed into the same iCloud account.
+  * Syncing: Settings, Library, read status, pages you stopped on, Importing, deleting.
+  * Restoring from iCloud or installing the app on a new device pulls the existing library and app state in.
+  * NOT syncing: content downloads (still your responsibility per App Store policy compliance). 
 
 ---
 
