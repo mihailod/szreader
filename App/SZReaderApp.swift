@@ -492,6 +492,17 @@ final class AppModel: ObservableObject {
     /// sense.
     private var librarySync: LibrarySync?
 
+    /// Whether this device is actually syncing with an iCloud account.
+    ///
+    /// Read by the delete confirmations, which have to say whether deleting
+    /// reaches the reader's other devices — and must not say so to somebody
+    /// who is not signed in and for whom it plainly does not.
+    ///
+    /// Set from a sync that got far enough to know, rather than assumed: the
+    /// entitlement being present says the app is allowed to sync, not that
+    /// there is an account behind it.
+    @Published private(set) var syncsWithICloud = false
+
     /// Whether a sync is in flight, so a fast switch between apps cannot start
     /// a second one over the top of the first.
     private var syncing = false
@@ -555,7 +566,11 @@ final class AppModel: ObservableObject {
             // Not signed in is not an error worth showing. The library works
             // exactly as it did before any of this existed; it simply stays on
             // this device.
-            guard await CloudAvailability.isSignedIn() else { return }
+            guard await CloudAvailability.isSignedIn() else {
+                self?.syncsWithICloud = false
+                return
+            }
+            self?.syncsWithICloud = true
             do {
                 let outcome = try await librarySync.run { stage in
                     Task { @MainActor in
@@ -1140,7 +1155,6 @@ final class AppModel: ObservableObject {
             refresh(note: report.isEmpty
                     ? "imported nothing new"
                     : "imported \(report.issues) issue\(report.issues == 1 ? "" : "s")")
-            scheduleSync()
             search(query)
             // A freshly imported page may be all codes and no titles.
             resolveTitles()
@@ -1288,7 +1302,6 @@ final class AppModel: ObservableObject {
             refresh(note: report.isEmpty
                     ? "imported nothing new"
                     : "imported \(report.issues) issue\(report.issues == 1 ? "" : "s")")
-            scheduleSync()
             search(query)
             return report
         } catch {
@@ -1311,7 +1324,6 @@ final class AppModel: ObservableObject {
             refresh(note: report.isEmpty
                     ? "imported nothing new"
                     : "imported \(report.issues) issue\(report.issues == 1 ? "" : "s")")
-            scheduleSync()
             search(query)
             return report
         } catch {
@@ -1574,7 +1586,6 @@ final class AppModel: ObservableObject {
     func markRead(issueID: Int) {
         guard let store else { return }
         try? store.setRead(true, issueID: issueID)
-        scheduleSync()
         refresh(note: "marked as read")
     }
 
@@ -1584,7 +1595,6 @@ final class AppModel: ObservableObject {
         guard let store else { return }
         do {
             try store.setRead(read, issueID: issue.id)
-            scheduleSync()
             refresh(note: read ? "marked as read" : "marked as unread")
         } catch {
             status = "could not mark: \(Library.reason(error))"
@@ -2887,6 +2897,19 @@ final class AppModel: ObservableObject {
         refreshSourceMenus()
         search(query)
         status = note
+        // And whatever just changed is worth telling the reader's other
+        // devices about.
+        //
+        // Here rather than at each of the dozen callers, because putting it at
+        // the callers is what went wrong twice: reading state synced and
+        // deletions did not, for no better reason than that somebody
+        // remembered one list of call sites and not the other. Everything that
+        // rebuilds the shelf has changed something worth sending, and anything
+        // that has not is one debounced round trip that finds nothing.
+        //
+        // The two places that change syncable state *without* rebuilding the
+        // shelf — a page turn and opening an issue — still ask for themselves.
+        scheduleSync()
     }
 
     func mirrors(for issue: StoredIssue) -> [MirrorLink] {

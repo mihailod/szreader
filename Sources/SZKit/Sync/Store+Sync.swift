@@ -337,3 +337,122 @@ extension Store {
         try setSyncMarks(SyncMarks())
     }
 }
+
+// MARK: - Deletions
+
+/// Removing an issue has to be a fact of its own.
+///
+/// Union cannot express it. "Take whatever the other device has" is the right
+/// rule for the first merge, where each side holds things the other has never
+/// seen and nothing may be lost — and it is exactly wrong afterwards, because
+/// an issue deleted here is simply an issue the other device still has, and
+/// the next merge brings it back. A reader deletes something, it returns, they
+/// delete it again, it returns.
+///
+/// So a deletion is written down when it happens, sent, and then applied by
+/// whoever hears about it.
+extension Store {
+
+    func migrateSync() throws {
+        try db.execute("""
+            -- Issues deleted here, by the name their record has in the
+            -- account. The name and not the issue: by the time this matters
+            -- the row is gone, and the name is derived from what the row was.
+            CREATE TABLE IF NOT EXISTS deleted_record (
+              name TEXT PRIMARY KEY,
+              at   REAL NOT NULL
+            );
+            """)
+    }
+
+    /// The name an issue's record has in the account, or nil if it has none.
+    ///
+    /// Nil is the ordinary answer for nine rows in ten: a catalogue row is
+    /// rebuilt from the app bundle and never sent, and a local file is the
+    /// folder on this device. Deleting either is a local matter and must not
+    /// tell another device to throw anything away.
+    func recordName(forIssue id: Int) throws -> String? {
+        var name: String?
+        try db.query("""
+            SELECT site, code, number, title_folded, series
+            FROM issue
+            WHERE id = ? AND site <> ?
+              AND IFNULL(source, '') <> (site || ' catalogue')
+            """, [.int(Int64(id)), .text(IssueSite.local.rawValue)]) { row in
+            guard let site = IssueSite(rawValue: row.string(0) ?? ""),
+                  let folded = row.string(3) else { return }
+            name = IssueIdentity(site: site, code: row.string(1), number: row.int(2),
+                                 titleFolded: folded, series: row.string(4)).recordName
+        }
+        return name
+    }
+
+    /// Writes down that these issues were deleted here, before they go.
+    ///
+    /// Called with the ids while the rows still exist — afterwards there is
+    /// nothing left to derive a name from.
+    func recordDeletions(issueIDs: [Int]) throws {
+        for id in issueIDs {
+            guard let name = try recordName(forIssue: id) else { continue }
+            try db.run("INSERT OR REPLACE INTO deleted_record (name, at) VALUES (?, ?)",
+                       [.text(name), .double(Date().timeIntervalSince1970)])
+        }
+    }
+
+    /// Deletions this device has not yet told the account about.
+    public func pendingDeletions() throws -> [String] {
+        var out: [String] = []
+        try db.query("SELECT name FROM deleted_record ORDER BY at") { row in
+            if let name = row.string(0) { out.append(name) }
+        }
+        return out
+    }
+
+    /// Forgotten once the account has them. The account's own change feed
+    /// carries the deletion to every other device from then on, so keeping
+    /// these would be a second copy of a fact somebody else is already
+    /// holding — and one that grows for ever.
+    public func clearDeletions(_ names: [String]) throws {
+        for chunk in stride(from: 0, to: names.count, by: 400).map({
+            Array(names[$0..<min($0 + 400, names.count)])
+        }) {
+            let holes = chunk.map { _ in "?" }.joined(separator: ", ")
+            try db.run("DELETE FROM deleted_record WHERE name IN (\(holes))",
+                       chunk.map { .text($0) })
+        }
+    }
+
+    /// Applies deletions made on the reader's other devices.
+    ///
+    /// The names are hashes and cannot be read backwards, so the library's own
+    /// names are computed and matched. Only over the exportable rows — a few
+    /// thousand rather than the whole shelf — and only when something has
+    /// actually been deleted, which is rare.
+    @discardableResult
+    public func applyDeletions(_ names: [String]) throws -> [Int] {
+        guard !names.isEmpty else { return [] }
+        let wanted = Set(names)
+
+        var doomed: [Int] = []
+        try db.query("""
+            SELECT id, site, code, number, title_folded, series
+            FROM issue
+            WHERE site <> ? AND IFNULL(source, '') <> (site || ' catalogue')
+            """, [.text(IssueSite.local.rawValue)]) { row in
+            guard let id = row.int(0),
+                  let site = IssueSite(rawValue: row.string(1) ?? ""),
+                  let folded = row.string(4) else { return }
+            let name = IssueIdentity(site: site, code: row.string(2), number: row.int(3),
+                                     titleFolded: folded, series: row.string(5)).recordName
+            if wanted.contains(name) { doomed.append(id) }
+        }
+        guard !doomed.isEmpty else { return [] }
+
+        // Through the same delete every other caller uses, so the search index
+        // and the mirrors go with the row — and *without* recording a
+        // deletion of our own, which would send back to the account a fact it
+        // has just told us.
+        for id in doomed { try deleteWithoutRecording(issueID: id) }
+        return doomed
+    }
+}

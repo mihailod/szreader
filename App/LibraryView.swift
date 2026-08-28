@@ -138,7 +138,8 @@ private struct Confirming: ViewModifier {
         case .remove(let issue):
             return Alert(
                 title: Text("Are you sure?"),
-                message: Text(LibraryView.deleteMessage(issueName(issue))),
+                message: Text(LibraryView.deleteMessage(issueName(issue),
+                                                        synced: model.syncsWithICloud)),
                 primaryButton: .destructive(Text("Yes")) { model.delete(issue) },
                 secondaryButton: .cancel(Text("No")))
         case .undeletable(let issue):
@@ -182,7 +183,8 @@ private struct Confirming: ViewModifier {
                 title: Text(LibraryView.deleteVisibleTitle(count)),
                 message: Text(LibraryView.deleteVisibleMessage(
                     count, shipped: shipped,
-                    wholeLibrary: count == model.deletableCount)),
+                    wholeLibrary: count == model.deletableCount,
+                    synced: model.syncsWithICloud)),
                 primaryButton: .destructive(Text("Yes")) { model.deleteVisible() },
                 secondaryButton: .cancel(Text("No")))
         case let .deleteAll(count, shipped):
@@ -190,7 +192,8 @@ private struct Confirming: ViewModifier {
             return Alert(
                 title: Text("Are you sure?"),
                 message: Text(LibraryView.deleteAllMessage(count, shipped: shipped,
-                                                           local: local.count)),
+                                                           local: local.count,
+                                                           synced: model.syncsWithICloud)),
                 primaryButton: .destructive(Text("Yes")) {
                     model.deleteEverything()
                     // Asked second, and only when there is something to ask
@@ -872,10 +875,15 @@ struct LibraryView: View {
             + "downloaded again."
     }
 
-    static func deleteMessage(_ name: String?) -> String {
+    /// - Parameter synced: whether this device is signed into iCloud and
+    ///   syncing. Deleting is not a local act when it is — the issue goes from
+    ///   the reader's other devices as well, and a confirmation that does not
+    ///   say so is asking them to agree to something it has not told them.
+    static func deleteMessage(_ name: String?, synced: Bool = false) -> String {
         let subject = name.map { "“\($0)”" } ?? "this issue"
-        return "Delete \(subject) from the library, including any download. "
-            + "Getting it back means importing its page again."
+        return "Delete \(subject) from the library, including any download."
+            + (synced ? " It goes from your other devices too." : "")
+            + " Getting it back means importing its page again."
     }
 
     /// Why Delete refused, and what is still on offer.
@@ -940,7 +948,8 @@ struct LibraryView: View {
     /// What it does not do is explain where those issues came from. The
     /// distinction that matters to a reader is whether an Import can bring a
     /// thing back, and that is all these say.
-    static func deleteVisibleMessage(_ count: Int, shipped: Int, wholeLibrary: Bool) -> String {
+    static func deleteVisibleMessage(_ count: Int, shipped: Int, wholeLibrary: Bool,
+                                     synced: Bool = false) -> String {
         let items: String
         if shipped == 0 {
             items = count == 1 ? "the item shown" : "the \(count) items shown"
@@ -963,8 +972,12 @@ struct LibraryView: View {
         let kept = shipped == 0 ? "" : " Items that cannot be imported again stay."
         let back = count == 1 ? "it back means importing its page"
                               : "them back means importing their pages"
+        let elsewhere = synced
+            ? (count == 1 ? " It goes from your other devices too."
+                          : " They go from your other devices too.")
+            : ""
         return "Delete \(items) from the library, including any "
-            + "downloads.\(scope)\(kept) Getting \(back) again."
+            + "downloads.\(scope)\(kept)\(elsewhere) Getting \(back) again."
     }
 
     /// Delete Library, which reaches everything an Import can bring back and
@@ -974,7 +987,12 @@ struct LibraryView: View {
     /// are not deleted here — the question about them is put separately, once
     /// this one has been answered — and saying so is what stops "resetting
     /// the app to empty" being a promise this does not keep.
-    static func deleteAllMessage(_ count: Int, shipped: Int, local: Int = 0) -> String {
+    static func deleteAllMessage(_ count: Int, shipped: Int, local: Int = 0,
+                                 synced: Bool = false) -> String {
+        // Before the question about local files, which are this device's
+        // alone and go nowhere — two different scopes in one alert, so the
+        // wider one is said while the reader is still reading about it.
+        let elsewhere = synced ? " Your other devices lose them too." : ""
         let asked = local == 0 ? ""
             : (local == 1 ? " Your one local file is asked about next."
                           : " Your \(local) local files are asked about next.")
@@ -982,11 +1000,11 @@ struct LibraryView: View {
             let items = count == 1 ? "the one item" : "all \(count) items"
             let scope = local == 0 ? ", resetting the app to empty" : ""
             return "Delete \(items) and every download\(scope). "
-                + "This cannot be undone.\(asked)"
+                + "This cannot be undone.\(elsewhere)\(asked)"
         }
         let items = count == 1 ? "the one imported item" : "all \(count) imported items"
         return "Delete \(items) and every download of them. Items that "
-            + "cannot be imported again stay. This cannot be undone.\(asked)"
+            + "cannot be imported again stay. This cannot be undone.\(elsewhere)\(asked)"
     }
 
     /// The question the reader asked for by name: how many of their own files

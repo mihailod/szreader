@@ -169,6 +169,23 @@ public struct CloudKitLibrary: LibraryCloud {
         }
     }
 
+    /// Removes records by name.
+    ///
+    /// Failures are read but not thrown on, unlike a save. The only thing that
+    /// can go wrong per record is that it is already gone, which is the
+    /// outcome being asked for — a deletion reaches the account once and may
+    /// be sent again by any retry.
+    public func delete(_ recordNames: [String]) async throws {
+        try await ensureZone()
+        let ids = recordNames.map { CKRecord.ID(recordName: $0, zoneID: zoneID) }
+        for chunk in stride(from: 0, to: ids.count, by: 400).map({
+            Array(ids[$0..<min($0 + 400, ids.count)])
+        }) {
+            _ = try await database.modifyRecords(
+                saving: [], deleting: chunk, savePolicy: .allKeys, atomically: false)
+        }
+    }
+
     // MARK: - Records
 
     /// Static, and taking the zone rather than reading it from `self`.

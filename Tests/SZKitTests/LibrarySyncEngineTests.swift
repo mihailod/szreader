@@ -8,20 +8,41 @@ import XCTest
 /// contract — order, paging, resumption, idempotence — none of which needs a
 /// network to be wrong.
 final class FakeLibraryCloud: LibraryCloud, @unchecked Sendable {
+
+    /// One thing that happened, in the order it happened.
+    ///
+    /// Append-only, which is what makes a cursor an index into it — and is
+    /// also how a change feed genuinely behaves. Removing entries instead
+    /// would shrink the feed under cursors that already point past the end,
+    /// which is a bug in the fake rather than in anything it is testing.
+    private enum Entry {
+        case record(SyncedIssue)
+        case deleted(String)
+    }
+
     private let lock = NSLock()
-    /// Append-only, so a cursor can be an index into it. Later versions of a
-    /// record supersede earlier ones by name, exactly as a server would.
-    private var log: [SyncedIssue] = []
+    private var feed: [Entry] = []
     private var readingLog: [SyncedReading] = []
     private(set) var saves = 0
     private(set) var fetches = 0
-    /// How many records a page holds, so paging can be exercised.
+    /// How many times a device has asked for something to be removed, which is
+    /// what tells an echoed deletion from a silent one.
+    private(set) var deleteCalls = 0
+    /// How many entries a page holds, so paging can be exercised.
     var pageSize = 1_000
     var failNextSave: Error?
 
+    /// What the account holds now, after everything that has happened to it.
     var recordNames: Set<String> {
         lock.lock(); defer { lock.unlock() }
-        return Set(log.map(\.recordName))
+        var live: Set<String> = []
+        for entry in feed {
+            switch entry {
+            case .record(let issue): live.insert(issue.recordName)
+            case .deleted(let name): live.remove(name)
+            }
+        }
+        return live
     }
 
     private static func index(_ cursor: SyncCursor?) -> Int {
@@ -37,21 +58,31 @@ final class FakeLibraryCloud: LibraryCloud, @unchecked Sendable {
     func changes(since cursor: SyncCursor?) async throws -> CloudChanges {
         lock.lock(); defer { lock.unlock() }
         fetches += 1
-        let from = Self.index(cursor)
-        let to = min(from + pageSize, log.count)
-        // Reading positions are not paged here: there are few of them, and
-        // what the engine has to get right about them is the merge rule.
-        return CloudChanges(issues: Array(log[from..<to]),
-                            reading: to >= log.count ? readingLog : [],
+        let from = min(Self.index(cursor), feed.count)
+        let to = min(from + pageSize, feed.count)
+
+        var issues: [SyncedIssue] = []
+        var deleted: [String] = []
+        for entry in feed[from..<to] {
+            switch entry {
+            case .record(let issue): issues.append(issue)
+            case .deleted(let name): deleted.append(name)
+            }
+        }
+        return CloudChanges(issues: issues,
+                            // Not paged: there are few of them, and what the
+                            // engine has to get right is the merge rule.
+                            reading: to >= feed.count ? readingLog : [],
+                            deletedRecordNames: deleted,
                             cursor: Self.cursor(to),
-                            more: to < log.count)
+                            more: to < feed.count)
     }
 
     func save(_ issues: [SyncedIssue]) async throws {
         lock.lock(); defer { lock.unlock() }
         if let failNextSave { self.failNextSave = nil; throw failNextSave }
         saves += 1
-        log.append(contentsOf: issues)
+        feed.append(contentsOf: issues.map(Entry.record))
     }
 
     func saveReading(_ states: [SyncedReading]) async throws {
@@ -60,6 +91,12 @@ final class FakeLibraryCloud: LibraryCloud, @unchecked Sendable {
             readingLog.removeAll { $0.recordName == state.recordName }
             readingLog.append(state)
         }
+    }
+
+    func delete(_ recordNames: [String]) async throws {
+        lock.lock(); defer { lock.unlock() }
+        deleteCalls += 1
+        feed.append(contentsOf: recordNames.map(Entry.deleted))
     }
 }
 
@@ -121,6 +158,7 @@ final class LibrarySyncEngineTests: XCTestCase {
                 lock.lock(); order.append("save"); lock.unlock()
             }
             func saveReading(_ states: [SyncedReading]) async throws {}
+            func delete(_ recordNames: [String]) async throws {}
         }
         let cloud = OrderRecording()
         let store = try Store()

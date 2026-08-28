@@ -182,6 +182,7 @@ public final class Store: @unchecked Sendable {
         db = try Database(path: path)
         try migrate()
         try migrateDownloads()
+        try migrateSync()
     }
 
     private func migrate() throws {

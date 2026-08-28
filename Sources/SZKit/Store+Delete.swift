@@ -11,6 +11,21 @@ extension Store {
     /// still finds deleted comics, or gigabytes that never come back.
     @discardableResult
     public func delete(issueID: Int) throws -> URL? {
+        // Before the row goes, while there is still something to derive its
+        // name in the account from. Deleting is a fact the reader's other
+        // devices have to hear: absence cannot carry it, because absence is
+        // also what an issue they have and this one never did looks like.
+        try recordDeletions(issueIDs: [issueID])
+        return try deleteWithoutRecording(issueID: issueID)
+    }
+
+    /// The same delete, for a deletion that arrived from another device.
+    ///
+    /// Recording one here would send the account back a fact it has just told
+    /// us — harmless in itself, and the start of two devices talking about the
+    /// same deletion for ever.
+    @discardableResult
+    func deleteWithoutRecording(issueID: Int) throws -> URL? {
         let file = try downloadedFile(issueID: issueID)?.path
         try db.transaction {
             try db.run("DELETE FROM issue_fts WHERE rowid = ?", [.int(Int64(issueID))])
@@ -46,6 +61,17 @@ extension Store {
     /// reclaiming space has agreed to. `deleteLocalIssues` is the one path
     /// that touches them, and it is asked for by name.
     static var notLocal: String { "issue.site <> '\(IssueSite.local.rawValue)'" }
+
+    /// The ids a doomed-rows query names, read before anything is deleted.
+    ///
+    /// The bulk deletes all work by handing one `SELECT id` to several
+    /// statements, and by the time the last of them has run there is nothing
+    /// left to ask. `recordDeletions` needs the rows while they exist.
+    func ids(matching sql: String, _ args: [SQLValue]) throws -> [Int] {
+        var out: [Int] = []
+        try db.query(sql, args) { row in if let id = row.int(0) { out.append(id) } }
+        return out
+    }
 
     @discardableResult
     public func deleteAllDownloads() throws -> [URL] {
@@ -97,6 +123,7 @@ extension Store {
         try db.query("SELECT path FROM download WHERE issue_id IN (\(doomed))", args) { row in
             if let p = row.string(0) { files.append(resolvedURL(p)) }
         }
+        try recordDeletions(issueIDs: try ids(matching: doomed, args))
         try db.transaction {
             try db.run("DELETE FROM issue_fts WHERE rowid IN (\(doomed))", args)
             try db.run("DELETE FROM download WHERE issue_id IN (\(doomed))", args)
@@ -119,6 +146,7 @@ extension Store {
         try db.query("SELECT path FROM download") { row in
             if let p = row.string(0) { files.append(resolvedURL(p)) }
         }
+        try recordDeletions(issueIDs: try ids(matching: "SELECT id FROM issue", []))
         try db.transaction {
             try db.execute("DELETE FROM issue_fts")
             try db.execute("DELETE FROM issue")

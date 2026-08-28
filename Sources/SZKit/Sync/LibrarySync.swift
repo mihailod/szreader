@@ -48,6 +48,10 @@ public protocol LibraryCloud: Sendable {
     func changes(since cursor: SyncCursor?) async throws -> CloudChanges
     func save(_ issues: [SyncedIssue]) async throws
     func saveReading(_ states: [SyncedReading]) async throws
+    /// Removes records by name. Deleting one that is already gone is not an
+    /// error — a deletion may well be sent twice, by a retry or by two devices
+    /// that both heard about it.
+    func delete(_ recordNames: [String]) async throws
 }
 
 /// What one sync did.
@@ -57,9 +61,12 @@ public struct SyncOutcome: Equatable, Sendable {
     /// Reading positions taken in from other devices, and sent out.
     public var readingApplied = 0
     public var readingPushed = 0
+    /// Issues deleted here because another device deleted them.
+    public var removed = 0
     public init() {}
     public var isEmpty: Bool {
-        merged.isEmpty && pushed == 0 && readingApplied == 0 && readingPushed == 0
+        merged.isEmpty && pushed == 0 && readingApplied == 0
+            && readingPushed == 0 && removed == 0
     }
 }
 
@@ -114,8 +121,10 @@ public struct LibrarySync: Sendable {
         // written after every page: a sync that is interrupted at page four
         // resumes at page four rather than starting again.
         progress?(.asking)
+        let startingFresh = try store.syncCursor() == nil
         var cursor = try store.syncCursor()
         var received = 0
+        var anythingCameBack = false
         /// What the account already holds, as it holds it.
         ///
         /// Two things make this necessary, and only comparing the whole issue
@@ -151,6 +160,15 @@ public struct LibrarySync: Sendable {
             if !changes.reading.isEmpty {
                 outcome.readingApplied += try store.mergeReading(changes.reading)
             }
+            // After the merges. A record deleted on another device may also be
+            // sitting in this same page as a modification from before it went;
+            // applying the removal last is what makes the order not matter.
+            if !changes.deletedRecordNames.isEmpty {
+                outcome.removed += try store.applyDeletions(changes.deletedRecordNames).count
+            }
+            if !changes.issues.isEmpty || !changes.deletedRecordNames.isEmpty {
+                anythingCameBack = true
+            }
             cursor = changes.cursor
             try store.setSyncCursor(cursor)
             guard changes.more else { break }
@@ -163,6 +181,25 @@ public struct LibrarySync: Sendable {
         // being saved, so it is sent now *and* offered again next time — which
         // costs one duplicate save and cannot lose the import. The other order
         // would record it as sent while it was still on its way.
+        // An account that answers a *full* read with nothing, to a device that
+        // believes it has already sent thousands of records, is not the
+        // account this device was talking to.
+        //
+        // The case that matters is shipping: a development build and a release
+        // build use two separate CloudKit databases, and switching between
+        // them does not touch the marks kept here. Without this, the first
+        // App Store build would find its marks saying everything had been sent,
+        // send nothing, and leave the reader with a library that syncs in
+        // perfect silence and never uploads. Clearing an account's iCloud data
+        // by hand lands in the same place.
+        //
+        // Only on a full read, so an ordinary "nothing has changed" — which is
+        // almost every sync — is never mistaken for it.
+        if startingFresh, !anythingCameBack, try store.syncMarks() != Store.SyncMarks() {
+            try store.setSyncMarks(Store.SyncMarks())
+            try store.setReadingMark(nil)
+        }
+
         let sent = try store.currentSyncMarks()
         let marks = try store.syncMarks()
         let pending = try store.exportableIssues(afterIssue: marks.issue,
@@ -189,6 +226,18 @@ public struct LibrarySync: Sendable {
             outcome.readingPushed = unsent.count
         }
         if let readingNow { try store.setReadingMark(readingNow) }
+
+        // 4. What this device has thrown away.
+        //
+        // Last, so a device that deletes an issue and re-imports it in the same
+        // sitting sends the pointer first and the removal after — which is the
+        // order they happened in, and the order that leaves the account
+        // agreeing with this device rather than with neither.
+        let gone = try store.pendingDeletions()
+        if !gone.isEmpty {
+            try await cloud.delete(gone)
+            try store.clearDeletions(gone)
+        }
 
         return outcome
     }

@@ -342,6 +342,7 @@ final class ReadingPushFailureTests: XCTestCase {
             if refuse { throw CocoaError(.fileWriteUnknown) }
             stored.append(contentsOf: states)
         }
+        func delete(_ recordNames: [String]) async throws {}
     }
 
     private func library() throws -> (Store, Int) {
