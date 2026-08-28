@@ -7,6 +7,40 @@ final class UIWordingTests: XCTestCase {
     private static let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
+    /// Everywhere a sentence the reader will see is written.
+    ///
+    /// The app layer, and the kit files that hold copy. That second part is
+    /// not a nicety: `DeleteCopy` moved out of `App` so it could be called by
+    /// a test, and the moment it did, this rule stopped applying to the most
+    /// destructive sentences in the app — silently, because a lint that scans
+    /// one directory cannot notice that the words left it.
+    ///
+    /// Named one by one rather than by scanning all of `Sources`, so adding a
+    /// file of copy is a decision somebody makes here rather than something
+    /// this quietly starts or stops covering.
+    private static let copyInTheKit = ["DeleteCopy.swift"]
+
+    private static func sourcesShowingWords() throws -> [(String, String)] {
+        let app = root.appendingPathComponent("App")
+        let kit = root.appendingPathComponent("Sources/SZKit")
+        var out: [(String, String)] = []
+        let appFiles = try FileManager.default.contentsOfDirectory(atPath: app.path)
+            .filter { $0.hasSuffix(".swift") }.sorted()
+        XCTAssertFalse(appFiles.isEmpty, "no UI sources found at \(app.path)")
+        for file in appFiles {
+            out.append((file, try String(contentsOf: app.appendingPathComponent(file),
+                                         encoding: .utf8)))
+        }
+        for file in copyInTheKit {
+            let url = kit.appendingPathComponent(file)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path),
+                          "\(file) is listed as copy but is not there — if it moved, "
+                        + "this list has to move with it or the rule stops applying")
+            out.append((file, try String(contentsOf: url, encoding: .utf8)))
+        }
+        return out
+    }
+
     /// Never "comic" on screen: the library holds magazines — Sirius, Alef,
     /// Galaksija, Kosmoplov — as well as comics, and calling every one of
     /// them a comic is wrong for a good part of the shelf. "Issue" covers
@@ -24,14 +58,8 @@ final class UIWordingTests: XCTestCase {
     /// is "comic" standing in for every issue on the shelf, so a literal
     /// still has to fail unless it names magazines in the same breath.
     func testTheUILayerNeverSaysComic() throws {
-        let dir = Self.root.appendingPathComponent("App")
-        let files = try FileManager.default.contentsOfDirectory(atPath: dir.path)
-            .filter { $0.hasSuffix(".swift") }
-        XCTAssertFalse(files.isEmpty, "no UI sources found at \(dir.path)")
-
         var offenders: [String] = []
-        for file in files.sorted() {
-            let source = try String(contentsOf: dir.appendingPathComponent(file), encoding: .utf8)
+        for (file, source) in try Self.sourcesShowingWords() {
             for literal in Self.stringLiterals(in: source) {
                 let text = literal.lowercased()
                 guard text.contains("comic"), !text.contains("magazine") else { continue }
