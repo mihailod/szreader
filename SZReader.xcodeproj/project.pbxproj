@@ -85,6 +85,7 @@
 		0DA4EDA742DCFD028234085B /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
 		0FF741E7B5E68CD19C6CB95F /* doc-cbr-22x29.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "doc-cbr-22x29.png"; sourceTree = "<group>"; };
 		10A12CF237924287D34868EA /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
+		1229C8D684527B37F447CFFB /* SZReader.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SZReader.entitlements; sourceTree = "<group>"; };
 		1683F9D4335D6F0B274C8507 /* doc-cbz-22x29.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "doc-cbz-22x29.png"; sourceTree = "<group>"; };
 		1ECEA8FA212E036CC702DFBD /* ArchiveBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveBrowserView.swift; sourceTree = "<group>"; };
 		289683A4600939769465C523 /* SourceToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceToggle.swift; sourceTree = "<group>"; };
@@ -207,6 +208,7 @@
 				A1E7EFF3E8C993DA1BBBF76B /* SiteCookies.swift */,
 				00E88A7E0A2672D5EDB73075 /* SourceCopy.swift */,
 				289683A4600939769465C523 /* SourceToggle.swift */,
+				1229C8D684527B37F447CFFB /* SZReader.entitlements */,
 				C284B2C0F963BC58FA52D6C2 /* SZReaderApp.swift */,
 			);
 			path = App;
@@ -471,6 +473,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
+				CODE_SIGN_ENTITLEMENTS = App/SZReader.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = MUYBB8YH5X;
@@ -495,6 +498,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++14";
+				CODE_SIGN_ENTITLEMENTS = App/SZReader.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = MUYBB8YH5X;

@@ -243,6 +243,42 @@ targets:
               NSIncludesSubdomains: true
               NSExceptionAllowsInsecureHTTPLoads: true
 
+    # The reader's settings follow them to their other devices: which sources
+    # show, how the shelf is filtered and sorted. See `PreferenceCloud`.
+    #
+    # The key-value store and nothing else. It is the small, flat half of
+    # iCloud — 1 MB and a thousand keys, which this could not fill if it tried
+    # — and it needs no container, no schema and no record types. The
+    # downloads are deliberately not in it: they are files, they are excluded
+    # from backup on purpose, and they are a different job.
+    #
+    # Generated here rather than added in Xcode, for the reason the build
+    # settings below are pinned here: xcodegen rewrites the project on every
+    # generate, and anything configured only in the IDE is lost on the next
+    # one.
+    # Depends on the App ID carrying the iCloud capability. It does: enabled
+    # on `com.mihailod.szreader` as "Compatible with Xcode 5", which is the
+    # portal's name for iCloud without CloudKit — no container, none needed.
+    # Without it, signing fails outright with "Provisioning profile ... doesn't
+    # include the iCloud capability", so this and that setting travel together.
+    #
+    # The key-value store and nothing else. It is the small, flat half of
+    # iCloud — 1 MB and a thousand keys, which the reader's settings could not
+    # fill if they tried — and it needs no container, no schema and no record
+    # types. The downloads are deliberately not in it: they are files, they are
+    # excluded from backup on purpose, and they are a different job.
+    #
+    # The identifier is the standard default and must stay that way once
+    # shipped: changing it orphans every reader's synced settings.
+    #
+    # Generated here rather than added in Xcode, for the reason the build
+    # settings below are pinned here — xcodegen rewrites the project on every
+    # generate, and anything configured only in the IDE is lost on the next one.
+    entitlements:
+      path: App/SZReader.entitlements
+      properties:
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
+
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mihailod.szreader

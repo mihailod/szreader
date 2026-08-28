@@ -155,4 +155,47 @@ extension Store {
     public var downloadedCount: Int {
         (try? db.scalarInt("SELECT COUNT(*) FROM download")) ?? 0
     }
+
+    /// Every recorded download and where its file is supposed to be, for
+    /// checking the table against the device. See `Library.reconcileDownloads`,
+    /// which is the only caller and holds the rule for reading the answer.
+    ///
+    /// Local Files are deliberately left out. Their rows are already
+    /// reconciled against the folder by `reconcileLocalFiles`, under a rule
+    /// this sweep does not have and must not apply: a local file that is gone
+    /// takes its whole *issue* with it, because the file was the only thing
+    /// the row ever was. Two mechanisms deleting the same rows to two
+    /// different rules is how they come to disagree.
+    func recordedDownloads() throws -> [(issueID: Int, file: URL)] {
+        var out: [(issueID: Int, file: URL)] = []
+        try db.query("""
+            SELECT d.issue_id, d.path FROM download d
+            JOIN issue ON issue.id = d.issue_id
+            WHERE \(Self.notLocal)
+            """) { row in
+            guard let id = row.int(0), let path = row.string(1) else { return }
+            out.append((id, resolvedURL(path)))
+        }
+        return out
+    }
+
+    /// Forgets downloads whose files are no longer here, in bulk.
+    ///
+    /// `deleteDownload`'s contract, applied to many rows at once and without
+    /// the file paths it returns — there is nothing on disk left to remove,
+    /// which is the whole reason for calling this.
+    ///
+    /// Chunked because the list is unbounded. A restore leaves every download
+    /// in the library stale at once, and a single `IN (...)` of several
+    /// thousand placeholders runs into SQLite's variable limit — where the
+    /// failure is the sweep silently doing nothing at all.
+    func forgetDownloads(issueIDs: [Int]) throws {
+        for chunk in stride(from: 0, to: issueIDs.count, by: 500).map({
+            Array(issueIDs[$0..<min($0 + 500, issueIDs.count)])
+        }) {
+            let holes = chunk.map { _ in "?" }.joined(separator: ", ")
+            try db.run("DELETE FROM download WHERE issue_id IN (\(holes))",
+                       chunk.map { .int(Int64($0)) })
+        }
+    }
 }

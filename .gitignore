@@ -56,6 +56,10 @@ build/
 *.xcworkspace/xcuserdata/
 *.xcuserstate
 *.xcodeproj/project.xcworkspace/xcuserdata/
+# Written the first time Xcode opens the project. Nominally "shared" settings,
+# but xcodegen generates the project and does not produce this, so anything in
+# it came from one person's IDE and would be handed to everyone else.
+*.xcodeproj/project.xcworkspace/xcshareddata/
 
 # --- Python ------------------------------------------------------------
 __pycache__/

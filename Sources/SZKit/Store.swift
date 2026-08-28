@@ -1034,6 +1034,23 @@ public final class Store: @unchecked Sendable {
                    [.text(url), .int(Int64(issueID))])
     }
 
+    /// Puts an issue back to having no artwork at all.
+    ///
+    /// For a reference that has stopped resolving to anything — currently one
+    /// case, a cover captured from the comic's own first page whose file went
+    /// with the download. Nil rather than dead: `cover_dead_at` says "this
+    /// artwork is gone for good, stop asking", and the whole point here is
+    /// that the issue should be asked about again.
+    ///
+    /// Matched on the reference as well as the id, so a cover that arrived
+    /// between the caller looking and this running is left alone.
+    func clearCoverURL(_ reference: String, issueID: Int) throws {
+        try db.run("""
+            UPDATE issue SET cover_url = NULL, cover_dead_at = NULL
+            WHERE id = ? AND cover_url = ?
+            """, [.int(Int64(issueID)), .text(reference)])
+    }
+
     /// Records that a cover URL leads nowhere.
     ///
     /// Keyed on the URL rather than the issue, and matching tile references

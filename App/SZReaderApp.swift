@@ -31,12 +31,20 @@ struct SZReaderApp: App {
                     guard url.isFileURL else { return }
                     model.adoptLocalFile(at: url)
                 }
-                // The folder changes while the app is not running — that is
-                // the whole point of it — so what is in it is a question that
-                // has to be asked again every time the app comes back.
+                // Two questions that can only be answered by asking again, and
+                // both for the same reason: what they are about changes while
+                // this app is not the one running.
+                //
+                // The folder is filled from a Mac, which is the whole point of
+                // it. The reader's settings are changed on their other device,
+                // and the store's change notification does not arrive in the
+                // background — so without asking here, the iPad would follow
+                // the iPhone only while both were open, and need restarting
+                // the rest of the time.
                 .onChange(of: scenePhase) { phase in
                     guard phase == .active else { return }
                     model.scanLocalFiles()
+                    model.refreshPreferences()
                 }
         }
     }
@@ -248,6 +256,66 @@ final class AppModel: ObservableObject {
         sourcesChanged(enabled: enabled, site: site)
     }
 
+    /// Which stored key stands for which source.
+    ///
+    /// Read backwards as well as forwards now: a switch thrown on the reader's
+    /// other device arrives as a key, and something has to know which source
+    /// that is. The four spelled out by hand carry the names they were given
+    /// when there were four sources rather than twenty-three; everything since
+    /// is `show_<site>`, which is why the rest is generated rather than typed.
+    static let sourceDefaultsKeys: [String: IssueSite] = {
+        var map: [String: IssueSite] = [
+            "showStripZona": .stripzona,
+            "showRetroSpec": .retrospec,
+            "showArchive": .archive,
+            "showCBPlus": .comicbookplus,
+        ]
+        for site in IssueSite.allCases
+        where site.isSwitchable && !map.values.contains(site) {
+            map[defaultsKey(for: site)] = site
+        }
+        return map
+    }()
+
+    /// Preferences that follow the reader to their other devices.
+    ///
+    /// Everything they deliberately chose: which sources show, how the shelf
+    /// is filtered, how it is sorted, how it is laid out, and how pages are
+    /// zoomed. Small, flat, and entirely strings and booleans — see
+    /// `PreferenceCloud`, which carries it.
+    static var syncedDefaultsKeys: [String] {
+        sourceDefaultsKeys.keys.sorted() + [
+            "seriesFilter", "publisherFilter", "heroFilter",
+            "showUnread", "showReading", "showRead",
+            "downloadedOnly", "shelfSort", "libraryLayout",
+            SmartZoom.settingKey,
+        ]
+    }
+
+    /// Preferences that stay on the device that set them, and why.
+    ///
+    /// Every one of these describes *this* device rather than what the reader
+    /// wants, and syncing it would be actively wrong:
+    ///
+    /// - `pageRenderStamp` records how the thumbnails **on this disk** were
+    ///   drawn. Carried across, a device that has never drawn one would think
+    ///   it had, and keep serving nothing.
+    /// - `retroSpecDefaultResolved` marks a one-time question already asked
+    ///   here, and the answer depends on what this library had seeded at the
+    ///   time. Answered elsewhere, it would skip the question on a device
+    ///   whose answer differs.
+    /// - `smartZoomOfferedIn` is a one-time offer, keyed to the build that
+    ///   made it. A new device is a fair place to be told about the feature
+    ///   once, and this is a prompt rather than a preference — the setting it
+    ///   offers, `smartZoom`, does sync.
+    ///
+    /// Spelled out rather than left implicit so that adding a preference makes
+    /// somebody decide. `PreferenceKeyCoverageTests` fails on any stored key
+    /// that is in neither list.
+    static let deviceOnlyDefaultsKeys = [
+        "pageRenderStamp", "retroSpecDefaultResolved", "smartZoomOfferedIn",
+    ]
+
     /// Sources the reader has switched on.    /// Sources the reader has switched on. Empty is a real answer — it means
     /// the shelf is deliberately blank — which is why nothing here hands an
     /// empty set to the store, where empty means "no opinion, show all".
@@ -391,6 +459,97 @@ final class AppModel: ObservableObject {
     /// nothing, and an empty shelf with no visible reason is the most baffling
     /// state the app has. Dropping those selections keeps the shelf
     /// explainable by what is actually on screen.
+    /// Keeps the reader's settings the same on every device on their account.
+    ///
+    /// Held for the life of the app: it is what carries the notification
+    /// observers, and a mirror nobody holds stops listening the moment it is
+    /// created.
+    private var preferences: PreferenceCloud?
+
+    /// Asks the account what the reader's other device has changed.
+    ///
+    /// Called when the app comes back to the front. See `PreferenceCloud
+    /// .refresh` for why waiting to be told is not enough.
+    func refreshPreferences() { preferences?.refresh() }
+
+    private func startPreferenceSync() {
+        let cloud = PreferenceCloud(keys: Self.syncedDefaultsKeys)
+        cloud.didAdopt = { [weak self] keys in self?.applyRemotePreferences(keys) }
+        preferences = cloud
+        cloud.start()
+    }
+
+    /// Applies preferences the reader changed on another device.
+    ///
+    /// `@AppStorage` has republished by the time this runs, so every switch
+    /// and menu on screen already shows the new value. What it cannot do is
+    /// the work each `didSet` would have done, because a `didSet` fires on
+    /// assignment through the property and nothing here assigns. So the two
+    /// things that are more than display happen here: a catalogue whose switch
+    /// has just come on somewhere else is loaded, and the shelf is re-asked.
+    private func applyRemotePreferences(_ keys: [String]) {
+        // The eighteen by-name source flags have no property to republish
+        // them — `storeFlag` sends this by hand for exactly the same reason.
+        objectWillChange.send()
+
+        // Every value is read from the store and assigned through this
+        // model's own property. Both halves of that matter.
+        //
+        // Read from the store, because the property cannot be trusted to
+        // answer: `@AppStorage` on an `ObservableObject` reads `UserDefaults`
+        // only until the first write through the property and caches from
+        // then on, answering with the last value *this device* set whatever
+        // is actually stored. `AppStorageCachingTests` pins that.
+        //
+        // Assigned through the property, because that is the only thing that
+        // clears the stale cache — and it is also what fires each `didSet`,
+        // which is where the real work lives. Writing to `UserDefaults` alone
+        // did neither: it was correct, invisible, and looked from the outside
+        // like sync that stopped working the moment you used the app.
+        let defaults = UserDefaults.standard
+        for key in keys {
+            switch key {
+            case "shelfSort":
+                sortOrder = defaults.string(forKey: key)
+                    .flatMap(ShelfSort.init(rawValue:)) ?? .default
+            case "seriesFilter":    seriesFilterRaw = defaults.string(forKey: key) ?? ""
+            case "publisherFilter": publisherFilterRaw = defaults.string(forKey: key) ?? ""
+            case "heroFilter":      heroFilterRaw = defaults.string(forKey: key) ?? ""
+            case "showUnread":      showUnread = defaults.bool(forKey: key)
+            case "showReading":     showReading = defaults.bool(forKey: key)
+            case "showRead":        showRead = defaults.bool(forKey: key)
+            case "downloadedOnly":  downloadedOnly = defaults.bool(forKey: key)
+            // `libraryLayout` and `smartZoom` are read in views rather than
+            // here, and a view's `@AppStorage` is refreshed by SwiftUI itself.
+            default: break
+            }
+        }
+        // Each of those `didSet`s schedules a search, and `scheduleSearch`
+        // cancels the one before it, so a dozen arriving at once still costs
+        // one query.
+
+        let sources = keys.compactMap { key in
+            Self.sourceDefaultsKeys[key].map { (key: key, site: $0) }
+        }
+        guard !sources.isEmpty else { return }
+
+        // Batched the way `setLanguage` batches, and for the same reason: each
+        // seed rebuilds the filter menus and re-runs the query, and a device
+        // waking up to a language's fifteen sources switched on would other-
+        // wise do all of that fifteen times.
+        movingSeveral = true
+        for source in sources {
+            // Through `setSource`, which owns the difference between the four
+            // sources with properties and the eighteen stored by name, and
+            // which seeds a catalogue that has just been switched on. Cheap
+            // when it is already in: the stamp in `meta` makes an unchanged
+            // catalogue a single read.
+            setSource(source.site, enabled: defaults.bool(forKey: source.key))
+        }
+        movingSeveral = false
+        rebuildForVisibleSources()
+    }
+
     private func rebuildForVisibleSources() {
         refreshSourceMenus()
         issueCount = store?.issueCount ?? 0
@@ -685,6 +844,18 @@ final class AppModel: ObservableObject {
             scanLocalFiles()
             watchLocalFiles()
 
+            // The download table against the device, before anything below
+            // counts it. A restore brings the database back and leaves the
+            // files behind — see `Library.reconcileDownloads` — and every
+            // readout here would otherwise describe a library that is not on
+            // the device: the count, the sizes, the disk usage, and a shelf
+            // showing every issue as downloaded.
+            let forgotten = (try? library?.reconcileDownloads()) ?? nil ?? []
+            if !forgotten.isEmpty {
+                status = "\(forgotten.count) download\(forgotten.count == 1 ? " is" : "s are") "
+                       + "no longer on this device, and can be fetched again"
+            }
+
             issueCount = store.issueCount
             downloadedCount = store.downloadedCount
             shippedCount = store.shippedCount
@@ -694,6 +865,11 @@ final class AppModel: ObservableObject {
             freeSpace = Self.freeSpace()
             refreshSourceMenus()
             search("")
+            // After the shelf exists, and deliberately so: adopting a filter
+            // from another device re-runs the query, and there has to be a
+            // query to re-run. Before it, the first frame would be drawn from
+            // this device's settings and then rearranged under the reader.
+            startPreferenceSync()
             resolveTitles()
             // Anything downloaded whose artwork went away since. See the
             // method: the capture at download time only ever fires once, and
@@ -1161,6 +1337,20 @@ final class AppModel: ObservableObject {
         guard let library, issue.isDownloaded, reading == nil else { return }
         let name = issue.readerTitle
         let resumeAt = (try? store?.lastPage(forIssue: issue.id)) ?? 0
+
+        // The row says downloaded; the device is the authority. The two come
+        // apart on restore — swept at launch by `reconcileDownloads` — and
+        // again for anything that goes missing while the app is running, and
+        // this is the one place a reader meets the difference. Without it the
+        // reader opens on a title, the issue is stamped as opened below, and
+        // *then* it fails: an alert saying the issue was never downloaded,
+        // about an issue that has just been moved to the top of the default
+        // sort for having been read.
+        guard library.isOnDevice(issueID: issue.id) else {
+            try? library.forgetDownload(issueID: issue.id)
+            refresh(note: "“\(name)” is no longer on this device")
+            return
+        }
 
         // Stamped here rather than once the pages have arrived: opening is
         // what the reader did, and an archive that turns out to be broken was

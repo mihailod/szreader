@@ -67,9 +67,20 @@ if [[ "$state" != *connected* && "$state" != *available* ]]; then
   exit 1
 fi
 
+# `-allowProvisioningUpdates` lets xcodebuild fetch a profile itself.
+#
+# Without it, xcodebuild will only ever use a profile already cached on this
+# Mac — it will not create or refresh one — so the first build after any change
+# to the App ID's capabilities fails, and the only way through is to open Xcode
+# once and let it do the fetch. Adding iCloud was exactly that: the portal says
+# in as many words that changing capabilities invalidates every profile
+# carrying this App ID.
+#
+# This is still a development install. It refreshes development signing; it
+# does not package, distribute or notarise anything.
 args=(-project SZReader.xcodeproj -scheme SZReader
       -destination "generic/platform=iOS"
-      -derivedDataPath .xcbuild-device -quiet build)
+      -derivedDataPath .xcbuild-device -allowProvisioningUpdates -quiet build)
 echo "==> building for device"
 xcodebuild "${args[@]}"
 

@@ -508,6 +508,98 @@ public final class Library {
         return Int(reference.dropFirst("szpage:".count))
     }
 
+    /// Whether anything readable for this issue is actually on the device.
+    ///
+    /// The recorded archive *or* the pages it unpacked to, because the
+    /// archive is deleted the moment its pages are out: for every issue the
+    /// reader has ever opened the file is expected to be missing, and the
+    /// directory beside it is the comic. Asking about the file alone would
+    /// call the whole read library gone.
+    ///
+    /// The directory is only tested for existence, not opened. Opening it
+    /// means `ComicDocument(unpackedAt:)`, which reads every name in it and
+    /// deletes duplicate volumes as it goes — neither of which belongs in a
+    /// question asked of every download at launch. So the answer is the
+    /// loosest one that is still correct: "there is something here", which is
+    /// what makes a false negative impossible and a stale row the only thing
+    /// this can ever remove.
+    public func isOnDevice(issueID: Int) -> Bool {
+        guard let file = try? store.downloadedFile(issueID: issueID)?.path else { return false }
+        return isOnDevice(issueID: issueID, file: file)
+    }
+
+    private func isOnDevice(issueID: Int, file: URL) -> Bool {
+        let fm = FileManager.default
+        return fm.fileExists(atPath: file.path)
+            || fm.fileExists(atPath: paths.directory(forIssue: issueID).path)
+    }
+
+    /// Forgets one download whose file has gone, and the artwork that went
+    /// with it. The issue stays: its mirrors, its read state and its place on
+    /// the shelf are all still true.
+    @discardableResult
+    public func forgetDownload(issueID: Int) throws -> Bool {
+        guard try store.downloadedFile(issueID: issueID) != nil else { return false }
+        try store.deleteDownload(issueID: issueID)
+        forgetCapturedCover(issueID: issueID)
+        return true
+    }
+
+    /// Brings the download table back into line with what is on the device.
+    ///
+    /// The shelf's "downloaded" is the presence of a `download` row and
+    /// nothing else, so the table and the disk have to agree or the shelf
+    /// lies. They come apart on one path, and it is not an obscure one:
+    /// everything the app downloads lives under a root marked
+    /// `isExcludedFromBackup` — see `LibraryPaths.standard` — while the
+    /// database recording it sits in Application Support, which is backed up.
+    /// Restore an iCloud backup onto a new device and every row arrives
+    /// without its file.
+    ///
+    /// Left alone, that shelf shows the entire library as downloaded, in
+    /// colour, with no download button anywhere on it. Tapping one opens the
+    /// reader, stamps the issue as opened — which moves it to the top of the
+    /// default sort — and only then fails with "not downloaded yet". Both
+    /// storage readouts count bytes that are not there, and "Remove Download"
+    /// offers to free them.
+    ///
+    /// Returns the issues forgotten, so the caller can say how many.
+    @discardableResult
+    public func reconcileDownloads() throws -> [Int] {
+        // Nothing is judged against a root that is not there. Every answer
+        // below comes from asking the filesystem whether a file exists, and a
+        // root missing because the container moved or could not be created
+        // answers no to all of them — which would forget the entire library
+        // in a single pass, on the one launch least able to afford it.
+        guard FileManager.default.fileExists(atPath: paths.root.path) else { return [] }
+
+        let stale = try store.recordedDownloads()
+            .filter { !isOnDevice(issueID: $0.issueID, file: $0.file) }
+            .map(\.issueID)
+        guard !stale.isEmpty else { return [] }
+
+        try store.forgetDownloads(issueIDs: stale)
+        for id in stale { forgetCapturedCover(issueID: id) }
+        return stale
+    }
+
+    /// Drops a cover reference pointing at artwork that is no longer here.
+    ///
+    /// Artwork captured from a comic's own first page lives under the same
+    /// excluded root as the download, so it goes wherever the download went.
+    /// Left pointing at it the issue is coverless for good: the shelf draws
+    /// its placeholder, and the one thing that would capture a replacement —
+    /// `downloadedIssuesLackingCover` — asks for issues *with* a download and
+    /// *without* a cover, and a row like this has neither. Cleared, it is
+    /// simply an issue with no artwork, which both the catalogue backfill and
+    /// the next download already know how to repair.
+    private func forgetCapturedCover(issueID: Int) {
+        let reference = Self.coverReference(issueID: issueID)
+        guard !FileManager.default.fileExists(
+            atPath: paths.coverFile(forIssue: issueID).path) else { return }
+        try? store.clearCoverURL(reference, issueID: issueID)
+    }
+
     /// Opens a downloaded comic for reading.
     ///
     /// Unpacking a solid RAR is slow enough to notice, so callers should do
@@ -568,6 +660,34 @@ public final class Library {
         // anywhere — so opening one would have deleted it out of the Finder,
         // along with anything beside it sharing a stem.
         guard paths.owns(recorded) else { return }
+
+        // A page is not an archive.
+        //
+        // Three sources fetch pages one at a time into the issue's own folder
+        // and never download a file at all — Stripovi, PopBoks and BatCave.
+        // There is no archive to name, so the download is recorded against
+        // page one for want of anything else; see `PageDownload.recordedFile`.
+        // Every assumption below then read that page as a spent container and
+        // deleted it, so an issue opened once was an issue starting at page
+        // two, for good, with the pages either side of the hole giving no sign
+        // of it. Neither guard above catches it: the file is under the comics
+        // root, so it is ours, and pages 2..n still read back whole.
+        //
+        // Asked of the pages themselves rather than of the site, so this stays
+        // true for whatever fetches pages next without anyone remembering to
+        // add it to a list. An archive can never be mistaken for one of them —
+        // `pageNames` admits image extensions only — so the file this method
+        // exists to drop is never the file this spares.
+        //
+        // The recording side is deliberately left alone. Page one is a
+        // perfectly good name for the download: it is inside the folder, it
+        // exists exactly when the download succeeded, and `totalDownloadedBytes`
+        // measures the folder it names. What was wrong was reading that name
+        // as an archive.
+        let unpackedDirectory = paths.directory(forIssue: issueID)
+        let ownPages = Set(((try? UnpackedReader(root: unpackedDirectory).pageNames()) ?? [])
+            .map { unpackedDirectory.appendingPathComponent($0).standardizedFileURL.path })
+        guard !ownPages.contains(recorded.standardizedFileURL.path) else { return }
 
         let fm = FileManager.default
         discardUnwrapped(forIssue: issueID)
