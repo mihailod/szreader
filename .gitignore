@@ -48,10 +48,11 @@ build/
 # Snapshot of the simulator's logged-in forum session (cookies). Local only.
 .simsession/
 
-# The paired device's identifier. Names a specific piece of hardware, so it
-# belongs to this machine rather than the repository. Written by
-# `./scripts/device.sh setup`.
+# The paired devices' identifiers. Name specific pieces of hardware, so they
+# belong to this machine rather than the repository. Written by
+# `./scripts/iPad.sh setup` and `./scripts/iPhone.sh setup`.
 .device
+.device-iphone
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcuserstate

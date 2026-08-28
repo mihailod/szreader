@@ -9,13 +9,16 @@ file.
 ```sh
 xcodegen generate
 ./scripts/sim.sh run        # build and run in the simulator
-./scripts/device.sh         # build, install and launch on a connected iPad
+./scripts/iPad.sh           # build, install and launch on the iPad
+./scripts/iPhone.sh         # the same, on the iPhone
 swift test                  # SZKit's tests
 ```
 
 `./scripts/sim.sh` also has `seed` (launch with the saved topic pages imported) and
-`paste` (copy the Mac clipboard into the simulator). `./scripts/device.sh setup` records the
-connected iPad in `.device`, and `no-launch` installs without bringing the app to the front.
+`paste` (copy the Mac clipboard into the simulator). `./scripts/iPad.sh setup` records the
+connected iPad in `.device` and `./scripts/iPhone.sh setup` records the iPhone in
+`.device-iphone`; `no-launch` installs without bringing the app to the front. Both are
+wrappers naming a device — the build, install and launch live once in `scripts/deploy.sh`.
 
 The app's version lives in `project.yml` and nowhere else — `Info.plist` refers to
 `$(MARKETING_VERSION)` and `$(CURRENT_PROJECT_VERSION)` rather than holding literals.

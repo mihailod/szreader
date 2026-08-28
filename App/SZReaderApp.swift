@@ -42,9 +42,28 @@ struct SZReaderApp: App {
                 // the iPhone only while both were open, and need restarting
                 // the rest of the time.
                 .onChange(of: scenePhase) { phase in
-                    guard phase == .active else { return }
+                    // Leaving is worth a send. A reader who marks an issue and
+                    // switches apps inside the debounce would otherwise carry
+                    // the change away with them, and it would sit here until
+                    // this device was opened again — which is after they have
+                    // looked at the other one and found nothing.
+                    //
+                    // Best effort, and knowingly so: iOS suspends a
+                    // backgrounded app when it likes. The change is still on
+                    // the device and still unsent, so the next foreground
+                    // sends it; this only shortens the odds.
+                    guard phase == .active else {
+                        if phase == .background { model.syncLibrary() }
+                        return
+                    }
                     model.scanLocalFiles()
                     model.refreshPreferences()
+                    // And what the reader imported on their other device.
+                    // Deliberately here rather than on a push notification:
+                    // a reader is not waiting on a shelf they are not looking
+                    // at, and the certainty of asking every time the app comes
+                    // to the front beats the machinery of being told.
+                    model.syncLibrary()
                 }
         }
     }
@@ -466,6 +485,113 @@ final class AppModel: ObservableObject {
     /// created.
     private var preferences: PreferenceCloud?
 
+    /// Carries the library of pointers to and from the reader's other devices.
+    ///
+    /// Built once and held, like the settings mirror beside it. Nil when the
+    /// store is not up yet, which is the only state in which syncing makes no
+    /// sense.
+    private var librarySync: LibrarySync?
+
+    /// Whether a sync is in flight, so a fast switch between apps cannot start
+    /// a second one over the top of the first.
+    private var syncing = false
+
+    /// Whether something changed while one was in flight, so the change is not
+    /// simply dropped for having arrived at a busy moment.
+    private var syncAgain = false
+
+    private var pendingSync: Task<Void, Never>?
+
+    /// Sends what just changed, a moment from now.
+    ///
+    /// Because syncing only when the app comes to the front is not enough, and
+    /// the way it fails is invisible: a reader marks an issue read on the iPad
+    /// and picks up the phone, and the phone asks an account the iPad never
+    /// wrote to. Nothing is broken and nothing appears, and the change would
+    /// only go up the *next* time the iPad itself was opened — by which point
+    /// the reader has already looked at the phone and concluded it does not
+    /// work.
+    ///
+    /// Debounced because reading is a stream of small changes: a page turn
+    /// writes a position, and a sync per page would be one request per page.
+    /// The delay is the pause after the last of them.
+    func scheduleSync() {
+        pendingSync?.cancel()
+        pendingSync = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.pendingSync = nil
+            self.syncLibrary()
+        }
+    }
+
+    /// Takes in what the reader's other devices have imported, and sends what
+    /// this one has.
+    ///
+    /// Never blocks the shelf. The app already learned this the expensive way:
+    /// the catalogue seed used to run before the first frame, took fifteen
+    /// seconds, and iOS killed the app for it — then rolled the transaction
+    /// back so the next launch did the same. The shelf comes up first and rows
+    /// land behind it.
+    ///
+    /// Silent unless there is something to say. On almost every foreground the
+    /// account has nothing new and this costs one round trip; announcing that
+    /// would put a "Syncing…" flash on every single launch in exchange for no
+    /// information.
+    func syncLibrary() {
+        guard let librarySync else { return }
+        // A change made while a sync was running is remembered rather than
+        // dropped: the run in flight has already read what it is going to
+        // send, so without this the change waits for some later trigger that
+        // may not come.
+        guard !syncing else { syncAgain = true; return }
+        syncing = true
+        syncAgain = false
+        Task { @MainActor [weak self] in
+            defer {
+                self?.syncing = false
+                if self?.syncAgain == true { self?.scheduleSync() }
+            }
+            // Not signed in is not an error worth showing. The library works
+            // exactly as it did before any of this existed; it simply stays on
+            // this device.
+            guard await CloudAvailability.isSignedIn() else { return }
+            do {
+                let outcome = try await librarySync.run { stage in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        switch stage {
+                        case .asking:
+                            break
+                        case .receiving(let issues):
+                            self.status = "iCloud: \(issues) issue\(issues == 1 ? "" : "s")…"
+                        case .sending(let issues):
+                            self.status = "iCloud: sending \(issues) issue\(issues == 1 ? "" : "s")…"
+                        }
+                    }
+                }
+                guard let self else { return }
+                guard !outcome.isEmpty else {
+                    self.status = ""
+                    return
+                }
+                // Rebuilt rather than searched: arriving issues can bring
+                // editions, heroes and publishers the filter menus have never
+                // offered, and a shelf that gained four hundred issues behind a
+                // stale menu is a shelf missing four hundred issues.
+                self.refresh(note: outcome.merged.added > 0
+                             ? "\(outcome.merged.added) issue"
+                             + "\(outcome.merged.added == 1 ? "" : "s") from iCloud"
+                             : "")
+            } catch {
+                // Worth saying once, in the line that says everything else.
+                // Not an alert: a sync that failed changes nothing, and the
+                // next foreground tries again.
+                self?.status = "iCloud sync failed: \(Library.reason(error))"
+            }
+        }
+    }
+
     /// Asks the account what the reader's other device has changed.
     ///
     /// Called when the app comes back to the front. See `PreferenceCloud
@@ -473,6 +599,7 @@ final class AppModel: ObservableObject {
     func refreshPreferences() { preferences?.refresh() }
 
     private func startPreferenceSync() {
+        if let store { librarySync = LibrarySync(store: store, cloud: CloudKitLibrary()) }
         let cloud = PreferenceCloud(keys: Self.syncedDefaultsKeys)
         cloud.didAdopt = { [weak self] keys in self?.applyRemotePreferences(keys) }
         preferences = cloud
@@ -1013,6 +1140,7 @@ final class AppModel: ObservableObject {
             refresh(note: report.isEmpty
                     ? "imported nothing new"
                     : "imported \(report.issues) issue\(report.issues == 1 ? "" : "s")")
+            scheduleSync()
             search(query)
             // A freshly imported page may be all codes and no titles.
             resolveTitles()
@@ -1160,6 +1288,7 @@ final class AppModel: ObservableObject {
             refresh(note: report.isEmpty
                     ? "imported nothing new"
                     : "imported \(report.issues) issue\(report.issues == 1 ? "" : "s")")
+            scheduleSync()
             search(query)
             return report
         } catch {
@@ -1182,6 +1311,7 @@ final class AppModel: ObservableObject {
             refresh(note: report.isEmpty
                     ? "imported nothing new"
                     : "imported \(report.issues) issue\(report.issues == 1 ? "" : "s")")
+            scheduleSync()
             search(query)
             return report
         } catch {
@@ -1358,6 +1488,7 @@ final class AppModel: ObservableObject {
         // rebuilt on the cover's `onDisappear` — so nothing is rearranged
         // underneath a comic that is still on screen.
         try? store?.markOpened(issueID: issue.id)
+        scheduleSync()
 
         // On screen straight away, holding nothing but a title and a place.
         // The reader shows its own progress until the pages arrive.
@@ -1435,6 +1566,7 @@ final class AppModel: ObservableObject {
     /// great deal of work nobody can see.
     func rememberPlace(issueID: Int, page: Int) {
         try? store?.setLastPage(page, issueID: issueID)
+        scheduleSync()
     }
 
     /// Marks by id, for the reader — which knows what it has open but not the
@@ -1442,6 +1574,7 @@ final class AppModel: ObservableObject {
     func markRead(issueID: Int) {
         guard let store else { return }
         try? store.setRead(true, issueID: issueID)
+        scheduleSync()
         refresh(note: "marked as read")
     }
 
@@ -1451,6 +1584,7 @@ final class AppModel: ObservableObject {
         guard let store else { return }
         do {
             try store.setRead(read, issueID: issue.id)
+            scheduleSync()
             refresh(note: read ? "marked as read" : "marked as unread")
         } catch {
             status = "could not mark: \(Library.reason(error))"

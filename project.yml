@@ -274,10 +274,24 @@ targets:
     # Generated here rather than added in Xcode, for the reason the build
     # settings below are pinned here — xcodegen rewrites the project on every
     # generate, and anything configured only in the IDE is lost on the next one.
+    # The library of pointers rides on CloudKit, which is a different half of
+    # iCloud from the key-value store above and needs a container of its own:
+    # thousands of small records, per-record merge, and deletions that can be
+    # told apart from absence — none of which 1 MB of flat keys can express.
+    #
+    # `iCloud.com.mihailod.szreader` is registered on the App ID, which also
+    # had to move from "Compatible with Xcode 5" to "Include CloudKit support"
+    # to grant this. That move keeps the key-value store: verified in the
+    # signed binary, because if it had quietly dropped it, every reader's
+    # synced settings would have looked like they reset.
+    #
+    # A one-way door once shipped, exactly as the kvstore identifier is.
     entitlements:
       path: App/SZReader.entitlements
       properties:
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
+        com.apple.developer.icloud-container-identifiers: [iCloud.com.mihailod.szreader]
+        com.apple.developer.icloud-services: [CloudKit]
 
     settings:
       base:

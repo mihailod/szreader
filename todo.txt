@@ -1,3 +1,7 @@
+IMPORTANT
+Before any App Store build: deploy the CloudKit schema to Production in the CloudKit Console — record types Issue and Reading. The schema auto-creates in Development only, so your dev build will keep working perfectly while the shipped one talks to an empty database. This is the single easiest way to ship a broken sync, so I've written it into my notes as well as saying it here.
+
+
 - send more emails
 
 ------------

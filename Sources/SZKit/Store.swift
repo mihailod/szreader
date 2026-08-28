@@ -306,6 +306,14 @@ public final class Store: @unchecked Sendable {
             // actually asks. Reopening a finished issue to check one panel
             // moves this and nothing else.
             ("opened_at", "REAL"),
+            // When the reading state last moved, whichever part of it moved.
+            //
+            // Not derivable from the four columns above it, which is the whole
+            // reason it exists. Unmarking an issue *clears* `read_at` and
+            // `started_at`, so a "latest of these" would run backwards — and a
+            // merge that resolves by newest-wins would then let a stale device
+            // undo the unmarking every time it synced.
+            ("read_state_at", "REAL"),
         ])
         // When the reader last opened this issue in the reader.
         //
@@ -394,6 +402,7 @@ public final class Store: @unchecked Sendable {
             """)
 
         try? seedOpenedAtFromReadHistory()
+        try? seedReadStateStamp()
 
         // Heal libraries damaged by the identity bug: naming an issue used to
         // rewrite `title_folded`, which is part of the natural key, so the next
@@ -493,6 +502,49 @@ public final class Store: @unchecked Sendable {
     /// holds, and far closer than the alternative — a Recently Open shelf
     /// that is blank for a reader with hundreds of issues behind them.
     ///
+    /// Gives a timestamp to reading state that predates the column recording
+    /// one.
+    ///
+    /// `read_state_at` arrived with syncing, and every library in existence
+    /// already held reading state without it: issues marked read, positions
+    /// part-way through, dates last opened, all of it stamped `NULL`. Since
+    /// the export asks for rows whose stamp is set, none of that would ever
+    /// have left the device it was on — a reader would sync their shelf and
+    /// find every issue unread on the other device, for ever, with no way to
+    /// mend it short of opening each one again.
+    ///
+    /// Stamped from the newest of the moments that imply it, floored at one
+    /// second past the epoch so a row carrying only a page number still counts
+    /// as stamped. Deliberately the oldest plausible time rather than now: it
+    /// says "this is what was here before any of this existed", so a genuine
+    /// change made on any device afterwards wins the merge — which is the
+    /// right answer when two devices disagree about state neither of them can
+    /// date.
+    #if DEBUG
+    /// Exposed so a test can build a library in the shape an older build left
+    /// behind and then run the migration over it deliberately.
+    func runReadStateBackfill() throws { try seedReadStateStamp() }
+    /// Likewise, for winding a library back to that shape.
+    func rawRun(_ sql: String) throws { try db.run(sql) }
+    #endif
+
+    private func seedReadStateStamp() throws {
+        let change = "read-state-stamped-from-history"
+        let seeded = try db.scalarInt("SELECT COUNT(*) FROM meta WHERE key = ?",
+                                      [.text(change)])
+        guard seeded == 0 else { return }
+        try db.run("""
+            UPDATE issue
+               SET read_state_at = MAX(IFNULL(read_at, 0), IFNULL(started_at, 0),
+                                       IFNULL(opened_at, 0), 1)
+             WHERE read_state_at IS NULL
+               AND (read_at IS NOT NULL OR started_at IS NOT NULL
+                    OR opened_at IS NOT NULL OR last_page IS NOT NULL)
+            """)
+        try db.run("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                   [.text(change), .text("1")])
+    }
+
     /// Once, via `meta`, for the same reason the cover questions are: run on
     /// every launch it would keep re-stamping issues marked read from the
     /// shelf without ever being opened, which is precisely the set this order
@@ -961,10 +1013,11 @@ public final class Store: @unchecked Sendable {
         // "Reading", and there would be no way out of that state at all —
         // finishing and then unmarking is the only exit.
         try db.run("""
-            UPDATE issue SET read_at = ?, last_page = NULL, started_at = NULL
+            UPDATE issue SET read_at = ?, last_page = NULL, started_at = NULL,
+                             read_state_at = ?
             WHERE id = ?
             """, [read ? .double(Date().timeIntervalSince1970) : .null,
-                  .int(Int64(issueID))])
+                  .double(Date().timeIntervalSince1970), .int(Int64(issueID))])
     }
 
     /// Records that the reader has just opened an issue.
@@ -974,8 +1027,9 @@ public final class Store: @unchecked Sendable {
     /// counts. Nothing about read state is touched — an issue marked read and
     /// then reopened belongs at the top of Recently Open like any other.
     public func markOpened(issueID: Int, at date: Date = Date()) throws {
-        try db.run("UPDATE issue SET opened_at = ? WHERE id = ?",
-                   [.double(date.timeIntervalSince1970), .int(Int64(issueID))])
+        try db.run("UPDATE issue SET opened_at = ?, read_state_at = ? WHERE id = ?",
+                   [.double(date.timeIntervalSince1970),
+                    .double(Date().timeIntervalSince1970), .int(Int64(issueID))])
     }
 
     /// Where the reader stopped, so the comic reopens there.
@@ -994,9 +1048,11 @@ public final class Store: @unchecked Sendable {
             UPDATE issue SET last_page = ?,
                              started_at = CASE
                                  WHEN ? >= 1 AND started_at IS NULL
-                                 THEN strftime('%s', 'now') ELSE started_at END
+                                 THEN strftime('%s', 'now') ELSE started_at END,
+                             read_state_at = ?
             WHERE id = ?
-            """, [.int(Int64(page)), .int(Int64(page)), .int(Int64(issueID))])
+            """, [.int(Int64(page)), .int(Int64(page)),
+                  .double(Date().timeIntervalSince1970), .int(Int64(issueID))])
     }
 
     /// The artwork reference recorded for an issue, if any.
