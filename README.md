@@ -46,6 +46,7 @@
 
   * Local Files is always ON (no Settings switch) because the device itself is the source.
   Remove All Downloads ignores local files; Delete Library asks before deleting them.
+  Local files show distinct badge in UI and can be filtered on.
 
 * **iCloud sync across devices** signed into the same iCloud account.
   * Syncing: Settings, Library, read status, pages you stopped on, Importing, deleting.

@@ -62,6 +62,15 @@ public struct StoredIssue: Equatable, Sendable, Identifiable {
     /// is the most recently opened thing on the shelf.
     public let openedAt: Date?
 
+    /// Whether the app tried to draw this issue's cover from its own first
+    /// page and could not.
+    ///
+    /// Only ever true of something already on the device, because that is the
+    /// only kind of row the drawing is attempted for. It means the file
+    /// itself cannot be read: not that a picture is missing, but that there
+    /// is nothing here to make one out of.
+    public let coverFailed: Bool
+
     /// Whether this row was written by the seed from a catalogue shipped in
     /// the app bundle.
     ///
@@ -86,7 +95,8 @@ public struct StoredIssue: Equatable, Sendable, Identifiable {
                 downloadFailed: Bool, style: LabelStyle, mirrorCount: Int,
                 coverURL: String?, isDownloaded: Bool,
                 site: IssueSite = .default, pageCount: Int? = nil,
-                openedAt: Date? = nil, isCatalogued: Bool = false) {
+                openedAt: Date? = nil, isCatalogued: Bool = false,
+                coverFailed: Bool = false) {
         self.id = id; self.code = code; self.number = number; self.title = title
         self.series = series; self.hero = hero; self.edition = edition
         self.publisher = publisher; self.isRead = isRead; self.lastPage = lastPage
@@ -96,6 +106,7 @@ public struct StoredIssue: Equatable, Sendable, Identifiable {
         self.isDownloaded = isDownloaded; self.site = site
         self.pageCount = pageCount; self.openedAt = openedAt
         self.isCatalogued = isCatalogued
+        self.coverFailed = coverFailed
     }
 
     /// Short form of the edition for the shelf: initials when it is several
@@ -307,6 +318,22 @@ public final class Store: @unchecked Sendable {
             // actually asks. Reopening a finished issue to check one panel
             // moves this and nothing else.
             ("opened_at", "REAL"),
+            // When drawing this issue's own first page into a cover was last
+            // found to be impossible.
+            //
+            // Separate from `cover_dead_at`, which is about a *remote* picture
+            // that stopped answering. This is about the file on the device: an
+            // archive that will not open, or one that opens and yields no page
+            // anything can decode. The reader can put any file they like in
+            // their folder under any name, and `LocalFiles.isReadable` gates
+            // on the extension alone, so a renamed JPEG or a half-finished
+            // download becomes a row like any other.
+            //
+            // A timestamp rather than a flag, to match every other "when this
+            // was found out" column here, and because the answer is only true
+            // of the bytes that were on disk at that moment — see
+            // `clearCoverCaptureFailed`, which is what a replacement calls.
+            ("cover_capture_failed_at", "REAL"),
             // When the reading state last moved, whichever part of it moved.
             //
             // Not derivable from the four columns above it, which is the whole
@@ -883,7 +910,8 @@ public final class Store: @unchecked Sendable {
                        publishers: Set<String> = [],
                        heroes: Set<String> = [],
                        states: Set<ReadState> = [],
-                       sites: Set<IssueSite> = []) throws -> [StoredIssue] {
+                       sites: Set<IssueSite> = [],
+                       localOnly: Bool = false) throws -> [StoredIssue] {
         let tokens = Fold.fold(text).split(separator: " ").filter { !$0.isEmpty }
         guard !tokens.isEmpty else { return [] }
         // Folding leaves only letters, digits and spaces, so no FTS5
@@ -893,7 +921,8 @@ public final class Store: @unchecked Sendable {
         var out: [StoredIssue] = []
         let terms = Self.filterClauses(downloadedOnly: downloadedOnly, editions: editions,
                                        publishers: publishers, heroes: heroes,
-                                       states: states, sites: sites)
+                                       states: states, sites: sites,
+                                       localOnly: localOnly)
         let filter = terms.sql.isEmpty ? "" : "AND " + terms.sql.joined(separator: " AND ")
         try db.query(Self.liveCover("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
@@ -905,7 +934,8 @@ public final class Store: @unchecked Sendable {
                    i.download_failed_at IS NOT NULL,
                    i.started_at IS NOT NULL,
                    i.number_to,
-                   i.site, i.page_count, i.opened_at, i.source
+                   i.site, i.page_count, i.opened_at, i.source,
+                   i.cover_capture_failed_at IS NOT NULL
             FROM issue_fts f
             JOIN issue i ON i.id = f.rowid
             WHERE issue_fts MATCH ?
@@ -935,7 +965,8 @@ public final class Store: @unchecked Sendable {
                 site: site,
                 pageCount: row.int(18),
                 openedAt: row.double(19).map(Date.init(timeIntervalSince1970:)),
-                isCatalogued: row.string(20) == Self.catalogueSource(for: site)))
+                isCatalogued: row.string(20) == Self.catalogueSource(for: site),
+                coverFailed: (row.int(21) ?? 0) == 1))
         }
         return out
     }
@@ -1087,7 +1118,14 @@ public final class Store: @unchecked Sendable {
     /// Clears any death mark: this is new artwork, and the mark belongs to the
     /// URL it replaced.
     public func setCoverURL(_ url: String, issueID: Int) throws {
-        try db.run("UPDATE issue SET cover_url = ?, cover_dead_at = NULL WHERE id = ?",
+        // `cover_capture_failed_at` too: a row that has just been given
+        // artwork is no longer one nothing could be drawn for, whichever of
+        // the two produced it.
+        try db.run("""
+            UPDATE issue
+            SET cover_url = ?, cover_dead_at = NULL, cover_capture_failed_at = NULL
+            WHERE id = ?
+            """,
                    [.text(url), .int(Int64(issueID))])
     }
 
@@ -1106,6 +1144,34 @@ public final class Store: @unchecked Sendable {
             UPDATE issue SET cover_url = NULL, cover_dead_at = NULL
             WHERE id = ? AND cover_url = ?
             """, [.int(Int64(issueID)), .text(reference)])
+    }
+
+    /// Records that this issue's own pages cannot be drawn into a cover.
+    ///
+    /// Set once, by the sweep that does the drawing, and read two ways: the
+    /// shelf says so on the tile instead of showing a frame that claims to be
+    /// working on it, and `downloadedIssuesLackingCover` stops handing the
+    /// same unreadable file back on every scan. Without the second half this
+    /// would be a file the app opens, fails on, and opens again for as long
+    /// as it sits in the folder.
+    public func markCoverCaptureFailed(issueID: Int) throws {
+        try db.run("""
+            UPDATE issue SET cover_capture_failed_at = strftime('%s', 'now')
+            WHERE id = ? AND cover_capture_failed_at IS NULL
+            """, [.int(Int64(issueID))])
+    }
+
+    /// Forgets that, because the bytes it was true of are gone.
+    ///
+    /// The mark answers a question about a file, not about a row, and the row
+    /// outlives the file: a reader who replaces a corrupt scan with a good one
+    /// under the same name keeps the same row — that is the whole point of
+    /// matching local files by name — and it must not keep the verdict passed
+    /// on the file it replaced. Called from the same place that throws away
+    /// the pages unpacked from the old bytes.
+    public func clearCoverCaptureFailed(issueID: Int) throws {
+        try db.run("UPDATE issue SET cover_capture_failed_at = NULL WHERE id = ?",
+                   [.int(Int64(issueID))])
     }
 
     /// Records that a cover URL leads nowhere.
@@ -1146,11 +1212,35 @@ public final class Store: @unchecked Sendable {
     static func filterClauses(downloadedOnly: Bool, editions: Set<String>,
                               publishers: Set<String>, heroes: Set<String>,
                               states: Set<ReadState>,
-                              sites: Set<IssueSite> = []) -> (sql: [String], args: [SQLValue]) {
+                              sites: Set<IssueSite> = [],
+                              localOnly: Bool = false) -> (sql: [String], args: [SQLValue]) {
         var sql: [String] = []
         var args: [SQLValue] = []
+        // Downloaded and Local Files are two switches over one question —
+        // where the file came from — so they OR against each other the way
+        // the read states below do, rather than AND. Ticking both would
+        // otherwise mean "not a local file, and a local file", which is a
+        // shelf nothing can appear on: the two controls that each widen what
+        // is shown would together empty it.
+        //
+        // Downloaded excludes local files rather than counting them. Every
+        // local row is written as downloaded from the moment it exists (see
+        // `insertLocalIssue`) because the file is on the device, so without
+        // the exclusion the whole folder answers a filter that is asking
+        // which of the *catalogued* issues have been fetched.
+        var arrival: [String] = []
         if downloadedOnly {
-            sql.append("EXISTS(SELECT 1 FROM download f WHERE f.issue_id = i.id)")
+            arrival.append("""
+                (EXISTS(SELECT 1 FROM download f WHERE f.issue_id = i.id) AND i.site <> ?)
+                """)
+            args.append(.text(IssueSite.local.rawValue))
+        }
+        if localOnly {
+            arrival.append("i.site = ?")
+            args.append(.text(IssueSite.local.rawValue))
+        }
+        if !arrival.isEmpty {
+            sql.append("(" + arrival.joined(separator: " OR ") + ")")
         }
         // Which archives the reader wants to see at all. Same shape as the
         // read states below: naming every source is the same as naming none,
@@ -1204,13 +1294,15 @@ public final class Store: @unchecked Sendable {
                        publishers: Set<String> = [],
                        heroes: Set<String> = [],
                        states: Set<ReadState> = [],
-                       sites: Set<IssueSite> = []) throws -> [StoredIssue] {
+                       sites: Set<IssueSite> = [],
+                       localOnly: Bool = false) throws -> [StoredIssue] {
         var out: [StoredIssue] = []
         // Applied in SQL rather than to the results, so a filter cannot be
         // defeated by a cap the caller happens to pass.
         let terms = Self.filterClauses(downloadedOnly: downloadedOnly, editions: editions,
                                        publishers: publishers, heroes: heroes,
-                                       states: states, sites: sites)
+                                       states: states, sites: sites,
+                                       localOnly: localOnly)
         let filter = terms.sql.isEmpty ? "" : "WHERE " + terms.sql.joined(separator: " AND ")
         try db.query(Self.liveCover("""
             SELECT i.id, i.code, i.number, i.title, i.series, i.style,
@@ -1222,7 +1314,8 @@ public final class Store: @unchecked Sendable {
                    i.download_failed_at IS NOT NULL,
                    i.started_at IS NOT NULL,
                    i.number_to,
-                   i.site, i.page_count, i.opened_at, i.source
+                   i.site, i.page_count, i.opened_at, i.source,
+                   i.cover_capture_failed_at IS NOT NULL
             FROM issue i \(filter) ORDER BY i.id \(limit == nil ? "" : "LIMIT ?")
             """, table: "i"), terms.args + (limit.map { [SQLValue.int(Int64($0))] } ?? [])) { row in
             let site = IssueSite(rawValue: row.string(17) ?? "") ?? .default
@@ -1243,7 +1336,8 @@ public final class Store: @unchecked Sendable {
                 site: site,
                 pageCount: row.int(18),
                 openedAt: row.double(19).map(Date.init(timeIntervalSince1970:)),
-                isCatalogued: row.string(20) == Self.catalogueSource(for: site)))
+                isCatalogued: row.string(20) == Self.catalogueSource(for: site),
+                coverFailed: (row.int(21) ?? 0) == 1))
         }
         return out
     }

@@ -152,8 +152,22 @@ extension Store {
 
 
 
+    /// How many issues the app has fetched.
+    ///
+    /// Local Files are left out, for the same reason the Downloaded filter
+    /// leaves them out: their rows carry a `download` each because the file is
+    /// on the device, but nothing was ever fetched, and counting them answers
+    /// a different question from the one every caller here asks. The shelf
+    /// uses this to decide whether an empty Downloaded shelf means "you have
+    /// not downloaded anything yet", and the sync uses it to decide whether a
+    /// library that has just arrived from iCloud came without its files — a
+    /// folder of the reader's own scans is not an answer to either.
     public var downloadedCount: Int {
-        (try? db.scalarInt("SELECT COUNT(*) FROM download")) ?? 0
+        (try? db.scalarInt("""
+            SELECT COUNT(*) FROM download d
+            JOIN issue i ON i.id = d.issue_id
+            WHERE i.site <> ?
+            """, [.text(IssueSite.local.rawValue)])) ?? 0
     }
 
     /// Every recorded download and where its file is supposed to be, for

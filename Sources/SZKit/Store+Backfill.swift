@@ -453,6 +453,7 @@ extension Store {
             SELECT i.id FROM issue i
             JOIN download d ON d.issue_id = i.id
             WHERE (i.cover_url IS NULL OR i.cover_dead_at IS NOT NULL)
+              AND i.cover_capture_failed_at IS NULL
             ORDER BY i.id DESC LIMIT ?
             """, [.int(Int64(limit))]) { row in
             if let id = row.int(0) { found.append(id) }

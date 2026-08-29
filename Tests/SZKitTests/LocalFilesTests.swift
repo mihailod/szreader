@@ -419,4 +419,187 @@ final class LocalFilesTests: XCTestCase {
         // The root itself is not something inside the root.
         XCTAssertFalse(paths.owns(URL(fileURLWithPath: "/var/app/Support/SZReader/comics")))
     }
+
+    // MARK: - Telling the reader's own files from the app's
+
+    /// One library holding all three kinds of row: an issue the app fetched,
+    /// one it has only catalogued, and a file the reader dropped in.
+    private func mixedLibrary() throws -> (store: Store, local: LocalFile) {
+        let store = try Store()
+        try store.ingest(html: """
+            <title>Zagor - ZLATNA SERIJA - ZS i LMS - Stripzona</title>
+            <div>013-Nasilje u Darkvudu</div><div>http://www.mediafire.com/?FAKEKEY013</div>
+            <div>017-Klark siti</div><div>http://www.mediafire.com/?FAKEKEY017</div>
+            """)
+        let fetched = try XCTUnwrap(try store.search("nasilje").first)
+        try store.recordDownload(issueID: fetched.id, mirrorURL: "http://x/1",
+                                 path: URL(fileURLWithPath: "/tmp/1.cbz"), bytes: 10)
+
+        let url = try write("Evropa 001.cbz", bytes: 64)
+        let file = LocalFile(name: url.lastPathComponent, url: url, bytes: 64)
+        try store.reconcileLocalFiles([file])
+        return (store, file)
+    }
+
+    /// The reader's own files answered the Downloaded filter, which is not
+    /// what anyone means by it.
+    ///
+    /// Every local row is written as downloaded the moment it exists — the
+    /// file is on the device, so it is — and the effect was that narrowing to
+    /// Downloaded emptied the shelf of catalogued issues and filled it with
+    /// the folder instead.
+    func testDownloadedDoesNotShowLocalFiles() throws {
+        let (store, _) = try mixedLibrary()
+        let shelf = try store.recent(limit: nil, downloadedOnly: true)
+        XCTAssertEqual(shelf.count, 1)
+        XCTAssertEqual(shelf.first?.site, .stripzona)
+        XCTAssertFalse(shelf.contains { $0.site == .local },
+                       "the reader's own files answered the Downloaded filter")
+    }
+
+    /// And the switch that does ask for them shows them, and nothing else.
+    func testLocalFilesFilterShowsOnlyTheReadersOwn() throws {
+        let (store, file) = try mixedLibrary()
+        let shelf = try store.recent(limit: nil, localOnly: true)
+        XCTAssertEqual(shelf.count, 1)
+        XCTAssertEqual(shelf.first?.code, file.name)
+    }
+
+    /// Two switches over one question, so they OR.
+    ///
+    /// The alternative is a shelf that cannot hold anything: "fetched and not
+    /// a local file" AND "a local file" is satisfied by no row in any library,
+    /// and ticking a second filter that widens what is shown would empty the
+    /// screen.
+    func testDownloadedAndLocalFilesTogetherShowBoth() throws {
+        let (store, _) = try mixedLibrary()
+        let shelf = try store.recent(limit: nil, downloadedOnly: true, localOnly: true)
+        XCTAssertEqual(Set(shelf.map(\.site)), [.stripzona, .local])
+        XCTAssertEqual(shelf.count, 2, "the undownloaded catalogue row leaked in")
+    }
+
+    /// The count behind "you have not downloaded anything yet", which has to
+    /// mean the same thing the filter does.
+    ///
+    /// Otherwise a reader whose only files are their own ticks Downloaded,
+    /// gets an empty shelf, and is told the generic "nothing matches" rather
+    /// than the one sentence that would explain it.
+    func testDownloadedCountIgnoresLocalFiles() throws {
+        let store = try Store()
+        let url = try write("Evropa 002.cbz", bytes: 32)
+        try store.reconcileLocalFiles([LocalFile(name: url.lastPathComponent,
+                                                 url: url, bytes: 32)])
+        XCTAssertEqual(store.localFileTotals.count, 1, "the file never became a row")
+        XCTAssertEqual(store.downloadedCount, 0)
+    }
+
+    // MARK: - Files that are not issues
+
+    /// The reader's folder is theirs, and `isReadable` looks at the extension
+    /// alone — so a renamed picture, a truncated download or a text file
+    /// called `.cbz` becomes a row exactly like a real scan does. Nothing can
+    /// be drawn from it, and without a mark the tile promises artwork for ever
+    /// and the sweep opens the file again after every scan.
+    func testAFileThatCannotBeDrawnIsMarkedRatherThanRetriedForEver() throws {
+        let store = try Store()
+        let url = try write("Not really a scan.cbz", bytes: 40)
+        try store.reconcileLocalFiles([LocalFile(name: url.lastPathComponent,
+                                                 url: url, bytes: 40)])
+        let issue = try XCTUnwrap(try store.recent().first)
+        XCTAssertFalse(issue.coverFailed, "marked before anything was tried")
+        XCTAssertEqual(try store.downloadedIssuesLackingCover(), [issue.id],
+                       "the sweep never offered to draw it")
+
+        try store.markCoverCaptureFailed(issueID: issue.id)
+
+        XCTAssertTrue(try XCTUnwrap(try store.recent().first).coverFailed)
+        XCTAssertTrue(try store.downloadedIssuesLackingCover().isEmpty,
+                      "the same unreadable file is opened again on every scan")
+    }
+
+    /// The mark is a verdict on the bytes, and the row outlives them.
+    ///
+    /// Local rows are matched by name, so replacing a corrupt file with a good
+    /// one under the same name keeps the row. Keeping the verdict with it
+    /// would leave the shelf calling a perfectly good scan unreadable, with
+    /// nothing ever looking again to find out otherwise.
+    func testReplacingTheFileClearsTheVerdictOnTheOldOne() throws {
+        let store = try Store()
+        let url = try write("Evropa 003.cbz", bytes: 40)
+        try store.reconcileLocalFiles([LocalFile(name: url.lastPathComponent,
+                                                 url: url, bytes: 40)])
+        let issue = try XCTUnwrap(try store.recent().first)
+        try store.markCoverCaptureFailed(issueID: issue.id)
+
+        // The reader drops a good file in over the bad one: same name, and
+        // the different size is what the scan notices.
+        try FileManager.default.removeItem(at: url)
+        let replacement = try write("Evropa 003.cbz", bytes: 900)
+        let report = try store.reconcileLocalFiles(
+            [LocalFile(name: replacement.lastPathComponent, url: replacement, bytes: 900)])
+        XCTAssertEqual(report.replaced, [issue.id], "the replacement went unnoticed")
+
+        // What the app does for every id in `replaced`.
+        try store.clearCoverCaptureFailed(issueID: issue.id)
+
+        XCTAssertFalse(try XCTUnwrap(try store.recent().first).coverFailed)
+        XCTAssertEqual(try store.downloadedIssuesLackingCover(), [issue.id],
+                       "the new file is never offered to the drawing")
+    }
+
+    /// And artwork arriving settles it, whichever way it arrived.
+    func testGivingAnIssueACoverForgetsThatItHadNone() throws {
+        let store = try Store()
+        let url = try write("Evropa 004.cbz", bytes: 40)
+        try store.reconcileLocalFiles([LocalFile(name: url.lastPathComponent,
+                                                 url: url, bytes: 40)])
+        let issue = try XCTUnwrap(try store.recent().first)
+        try store.markCoverCaptureFailed(issueID: issue.id)
+
+        try store.setCoverURL("szpage:\(issue.id)", issueID: issue.id)
+
+        XCTAssertFalse(try XCTUnwrap(try store.recent().first).coverFailed,
+                       "a row with artwork still says nothing could be drawn for it")
+    }
+
+    /// The link the mark actually hangs on: a file that is not an archive
+    /// makes the drawing throw, rather than quietly producing something.
+    ///
+    /// Worth its own test because the mark is only ever set from a failure
+    /// here. If `captureCover` came back with a picture for a renamed JPEG —
+    /// or threw for a scan that is merely slow to open — the shelf would
+    /// label the wrong files, and every test above it would still pass
+    /// because they set the mark by hand.
+    func testDrawingACoverThrowsForAFileThatIsNotAnArchive() throws {
+        let store = try Store()
+        let comics = folder.appendingPathComponent("comics", isDirectory: true)
+        try FileManager.default.createDirectory(at: comics, withIntermediateDirectories: true)
+        let documents = folder.appendingPathComponent("Documents", isDirectory: true)
+        try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
+
+        // A JPEG the reader renamed, which is the everyday version of this:
+        // the extension says issue and the bytes say picture.
+        let bogus = documents.appendingPathComponent("Holiday.cbz")
+        try Data([0xFF, 0xD8, 0xFF, 0xE0] + Array(repeating: 0x00, count: 512)).write(to: bogus)
+
+        let library = Library(store: store, paths: LibraryPaths(root: comics),
+                              transport: StubTransport { _ in HTTPResponse(status: 404) },
+                              downloader: StubDownloader(bodies: [:]))
+        try store.reconcileLocalFiles(LocalFiles.scan(documents))
+        let issue = try XCTUnwrap(try store.recent().first)
+        XCTAssertEqual(issue.site, .local, "the file never became a local row")
+
+        XCTAssertThrowsError(try library.captureCover(issueID: issue.id),
+                             "a renamed picture was accepted as an issue")
+
+        // And a real one in the same folder still draws, so the test above is
+        // not passing because nothing here can draw anything.
+        let scratch = folder.appendingPathComponent("build", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        _ = try SevenZipFixture.make(named: "Evropa.cbz", pages: 1...2,
+                                     in: scratch, at: documents)
+        try store.reconcileLocalFiles(LocalFiles.scan(documents))
+        let good = try XCTUnwrap(try store.search("evropa").first)
+        XCTAssertNoThrow(try library.captureCover(issueID: good.id))
+    }
 }

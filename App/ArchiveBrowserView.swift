@@ -88,7 +88,7 @@ struct ArchiveBrowserView: View {
             // only visible difference is a format and a size.
             Text("“\(swap.item.title)” is already downloaded from a different "
                  + "file. Switching to \(swap.file.label) removes what is on "
-                 + "the device; the issue stays on your shelf and can be "
+                 + "the \(Device.name); the issue stays on your shelf and can be "
                  + "downloaded again.")
         }
     }

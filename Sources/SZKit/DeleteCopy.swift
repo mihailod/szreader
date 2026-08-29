@@ -70,20 +70,22 @@ public enum DeleteCopy {
     ///
     /// The second half only when there is a download to remove: telling a
     /// reader they may free space they are not using explains nothing.
-    public static func undeletableMessage(downloaded: Bool) -> String {
+    public static func undeletableMessage(downloaded: Bool,
+                                          on device: String = DeviceName.current) -> String {
         let refusal = "This item's location is shipped in the application's index "
             + "and cannot be deleted since there would be no way to recover it "
             + "(there is no Import for it)."
         guard downloaded else { return refusal }
         return refusal + " You can remove the download for it to free the space "
-            + "on your device but you cannot delete the entry."
+            + "on your \(device) but you cannot delete the entry."
     }
 
     public static func removeVisibleTitle(_ count: Int) -> String {
         "Remove \(count) download\(count == 1 ? "" : "s")?"
     }
 
-    public static func removeVisibleMessage(_ count: Int, touchesASet: Bool) -> String {
+    public static func removeVisibleMessage(_ count: Int, touchesASet: Bool,
+                                            on device: String = DeviceName.current) -> String {
         // Says what is being counted, because it is not the shelf. Most of
         // what is shown is usually not downloaded — 572 issues on screen and
         // one of them on disk — and "the issue shown" read as though the
@@ -103,7 +105,7 @@ public enum DeleteCopy {
                               + "so issues not shown here are removed too."
         }
         return "\(subject) Remove \(count == 1 ? "its" : "their") files from this "
-            + "device.\(sets) Every title stays in your library and can be "
+            + "\(device).\(sets) Every title stays in your library and can be "
             + "downloaded again."
     }
 
@@ -186,18 +188,27 @@ public enum DeleteCopy {
 
     /// The question the reader asked for by name: how many of their own files
     /// there are, what they weigh, and whether to remove them too.
-    public static func deleteLocalFilesMessage(_ count: Int, bytes: Int64) -> String {
+    /// - Parameter device: what the machine in the reader's hands is called.
+    ///
+    /// Named rather than assumed. This said "iPad" outright, which is the one
+    /// place a wrong word does real harm: somebody on an iPhone was told the
+    /// files were about to leave a device they were not holding, in an alert
+    /// asking them to confirm a deletion. A parameter with a default, so every
+    /// call site reads as it did before and a test can ask for both.
+    public static func deleteLocalFilesMessage(_ count: Int, bytes: Int64,
+                                               on device: String = DeviceName.current) -> String {
         let size = ByteSize.short(bytes)
         let files = count == 1 ? "your one local file" : "all \(count) local files"
         return "Would you like to delete \(files) (\(size)) too? "
-            + "They are removed from this iPad, and getting them back means "
+            + "They are removed from this \(device), and getting them back means "
             + "copying them over again."
     }
 
     /// One of them, deleted on its own from the shelf.
-    public static func deleteLocalFileMessage(_ name: String?) -> String {
+    public static func deleteLocalFileMessage(_ name: String?,
+                                              on device: String = DeviceName.current) -> String {
         let subject = name.map { "“\($0)”" } ?? "this item"
         return "Delete \(subject) from the library and remove the file from "
-            + "this iPad. Getting it back means copying it over again."
+            + "this \(device). Getting it back means copying it over again."
     }
 }

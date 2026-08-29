@@ -201,9 +201,9 @@ struct SourceCopy {
         // switch that had gone missing. The name says why there is none.
         switchTitle: "\(IssueSite.local.settingsName) (always enabled)",
         detail: "Manually (USB or AirDrop) imported items.",
-        shelfPhrase: "issues you copy onto the iPad yourself",
+        shelfPhrase: "issues you copy onto the \(Device.name) yourself",
         creditHeading: IssueSite.local.settingsName,
-        credit: "Files you copy onto the device are your own. The app reads "
+        credit: "Files you copy onto the \(Device.name) are your own. The app reads "
               + "them where they sit and never uploads them anywhere.")
 
     private static let batcave = SourceCopy(

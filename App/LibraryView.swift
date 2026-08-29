@@ -169,8 +169,8 @@ private struct Confirming: ViewModifier {
             return Alert(
                 title: Text("Are you sure?"),
                 message: Text("Remove \(count) downloaded issue\(count == 1 ? "" : "s") "
-                              + "from this device. The library keeps every title, "
-                              + "so nothing needs importing again."),
+                              + "from this \(Device.name). The library keeps every "
+                              + "title, so nothing needs importing again."),
                 primaryButton: .destructive(Text("Yes")) { model.removeAllDownloads() },
                 secondaryButton: .cancel(Text("No")))
         case let .removeVisibleDownloads(count, touchesASet):
@@ -512,9 +512,21 @@ struct LibraryView: View {
                 // undoes a narrowed shelf was missing from every menu opened
                 // to check whether the shelf *was* narrowed. A button that
                 // does nothing costs far less than a button nobody can find.
+                //
+                // A `Toggle` rather than a `Button` so it carries a tick like
+                // everything below it. It is a filter state — the one where
+                // nothing is narrowed — and as a plain button it was the only
+                // entry in the menu that never said whether it was the one in
+                // force. Ticked when no filter is set, which is exactly when
+                // tapping it would do nothing; the `set` ignores being
+                // switched off, because there is no such thing as turning
+                // "show everything" off.
                 Section {
-                    Button("Show All", systemImage: "xmark.circle") {
-                        model.showAll()
+                    Toggle(isOn: Binding(
+                        get: { !narrowed },
+                        set: { if $0 { model.showAll() } }
+                    )) {
+                        Label("Show All", systemImage: "xmark.circle")
                     }
                 }
 
@@ -536,6 +548,15 @@ struct LibraryView: View {
                     }
                     Toggle(isOn: $model.showRead) {
                         Label("Read", systemImage: "checkmark.circle")
+                    }
+                    // The other half of Downloaded, which no longer answers
+                    // for these: a local file is on the device by definition,
+                    // so counting it there made the whole folder appear under
+                    // a filter asking which catalogued issues had been
+                    // fetched. The same folder the shelf badge marks — see
+                    // `localBadge`.
+                    Toggle(isOn: $model.localOnly) {
+                        Label(IssueSite.local.display, systemImage: "folder")
                     }
                 }
 
@@ -633,9 +654,15 @@ struct LibraryView: View {
                 if !importSources.isEmpty { Divider() }
                 // Last, and below a divider, because it is the one entry that
                 // brings nothing over the network — everything above reaches
-                // an archive, this reaches the iPad the reader is holding.
+                // an archive, this reaches the device the reader is holding.
+                //
+                // The glyph follows the device for the same reason the
+                // sentences do: an iPhone drawn in the menu of an iPad is the
+                // picture version of telling somebody their file is leaving a
+                // machine they are not holding.
                 Button { importingFiles = true } label: {
-                    Label("From Device", systemImage: "iphone")
+                    Label("From this \(Device.name)",
+                          systemImage: Device.isPhone ? "iphone" : "ipad")
                 }
                 if importSources.isEmpty {
                     Divider()
@@ -1113,6 +1140,11 @@ struct LibraryView: View {
 
     private static let failedRed = Color(red: 0.90, green: 0.16, blue: 0.16)
 
+    /// Deliberately none of the three above. The other corner's marks are
+    /// green, yellow and red, and a fourth in any of those would read as a
+    /// fourth reading state.
+    private static let localBlue = Color(red: 0.16, green: 0.44, blue: 0.78)
+
     private func badged(_ issue: StoredIssue) -> Bool {
         issue.downloadFailed || issue.readState != .unread
     }
@@ -1170,10 +1202,45 @@ struct LibraryView: View {
         }
     }
 
+    /// The mark that says a file is the reader's own.
+    ///
+    /// Everything else on the shelf came off a network from an archive the app
+    /// knows about; these were dropped into the folder over a cable, out of
+    /// AirDrop or from the Files app, and nothing about the tile said so. Not
+    /// a small point: a local file is written as downloaded the moment it
+    /// exists, so it shows in full colour like a fetched issue, and the
+    /// shelf's own vocabulary for provenance — grey means not here yet — has
+    /// nothing to say about it. The list row said it in passing, through the
+    /// "Local Files" publisher in `provenance`; the grid said it nowhere.
+    ///
+    /// Bottom *leading*, which is the one corner of a tile nothing else uses:
+    /// top-trailing carries the download and unpacking spinners, and
+    /// bottom-trailing the read and failed marks. Sized and positioned as the
+    /// mirror image of that one so the pair sits level.
+    ///
+    /// It says where the issue came from, not what has been done with it,
+    /// which is why it is allowed to share a tile with the read badge rather
+    /// than compete for its corner.
+    private var localBadge: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height) * 0.25
+            Image(systemName: "folder.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(.white, Self.localBlue)
+                .frame(width: side, height: side)
+                .position(x: side * 0.45, y: geo.size.height - side * 0.45)
+                .shadow(radius: 2)
+        }
+        .accessibilityLabel(IssueSite.local.display)
+    }
+
     private func cover(_ issue: StoredIssue, cornerRadius: CGFloat = 8) -> some View {
         CoverImage(url: issue.coverURL, number: issue.number,
                    grayscale: !issue.isDownloaded,
                    awaitingDownload: !issue.isDownloaded,
+                   awaitingCapture: issue.site == .local && issue.coverURL == nil,
+                   captureFailed: issue.coverFailed,
                    cornerRadius: cornerRadius)
             .opacity(issue.isDownloaded ? 1 : 0.75)
             .overlay(alignment: .bottom) {
@@ -1203,12 +1270,28 @@ struct LibraryView: View {
                     }
                 }
             }
+            .overlay(alignment: .bottomLeading) {
+                if issue.site == .local { localBadge }
+            }
+    }
+
+    /// Everything "Show All" undoes, which is a wider question than
+    /// `filtering`: it clears the search box too. Ticking that entry off
+    /// `filtering` alone would show it in force while a query was still
+    /// hiding most of the library, and tapping it would then change the shelf
+    /// under a reader who had just been told nothing was narrowing it.
+    ///
+    /// The funnel icon keeps to `filtering`, because a search is not a filter
+    /// and lighting the menu up for one would say the menu holds something
+    /// that has to be undone there.
+    private var narrowed: Bool {
+        filtering || !model.query.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     /// Anything narrowing the shelf, so the icon reports the whole filter and
     /// not just its first switch.
     private var filtering: Bool {
-        model.downloadedOnly || !model.selectedSeries.isEmpty
+        model.downloadedOnly || model.localOnly || !model.selectedSeries.isEmpty
             || !model.selectedPublishers.isEmpty || !model.selectedHeroes.isEmpty
             || !model.readStates.isEmpty
     }
@@ -1516,6 +1599,19 @@ private struct CoverImage: View {
     /// Whether the comic is still to be fetched, which decides what the
     /// empty frame should say.
     var awaitingDownload = true
+    /// Whether this is one of the reader's own files whose first page has not
+    /// been drawn into a cover yet.
+    ///
+    /// A local file has no cover reference when it arrives — there is no
+    /// archive to have published one — and it never gains one from a
+    /// catalogue. It gains one from itself: every folder scan ends in
+    /// `captureMissingCovers`, which renders the first page of a dozen of
+    /// them at a time. So an empty frame here means the drawing has not
+    /// reached this file yet, not that there will never be a picture.
+    var awaitingCapture = false
+    /// Whether drawing this issue's first page into a cover was tried and
+    /// found to be impossible — the file cannot be read at all.
+    var captureFailed = false
     /// Matched to whatever the caller clips this to, so the cue below traces
     /// the same corner rather than cutting across it: 8 in the grid, 6 on a
     /// list row.
@@ -1529,11 +1625,14 @@ private struct CoverImage: View {
     @State private var isMonochrome = false
 
     init(url: String?, number: Int?, grayscale: Bool,
-         awaitingDownload: Bool = true, cornerRadius: CGFloat = 8) {
+         awaitingDownload: Bool = true, awaitingCapture: Bool = false,
+         captureFailed: Bool = false, cornerRadius: CGFloat = 8) {
         self.url = url
         self.number = number
         self.grayscale = grayscale
         self.awaitingDownload = awaitingDownload
+        self.awaitingCapture = awaitingCapture
+        self.captureFailed = captureFailed
         self.cornerRadius = cornerRadius
         _image = State(initialValue: CoverStore.shared.cached(url, grayscale: grayscale))
         _isMonochrome = State(initialValue: CoverStore.shared.isMonochrome(url))
@@ -1664,13 +1763,46 @@ private struct CoverImage: View {
     /// arrives or fails. There is nothing to wait for when the issue has no
     /// cover reference at all — that artwork does not exist yet and will not
     /// until the archive is here and its first page becomes the cover.
-    private var fetching: Bool { url != nil && !fetchFailed }
+    ///
+    /// Except for the reader's own files, where the archive *is* here and the
+    /// first page is being drawn — see `awaitingCapture`. Without that a
+    /// freshly imported file sat in the last branch below showing its number,
+    /// and a filename `TitleCleaner` could read no number out of showed a
+    /// bare "-" in a grey frame: the one tile on the shelf that looked like
+    /// the app had broken rather than like something in progress.
+    private var fetching: Bool {
+        url == nil ? awaitingCapture : !fetchFailed
+    }
+
+    /// The same statement in the two languages it is true in.
+    ///
+    /// A catalogued cover comes off a web server; a local one is rendered
+    /// here out of the file's own first page. Both are "not yet", and saying
+    /// a file on the device is being fetched would name the wrong machine.
+    private var comingLabel: String {
+        awaitingCapture && url == nil ? "Drawing\nthe cover" : "Fetching\nthe cover"
+    }
 
     private var placeholder: some View {
         ZStack {
             Color(.tertiarySystemFill)
             VStack(spacing: 6) {
-                if fetching {
+                // First, because it is an answer and the two below it are
+                // both "not yet". The file is here and cannot be read, so
+                // nothing is coming and nothing the reader does to this app
+                // will change that — the fix is a different file.
+                //
+                // Said on the tile rather than left to the moment they tap
+                // it: the shelf is where they look for what they have, and a
+                // frame that says the cover is being drawn is a promise the
+                // app already knows it will not keep.
+                if captureFailed {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.title2)
+                    Text("Unsupported\nformat")
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                } else if fetching {
                     // A cover that is merely late is not a cover that is
                     // missing. Six hundred RetroSpec covers come off a web
                     // server one at a time, and telling a reader to download
@@ -1678,7 +1810,7 @@ private struct CoverImage: View {
                     // sends them to do work they do not need to do.
                     Image(systemName: "ellipsis.circle")
                         .font(.title2)
-                    Text("Fetching\nthe cover")
+                    Text(comingLabel)
                         .font(.caption)
                         .multilineTextAlignment(.center)
                 } else if awaitingDownload {

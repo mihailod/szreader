@@ -18,7 +18,8 @@ final class UIWordingTests: XCTestCase {
     /// Named one by one rather than by scanning all of `Sources`, so adding a
     /// file of copy is a decision somebody makes here rather than something
     /// this quietly starts or stops covering.
-    private static let copyInTheKit = ["DeleteCopy.swift", "SyncCopy.swift"]
+    private static let copyInTheKit = ["DeleteCopy.swift", "SyncCopy.swift",
+                                       "ImportCopy.swift", "Downloader.swift"]
 
     private static func sourcesShowingWords() throws -> [(String, String)] {
         let app = root.appendingPathComponent("App")
@@ -68,6 +69,85 @@ final class UIWordingTests: XCTestCase {
         }
         XCTAssertEqual(offenders, [],
                        "say “issue”, not “comic” — the library holds magazines too")
+    }
+
+    /// Never the name of a device the reader may not be holding.
+    ///
+    /// The bug: "remove the file from this iPad", in a delete confirmation, on
+    /// an iPhone. Every sentence saying where a file physically is has to name
+    /// the machine it is actually running on, and there is exactly one place
+    /// that knows — `Device.name`. A literal cannot know, so a literal is
+    /// always wrong here however carefully it was chosen.
+    ///
+    /// Scanned rather than left to review because this is invisible to
+    /// whoever writes it: the sentence is correct on the device they are
+    /// testing on, and wrong on the other one.
+    func testTheUILayerNeverNamesADeviceOutright() throws {
+        var offenders: [String] = []
+        for (file, source) in try Self.sourcesShowingWords() {
+            for literal in Self.stringLiterals(in: source) {
+                let text = literal.lowercased()
+                guard text.contains("ipad") || text.contains("iphone") else { continue }
+                // Prose only. "iphone" and "ipad" are also SF Symbol names,
+                // which are identifiers the reader never sees — and the icon
+                // beside a sentence has to be chosen the same way the sentence
+                // is, so the app layer genuinely needs both spellings as
+                // literals. A device name in something a reader reads always
+                // has a word next to it; a symbol name never does.
+                guard literal.contains(" ") else { continue }
+                offenders.append("\(file): “\(literal)”")
+            }
+        }
+        XCTAssertEqual(offenders, [],
+                       "say “\\(Device.name)”, not “iPad” or “iPhone” — "
+                     + "the app runs on both")
+    }
+
+    /// And the two spellings it is choosing between.
+    ///
+    /// The rule above only bites if `Device.name` really does answer
+    /// differently on the two, which nothing else here would notice: the tests
+    /// run off-device, so every sentence takes the same branch.
+    func testTheDeviceSentencesCarryWhicheverNameTheyAreGiven() {
+        let phone = DeleteCopy.deleteLocalFileMessage("Evropa", on: "iPhone")
+        let pad = DeleteCopy.deleteLocalFileMessage("Evropa", on: "iPad")
+        XCTAssertTrue(phone.contains("this iPhone"), phone)
+        XCTAssertTrue(pad.contains("this iPad"), pad)
+        XCTAssertFalse(phone.contains("iPad"), "an iPhone was told about an iPad")
+
+        let manyPhone = DeleteCopy.deleteLocalFilesMessage(3, bytes: 9_000_000, on: "iPhone")
+        XCTAssertTrue(manyPhone.contains("this iPhone"), manyPhone)
+        XCTAssertFalse(manyPhone.contains("iPad"))
+
+        // The remove-downloads pair, which sit in the same alert stack as the
+        // two above. One saying "iPhone" beside one saying "device" is the
+        // half-done version of this fix, and reads as two different places.
+        let removing = DeleteCopy.removeVisibleMessage(2, touchesASet: false, on: "iPhone")
+        XCTAssertTrue(removing.contains("from this iPhone."), removing)
+        let undeletable = DeleteCopy.undeletableMessage(downloaded: true, on: "iPad")
+        XCTAssertTrue(undeletable.contains("on your iPad"), undeletable)
+    }
+
+    /// The prose-only skip, and the line it does not cross.
+    ///
+    /// Same reasoning as the comic rule's companion below: "skip literals
+    /// with no space in them" is one careless edit away from "skip the
+    /// literals that matter", and that edit would leave every test here green
+    /// while the rule guarded nothing.
+    func testTheDeviceRuleStillCatchesTheSentenceItIsFor() {
+        // The bug as it shipped, which must always be an offence.
+        let shipped = "this iPad. Getting it back means copying it over again."
+        XCTAssertTrue(shipped.contains(" "), "prose, so the rule looks at it")
+        XCTAssertTrue(shipped.lowercased().contains("ipad"))
+
+        // What the skip is for, and all it is for.
+        for identifier in ["iphone", "ipad", "iphone.gen3"] {
+            XCTAssertFalse(identifier.contains(" "),
+                           "\(identifier) is a symbol name, not something read")
+        }
+        // A device name in anything with a second word is still caught, even
+        // where the sentence is short.
+        XCTAssertTrue("On iPad".contains(" "))
     }
 
     /// The exception above is narrow, and this is what keeps it narrow.

@@ -46,7 +46,8 @@ public enum DownloadError: Error, CustomStringConvertible {
         case .emptyFile: return "server returned no bytes"
         case .notAnArchive(let m): return "not a CBZ/CBR archive: \(m)"
         case .insufficientSpace:
-            return "No free space on device — make room or remove some downloads"
+            return "No free space on \(DeviceName.current) — make room or "
+                 + "remove some downloads"
         case .rateLimited(let host, let wait):
             // Written to be read by whoever tapped Download, because that is
             // who has to act on it: the answer is to wait, and the only useful

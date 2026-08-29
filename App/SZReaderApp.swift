@@ -9,6 +9,10 @@ struct SZReaderApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        // First, and before anything can read a sentence: the kit's copy has
+        // to name the machine this is, and cannot ask. See `DeviceName`.
+        Device.tellTheKit()
+
         // AsyncImage goes through URLSession.shared -> URLCache.shared, whose
         // iOS default disk budget (~10 MB) barely holds one page of covers and
         // is shared with everything else. The covers are small and the server
@@ -200,8 +204,23 @@ final class AppModel: ObservableObject {
         didSet { scheduleSearch() }
     }
 
-    /// Show only comics whose archive is actually on disk.
+    /// Show only issues whose archive is actually on disk, and which the app
+    /// fetched. The reader's own files are excluded — see `localOnly`.
     @AppStorage("downloadedOnly") var downloadedOnly = false {
+        didSet { scheduleSearch() }
+    }
+
+    /// Show only the reader's own files.
+    ///
+    /// A switch of its own rather than a line in the source list, because it
+    /// is the answer to a different question. The source switches in Settings
+    /// say what this library holds at all; this says which part of it to look
+    /// at now, which is what every other control in the filter menu does.
+    ///
+    /// It sits beside Downloaded on purpose: those two are the only filters
+    /// about where a file came from, and between them they name the whole
+    /// shelf. See `Store.filterClauses` for why they OR rather than AND.
+    @AppStorage("localFilesOnly") var localOnly = false {
         didSet { scheduleSearch() }
     }
 
@@ -315,7 +334,7 @@ final class AppModel: ObservableObject {
         sourceDefaultsKeys.keys.sorted() + [
             "seriesFilter", "publisherFilter", "heroFilter",
             "showUnread", "showReading", "showRead",
-            "downloadedOnly", "shelfSort", "libraryLayout",
+            "downloadedOnly", "localFilesOnly", "shelfSort", "libraryLayout",
             SmartZoom.settingKey,
         ]
     }
@@ -710,6 +729,7 @@ final class AppModel: ObservableObject {
             case "showReading":     showReading = defaults.bool(forKey: key)
             case "showRead":        showRead = defaults.bool(forKey: key)
             case "downloadedOnly":  downloadedOnly = defaults.bool(forKey: key)
+            case "localFilesOnly":  localOnly = defaults.bool(forKey: key)
             // `libraryLayout` and `smartZoom` are read in views rather than
             // here, and a view's `@AppStorage` is refreshed by SwiftUI itself.
             default: break
@@ -1044,7 +1064,7 @@ final class AppModel: ObservableObject {
             let forgotten = (try? library?.reconcileDownloads()) ?? nil ?? []
             if !forgotten.isEmpty {
                 status = "\(forgotten.count) download\(forgotten.count == 1 ? " is" : "s are") "
-                       + "no longer on this device, and can be fetched again"
+                       + "no longer on this \(Device.name), and can be fetched again"
                 // Cleared before the notice is offered below.
                 //
                 // `UserDefaults` is inside an iCloud backup, so a restored
@@ -1153,12 +1173,14 @@ final class AppModel: ObservableObject {
                                    editions: selectedSeries,
                                    publishers: selectedPublishers,
                                    heroes: selectedHeroes,
-                                   states: readStates, sites: visibleSites)
+                                   states: readStates, sites: visibleSites,
+                                   localOnly: localOnly)
                 : try store.search(text, limit: nil, downloadedOnly: downloadedOnly,
                                    editions: selectedSeries,
                                    publishers: selectedPublishers,
                                    heroes: selectedHeroes,
-                                   states: readStates, sites: visibleSites)
+                                   states: readStates, sites: visibleSites,
+                                   localOnly: localOnly)
             // Applied on top of the query, and told whether there is one: the
             // shelf sorts by arrival, a search stays in relevance order. Both
             // import orders defer here; the four explicit keys do not.
@@ -1254,7 +1276,7 @@ final class AppModel: ObservableObject {
         Task { @MainActor [weak self] in
             let waiting = (try? store.downloadedIssuesLackingCover()) ?? []
             guard !waiting.isEmpty else { return }
-            var captured = 0
+            var changed = 0
             for issueID in waiting {
                 let art = try? await Task.detached(priority: .utility) {
                     try library.captureCover(issueID: issueID)
@@ -1273,10 +1295,28 @@ final class AppModel: ObservableObject {
                     // itself rather than needing the cache cleared by hand.
                     CoverStore.shared.forget(art)
                     try? store.setCoverURL(art, issueID: issueID)
-                    captured += 1
+                    changed += 1
+                } else {
+                    // Nothing could be made of the file. For a download that
+                    // means a broken archive; for one of the reader's own
+                    // files it usually means it was never an issue at all —
+                    // the folder is theirs and `LocalFiles.isReadable` looks
+                    // at the extension, so a renamed picture or a truncated
+                    // download gets a row like anything else.
+                    //
+                    // Marked rather than simply skipped, for two reasons that
+                    // both matter: the tile can say so instead of promising
+                    // artwork that is not coming, and this sweep stops
+                    // opening the same unreadable file after every scan for
+                    // as long as it sits in the folder. Cleared the moment
+                    // the file changes — see `clearCoverCaptureFailed`.
+                    try? store.markCoverCaptureFailed(issueID: issueID)
+                    changed += 1
                 }
             }
-            guard let self, captured > 0 else { return }
+            // A refusal changes the shelf as much as a capture does:
+            // the tile stops saying the cover is on its way.
+            guard let self, changed > 0 else { return }
             self.search(self.query)
         }
     }
@@ -1562,7 +1602,7 @@ final class AppModel: ObservableObject {
         // sort for having been read.
         guard library.isOnDevice(issueID: issue.id) else {
             try? library.forgetDownload(issueID: issue.id)
-            refresh(note: "“\(name)” is no longer on this device")
+            refresh(note: "“\(name)” is no longer on this \(Device.name)")
             return
         }
 
@@ -1702,6 +1742,7 @@ final class AppModel: ObservableObject {
         selectedSeries = []
         selectedPublishers = []
         downloadedOnly = false
+        localOnly = false
         // Last, and through `search` rather than by assigning `query`: the
         // field is bound to it, and this is what actually re-runs the query
         // and rebuilds the shelf.
@@ -2654,6 +2695,12 @@ final class AppModel: ObservableObject {
             for id in report.replaced {
                 library?.discardUnpacked(forIssue: id)
                 discardCover(forIssue: id)
+                // The row survives a replacement and the verdict on the file
+                // must not: a reader who replaces a corrupt scan with a good
+                // one under the same name would otherwise keep a tile saying
+                // their new file cannot be read, and the sweep would never
+                // look at it again to find out otherwise.
+                try? store.clearCoverCaptureFailed(issueID: id)
             }
             guard !report.isEmpty else { return }
             refresh(note: Self.scanNote(report))
@@ -2723,6 +2770,16 @@ final class AppModel: ObservableObject {
         guard let localFolder else { return }
         guard LocalFiles.isReadable(url.lastPathComponent) else {
             status = "\(url.lastPathComponent) is not a file this app can open"
+            // And an alert as well as the line, here and in the three other
+            // ways a file can be turned away. The status line reports things
+            // that leave something behind to look at — a scan that added two
+            // rows, a download that finished — and it is read by glancing at
+            // the shelf afterwards. A refusal leaves the shelf exactly as it
+            // was, so there is nothing to glance at, and the one sentence
+            // saying the file never arrived scrolls away behind the next
+            // message. See `ImportCopy`.
+            failure = Failure(title: ImportCopy.unsupportedTitle,
+                              message: ImportCopy.unsupportedMessage(url.lastPathComponent))
             return
         }
         do {
@@ -2731,6 +2788,10 @@ final class AppModel: ObservableObject {
         } catch {
             status = "could not take in \(url.lastPathComponent): "
                    + "\(Library.reason(error))"
+            failure = Failure(
+                title: ImportCopy.refusedTitle,
+                message: ImportCopy.refusedMessage(url.lastPathComponent,
+                                                   reason: Library.reason(error)))
         }
     }
 
@@ -2792,6 +2853,11 @@ final class AppModel: ObservableObject {
         status = refused.count == 1
             ? "could not take in \(refused[0])"
             : "could not take in \(refused.count) of \(urls.count) files"
+        // Named rather than counted: a reader who picked eleven files and is
+        // told three did not arrive would otherwise have to find out which
+        // three by comparing the shelf against the Files app.
+        failure = Failure(title: ImportCopy.refusedTitle(refused.count),
+                          message: ImportCopy.refusedMessage(refused, of: urls.count))
     }
 
     /// Takes in files dragged onto the shelf from another app.
@@ -2807,12 +2873,29 @@ final class AppModel: ObservableObject {
             provider.loadInPlaceFileRepresentation(
                 forTypeIdentifier: UTType.data.identifier
             ) { url, _, _ in
-                guard let url, LocalFiles.isReadable(url.lastPathComponent) else { return }
+                guard let url else { return }
+                // The refusal that used to be silent. A drop is the one way in
+                // with no dialog of its own and no list of what was picked:
+                // dragging a file onto the shelf and having *nothing at all*
+                // happen is indistinguishable from the drop not having been
+                // registered, and the reader's next move is to try it again.
+                guard LocalFiles.isReadable(url.lastPathComponent) else {
+                    let name = url.lastPathComponent
+                    Task { @MainActor [weak self] in
+                        self?.status = "\(name) is not a file this app can open"
+                        self?.failure = Failure(title: ImportCopy.unsupportedTitle,
+                                                message: ImportCopy.unsupportedMessage(name))
+                    }
+                    return
+                }
                 let taken = try? Self.take(url, into: localFolder)
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     if taken == nil {
                         self.status = "could not take in \(url.lastPathComponent)"
+                        self.failure = Failure(
+                            title: ImportCopy.refusedTitle,
+                            message: ImportCopy.refusedMessage(url.lastPathComponent))
                     }
                     self.scanLocalFiles()
                 }
