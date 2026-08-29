@@ -85,7 +85,11 @@ let package = Package(
     name: "SZReader",
     platforms: [.macOS(.v13), .iOS(.v16)],
     products: [
-        .library(name: "SZKit", targets: ["SZKit"])
+        .library(name: "SZKit", targets: ["SZKit"]),
+        // Linked on its own by the Quick Look thumbnail extension. See the
+        // SZPages target below for why it is a product rather than an
+        // implementation detail of SZKit.
+        .library(name: "SZPages", targets: ["SZPages"])
     ],
     targets: [
         // Vendored unrar 7.0.9 behind a small C API (see include/szunrar.h).
@@ -135,10 +139,25 @@ let package = Package(
             publicHeadersPath: "include",
             cSettings: [.headerSearchPath("lzma")]
         ),
+        // Opening a comic and drawing a page from it, with no resources of
+        // its own.
+        //
+        // Split out of SZKit for one reason: the thumbnail extension needs
+        // exactly this and nothing else, and a target that declares resources
+        // copies its whole bundle into every binary that links it. Linking
+        // SZKit put all eighteen catalogues — 11 MB of JSON a thumbnail never
+        // reads — inside SZReaderThumbnail.appex, once in the app and once
+        // again in the extension.
+        //
+        // The line between the two is the one `FirstPage` already draws: this
+        // target is the archive formats and the page decoder, SZKit is the
+        // shelf, the sources and the catalogues that name them.
+        .target(name: "SZPages", dependencies: ["CUnrar", "C7z"],
+                swiftSettings: [.swiftLanguageMode(.v6)]),
         // The shipped catalogues are resources rather than files in the app
         // target, so `Bundle.module` finds them from both the app and `swift
         // test` — a seed the tests cannot load is a seed nothing checks.
-        .target(name: "SZKit", dependencies: ["CUnrar", "C7z"],
+        .target(name: "SZKit", dependencies: ["CUnrar", "C7z", "SZPages"],
                 resources: [.process("Resources")],
                 swiftSettings: [.swiftLanguageMode(.v6)]),
         // Builds those catalogues. Neither is shipped or linked by the app:
@@ -181,7 +200,7 @@ let package = Package(
                           swiftSettings: [.swiftLanguageMode(.v6)]),
         // Still v5: the concurrency tests deliberately share one Store across
         // threads to prove the locking works, which mode 6 cannot see is safe.
-        .testTarget(name: "SZKitTests", dependencies: ["SZKit"],
+        .testTarget(name: "SZKitTests", dependencies: ["SZKit", "SZPages"],
                     swiftSettings: [.swiftLanguageMode(.v5)])
     ],
     cxxLanguageStandard: .cxx14

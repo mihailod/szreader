@@ -8,7 +8,10 @@ import Foundation
 /// would.
 public enum PageManifest {
 
-    static let imageExtensions: Set<String> = [
+    /// Public because `PageDownload` in SZKit picks a file extension for a
+    /// downloaded page against this same set — one list of what counts as an
+    /// image, rather than a second one that can drift from it.
+    public static let imageExtensions: Set<String> = [
         "jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff", "avif", "heic",
     ]
 

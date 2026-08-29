@@ -335,9 +335,13 @@ targets:
           - "**/.*.sw?"
           - "**/*~"
 
+    # SZPages, not SZKit. The extension needs `FirstPage` and nothing else,
+    # and SZKit declares the eighteen catalogues as resources — so linking it
+    # copied 11 MB of JSON no thumbnail ever reads into this .appex, beside
+    # the copy already in the app. See the SZPages target in Package.swift.
     dependencies:
       - package: SZKit
-        product: SZKit
+        product: SZPages
 
     info:
       path: Thumbnail/Info.plist

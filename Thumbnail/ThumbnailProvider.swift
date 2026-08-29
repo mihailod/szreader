@@ -2,7 +2,9 @@ import CoreGraphics
 import Foundation
 import OSLog
 import QuickLookThumbnailing
-import SZKit
+// SZPages rather than SZKit: `FirstPage` is the whole of what this needs, and
+// SZKit carries the catalogues with it (see Package.swift).
+import SZPages
 
 /// Draws the cover of a comic file for the Files app.
 ///

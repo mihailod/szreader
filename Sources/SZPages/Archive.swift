@@ -282,6 +282,6 @@ extension Data {
 /// Written into a work directory once its archive has finished unpacking, so
 /// a directory left behind by an interrupted unpack is not mistaken for a
 /// complete one.
-enum UnpackMarker {
-    static let name = ".szunpacked"
+public enum UnpackMarker {
+    public static let name = ".szunpacked"
 }

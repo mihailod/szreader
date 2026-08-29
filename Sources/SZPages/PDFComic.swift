@@ -10,16 +10,16 @@ import PDFKit
 /// decoded, so nothing about it fits the archive path — but the reader only
 /// ever asks a comic for a page as an image, which is a question a PDF can
 /// answer just as well.
-struct PDFComic {
+public struct PDFComic {
 
     private let document: PDFDocument
 
-    init?(fileURL: URL) {
+    public init?(fileURL: URL) {
         guard let document = PDFDocument(url: fileURL) else { return nil }
         self.document = document
     }
 
-    var pageCount: Int { document.pageCount }
+    public var pageCount: Int { document.pageCount }
 
     /// One page, drawn at the size it will be shown.
     ///
@@ -28,7 +28,7 @@ struct PDFComic {
     /// chooses its downsample: whatever the panel can actually show. Drawing
     /// a 146-page magazine at full size instead is how an iPad runs out of
     /// memory.
-    func image(_ index: Int, maxPixelSize: Int) -> CGImage? {
+    public func image(_ index: Int, maxPixelSize: Int) -> CGImage? {
         guard index >= 0, index < document.pageCount,
               let page = document.page(at: index) else { return nil }
 

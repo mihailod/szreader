@@ -2,6 +2,9 @@ import CoreGraphics
 import PDFKit
 import XCTest
 @testable import SZKit
+// `PDFComic` lives in SZPages since the split; these tests reach its internal
+// `shownSize` directly, which `@_exported import` does not carry across.
+@testable import SZPages
 
 /// Drawing a PDF page that does not sit square in its own file.
 ///
