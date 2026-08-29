@@ -19,8 +19,9 @@ settings:
     # The single source of truth for the app's version.
     #
     # MARKETING_VERSION is what a reader sees — "1.3". Bump it when the
-    # release is worth naming. 1.2 (5) went to review on its own; everything
-    # since is 1.3 (6), and the next submission is what moves either number.
+    # release is worth naming. 1.2 (5) went to review on its own; 1.3 was
+    # built as (6) and resubmitted as (7), which is what a build number is
+    # for — same release, another upload.
     #
     # CURRENT_PROJECT_VERSION is the build number. The App Store rejects an
     # upload whose build number it has seen before for the same marketing
@@ -29,7 +30,7 @@ settings:
     # that only ever increases; it does not reset when MARKETING_VERSION
     # changes.
     MARKETING_VERSION: "1.3"
-    CURRENT_PROJECT_VERSION: "6"
+    CURRENT_PROJECT_VERSION: "7"
 
 packages:
   SZKit:
