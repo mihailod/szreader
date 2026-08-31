@@ -26,7 +26,9 @@
   <th><img src="screenshotphone.png" alt="Screenshot iPhone" width="150"></th>
 </tr></table>
 
-## Coming soon in 1.3
+## New in in 1.3 (August 31st, 2026)
+  <a href="https://apps.apple.com/us/app/streamzine/id6801719481" float="left">
+    <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&releaseDate=1276560000&h=7e7b68fad19738b5649a1bfb78ff46e9" alt="Download on the App Store"><br></a><br>
 
 * **Added content source:** **[PopBoks](https://www.popboks.com)** - Scanned archives of
   cult ex-Yugoslav music magazines **Džuboks** (1974–1985) and **Ritam** (1989–1995).
@@ -55,7 +57,7 @@
 
 ---
 
-## New in 1.2 (August 27th, 2006)
+## New in 1.2 (August 27th, 2026)
   <a href="https://apps.apple.com/us/app/streamzine/id6801719481" float="left">
     <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&releaseDate=1276560000&h=7e7b68fad19738b5649a1bfb78ff46e9" alt="Download on the App Store"><br></a><br>
 
